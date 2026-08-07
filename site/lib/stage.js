@@ -6,10 +6,12 @@
 // testable in Node against a stub context.
 
 import { smoothstep } from './draw.js';
-import { chromaSplit, makeTearBands, seam, tearBands } from './vhs.js';
+import { chromaSplit, createTape, makeTearBands, seam, tearBands } from './vhs.js';
 import { createRng } from './rng.js';
 
-// Past 2x the extra pixels cost far more than they show.
+// Past 2x the extra pixels cost far more than they show. A scene can ask for less via
+// `meta.maxDpr` — a deliberately lo-fi scene has no use for retina pixels, and the fill rate it
+// saves is the difference between 60fps and a slideshow on modest hardware.
 const MAX_DPR = 2;
 const TRANSITION_SECONDS = 0.95;
 
@@ -20,12 +22,21 @@ const TRANSITION_SECONDS = 0.95;
 export function createStage(canvas, options = {}) {
   const ctx = canvas.getContext('2d', { alpha: false });
   const glitchBands = makeTearBands(createRng('channel-change'), 7);
+  // One scratch buffer for the whole stage: the channel change uses it, and every scene is handed
+  // the same one so the tape artefacts stay fast. See `createTape`.
+  const tape = createTape();
 
   let current = null; // { module, instance, elapsed }
   let outgoing = null; // the scene being pushed off screen, during a transition
   let transition = 0; // 0 → 1
   let direction = 1; // +1 when travelling down the gallery, -1 when travelling up
 
+  let pixelCap = MAX_DPR;
+  // Render scale backs off when the machine can't keep up. A full-screen effects pipeline is
+  // fill-rate bound, so resolution is the one lever that always works.
+  let quality = 1;
+  let slowFrames = 0;
+  let fastFrames = 0;
   let frame = 0;
   let lastTimestamp = 0;
   let width = 0;
@@ -37,7 +48,7 @@ export function createStage(canvas, options = {}) {
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function measure() {
-    const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
+    const dpr = Math.min(window.devicePixelRatio || 1, pixelCap) * quality;
     const nextWidth = Math.max(1, Math.round(canvas.clientWidth || window.innerWidth));
     const nextHeight = Math.max(1, Math.round(canvas.clientHeight || window.innerHeight));
     const pixelWidth = Math.round(nextWidth * dpr);
@@ -87,9 +98,10 @@ export function createStage(canvas, options = {}) {
 
     // Then wreck the composite. Peaks in the middle of the move and settles at both ends.
     const violence = Math.sin(p * Math.PI);
+    tape?.capture(ctx);
     ctx.save();
-    tearBands(ctx, width, height, current.elapsed, glitchBands, 0.6 + violence * 5);
-    chromaSplit(ctx, width, height, current.elapsed, violence * 6);
+    tearBands(ctx, width, height, current.elapsed, glitchBands, 0.6 + violence * 5, tape);
+    chromaSplit(ctx, width, height, current.elapsed, violence * 6, tape);
     seam(ctx, width, (1 - p) * height * direction + (direction > 0 ? 0 : height), violence);
     ctx.restore();
   }
@@ -99,6 +111,9 @@ export function createStage(canvas, options = {}) {
     // Clamp the step so a backgrounded tab or a slow first frame can't teleport the animation.
     const dt = lastTimestamp ? Math.min((timestamp - lastTimestamp) / 1000, 0.1) : 0;
     lastTimestamp = timestamp;
+
+    // Watch the real frame interval, not the clamped step, and trade resolution for smoothness.
+    if (dt > 0) adaptQuality(dt);
 
     if (current) current.elapsed += dt;
     if (outgoing) {
@@ -110,6 +125,33 @@ export function createStage(canvas, options = {}) {
       }
     }
     renderFrame(dt);
+  }
+
+  /**
+   * Below ~28fps for half a second, drop the render scale; above ~50fps for four seconds, put it
+   * back. The counters reset on every change, which is the hysteresis that stops it oscillating.
+   * The scene never hears about this: it always draws in CSS pixels.
+   */
+  function adaptQuality(dt) {
+    if (dt > 1 / 28) {
+      slowFrames += 1;
+      fastFrames = 0;
+    } else if (dt < 1 / 50) {
+      fastFrames += 1;
+      slowFrames = 0;
+    }
+
+    if (slowFrames > 30 && quality > 0.5) {
+      quality = Math.max(0.5, quality - 0.25);
+      slowFrames = 0;
+      fastFrames = 0;
+      measure();
+    } else if (fastFrames > 240 && quality < 1) {
+      quality = Math.min(1, quality + 0.25);
+      slowFrames = 0;
+      fastFrames = 0;
+      measure();
+    }
   }
 
   function start() {
@@ -144,7 +186,7 @@ export function createStage(canvas, options = {}) {
     return {
       module,
       elapsed: prefersReducedMotion() ? (module.meta.posterTime ?? 0) : 0,
-      instance: module.create({ width, height, seed: module.meta.seed || module.meta.id }),
+      instance: module.create({ width, height, seed: module.meta.seed || module.meta.id, tape }),
     };
   }
 
@@ -154,6 +196,7 @@ export function createStage(canvas, options = {}) {
    * @param {{ direction?: 'down' | 'up' }} [opts]
    */
   function mount(module, opts = {}) {
+    pixelCap = Math.min(module.meta.maxDpr ?? MAX_DPR, MAX_DPR);
     measure();
     const reduced = prefersReducedMotion();
     const next = build(module);
@@ -208,6 +251,9 @@ export function createStage(canvas, options = {}) {
     },
     get transitioning() {
       return outgoing !== null;
+    },
+    get quality() {
+      return quality;
     },
   };
 }

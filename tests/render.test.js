@@ -82,6 +82,28 @@ for (const scene of scenes) {
     );
   });
 
+  test(`${meta.id}: renders the same whether or not it gets a scratch tape`, () => {
+    // The browser hands scenes a scratch buffer to read displacement from; the plain render tests
+    // don't. Without this, the path every real visitor exercises is the untested one.
+    const viewport = { width: 1200, height: 800 };
+    let captures = 0;
+    const tape = {
+      source: { width: viewport.width, height: viewport.height },
+      capture() {
+        captures += 1;
+      },
+    };
+
+    const recorder = createRecordingContext(viewport);
+    const instance = scene.create({ ...viewport, seed: meta.id, tape });
+    for (const t of SAMPLE_TIMES) instance.draw(recorder.ctx, t, 1 / 60);
+
+    recorder.assertClean(`${meta.id} with a tape`);
+    assert.equal(recorder.depth, 0, `${meta.id}: unbalanced save/restore on the tape path`);
+    assert.ok(recorder.paints > SAMPLE_TIMES.length * 20, `${meta.id}: drew almost nothing`);
+    assert.ok(captures > 0, `${meta.id} never snapshotted the tape — the fast path is dead code`);
+  });
+
   test(`${meta.id}: renders its reduced-motion poster frame`, () => {
     const viewport = { width: 1280, height: 720 };
     const recorder = createRecordingContext(viewport);
