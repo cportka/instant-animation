@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format follows Keep
 (https://keepachangelog.com) and the project uses Semantic Versioning (https://semver.org).
 Every change bumps the version and adds an entry below.
 
+## [0.2.0] - 2026-08-07
+
+### Changed
+- **"Asleep Among the Stars" recomposed for scale and stripped back.** The animation now reads as
+  something small and lost rather than something cosy:
+  - The bed is scaled against the viewport's **short edge** instead of fitted to the frame, so it
+    occupies roughly a quarter of a desktop window and less on anything larger — the bigger the
+    screen, the more lost it looks. It sits off-centre, with the emptiness as the subject.
+  - Drift periods went from seconds to **minutes** (97s, 71s, 127s), so the bed wanders the frame
+    and tumbles almost imperceptibly instead of bobbing in place.
+  - New background: a **galactic band** of clustered stars cut by soft dust lanes, and the unlit
+    limb of **something enormous** just off frame, which occludes the star field behind it.
+  - A single **distant sun** (`KEY_STAR`) is now the one light source in the scene. The planet's
+    lit limb, the duvet's rim and the sleeper's face all derive their edges from that one
+    position, and the rim light falls off as surfaces turn away from it rather than running at an
+    even brightness like neon piping.
+  - Palette pulled to cold near-monochrome; the sleeper's face is the only warmth in the frame.
+    Star twinkle cut to a flicker, shooting stars made rare (27s), the Zzz's reduced to a whisper.
+
+### Added
+- `docs/AUTHORING.md` guidance on composing for scale contrast and on keeping one key light.
+
 ## [0.1.0] - 2026-08-07
 
 ### Added

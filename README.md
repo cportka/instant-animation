@@ -2,7 +2,7 @@
 
 An instant animation generator. Animate anything you can describe.
 
-**Version:** 0.1.0 · **Live:** https://cportka.github.io/instant-animation/
+**Version:** 0.2.0 · **Live:** https://cportka.github.io/instant-animation/
 
 Describe something. It becomes a hand-drawn canvas animation and joins the gallery. The site
 shows the animations and nothing else — chrome fades out after a couple of idle seconds.

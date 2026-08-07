@@ -15,7 +15,8 @@ Follow `docs/AUTHORING.md`. In short:
    no `Date.now()`. Seeded randomness comes from `lib/rng.js`; `t` is the only clock.
 4. Layer slow sine waves at unrelated periods so the motion never visibly loops. Study
    `site/scenes/floating-bed.js` for the house style — full-bleed background in screen space,
-   subject composed in a fixed design box via `fitContain()`.
+   subject drawn in its own design units and placed with a single transform, and one key light
+   in one constant that everything else derives its edges and shadows from.
 5. Run `npm test`. The render tests catch NaN geometry, bad colours, leaked `save()`, and
    non-determinism.
 6. **Look at it.** Start `npm run serve`, screenshot several timestamps at both a desktop and a

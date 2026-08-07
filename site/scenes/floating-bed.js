@@ -1,13 +1,17 @@
 // "A bed floating in space with someone snuggled under the covers peacefully sleeping while the
 //  bed gently floats amongst the stars."
 //
-// Everything here is drawn from paths — no images, no fonts beyond a stray "Z" — so the scene
-// stays a few kilobytes and renders identically in a browser and in the headless render tests.
+// Composed for scale, not for comfort: the bed is a few hundred pixels of warm dark against a
+// void, a galactic band, and the unlit limb of something enormous. Almost all of the frame is
+// empty on purpose — the emptiness is the subject, and the sleeper is what makes it hurt.
+//
+// Everything is drawn from paths — no images, no fonts beyond a stray "Z" — so the scene stays a
+// few kilobytes and renders identically in a browser and in the headless render tests.
 
 import { createRng } from '../lib/rng.js';
 import {
   TAU,
-  fitContain,
+  clamp,
   glow,
   lerp,
   rgba,
@@ -24,88 +28,89 @@ export const meta = {
   prompt:
     'a bed floating in space with someone snuggled under the covers peacefully sleeping while the bed gently floats amongst the stars',
   created: '2026-08-07',
-  background: '#04050d',
+  background: '#000208',
   // Where the still frame is taken when the visitor prefers reduced motion.
-  posterTime: 7.4,
+  posterTime: 34,
 };
 
-// The bed is composed against a fixed box and scaled to fit whatever screen shows up. The box is
-// sized to the bed plus the headroom the Zzz's drift into, so the composition fills the frame.
-const DESIGN_WIDTH = 940;
-const DESIGN_HEIGHT = 660;
+// The bed is ~714 units long and is scaled against the viewport's short edge, so the larger the
+// screen, the smaller it becomes in frame — the bigger your window, the more lost it looks.
+const BED_SCALE = 0.00056;
 
 const STAR_TINTS = [
   [255, 255, 255],
   [255, 255, 255],
-  [206, 226, 255],
-  [255, 232, 205],
-  [223, 214, 255],
+  [255, 255, 255],
+  [198, 219, 255],
+  [255, 226, 190],
 ];
 
-const NEBULA_COLOURS = [
-  [86, 66, 178],
-  [32, 118, 140],
-  [148, 62, 122],
-  [58, 74, 190],
-];
+// Cold and near-monochrome. The only warmth in the whole frame is the sleeper.
+const VOID_TOP = '#04060f';
+const VOID_MID = '#02030a';
+const VOID_DEEP = '#000104';
 
-const WOOD = {
-  light: '#a4795c',
-  mid: '#7c5540',
-  dark: '#4b3126',
-  edge: '#33211a',
-};
+const FRAME_DARK = '#090b16';
+const FRAME_EDGE = '#1a2038';
+const LINEN = '#333b52';
+const LINEN_LIGHT = '#5a6684';
+// Cool near-black rather than true black: the hair has to sit a hair's breadth above the void,
+// or the head reads as bald and the graze light along the crown looks like a detached wire.
+const HAIR = '#1b1927';
+const SKIN = '#c1926f';
+const SKIN_SHADE = '#7d5c46';
 
-const SKIN = '#f0c8a6';
-const SKIN_SHADE = '#d7a582';
-const HAIR = '#3b2a35';
-const SHOOTER_PERIOD = 12.5; // seconds between shooting stars
+const SHOOTER_PERIOD = 27; // seconds between shooting stars — rare enough to feel like luck
+
+// The distant sun, in normalised viewport coordinates. Everything with a lit edge — the planet's
+// limb, the duvet, the sleeper's face — is lit from here, so it lives in one place.
+const KEY_STAR = { x: 0.82, y: 0.15 };
 
 export function create({ width, height, seed = meta.id }) {
   const rng = createRng(seed);
 
   // Star positions live in normalised space so a resize never reshuffles the sky.
   const layers = [
-    makeStarLayer(rng, { count: 460, minRadius: 0.35, maxRadius: 0.95, alpha: 0.55, depth: 0.15 }),
-    makeStarLayer(rng, { count: 150, minRadius: 0.8, maxRadius: 1.6, alpha: 0.8, depth: 0.4 }),
-    makeStarLayer(rng, { count: 38, minRadius: 1.5, maxRadius: 2.6, alpha: 1, depth: 0.85 }),
+    makeStarLayer(rng, { count: 520, minRadius: 0.3, maxRadius: 0.8, alpha: 0.42, depth: 0.06 }),
+    makeStarLayer(rng, { count: 120, minRadius: 0.7, maxRadius: 1.4, alpha: 0.72, depth: 0.14 }),
+    makeStarLayer(rng, { count: 26, minRadius: 1.3, maxRadius: 2.3, alpha: 1, depth: 0.3 }),
   ];
 
-  const nebulae = Array.from({ length: 4 }, (_, i) => ({
-    x: rng.range(0.1, 0.9),
-    y: rng.range(0.1, 0.9),
-    radius: rng.range(0.34, 0.62),
-    colour: NEBULA_COLOURS[i % NEBULA_COLOURS.length],
-    alpha: rng.range(0.07, 0.13),
-    phase: rng.range(0, TAU),
-    driftX: rng.range(0.008, 0.02),
-    driftY: rng.range(0.006, 0.016),
+  // The galactic band: stars clustered along an axis, in the band's own rotated space.
+  const bandStars = Array.from({ length: 340 }, () => {
+    // Sum of three uniforms ≈ normal, which piles the stars up along the spine of the band.
+    const across = (rng.next() + rng.next() + rng.next()) / 1.5 - 1;
+    return {
+      along: rng.range(-1, 1),
+      across,
+      radius: rng.range(0.25, 1.05),
+      alpha: rng.range(0.2, 0.85),
+      tint: rng.pick(STAR_TINTS),
+    };
+  });
+
+  const dustLanes = Array.from({ length: 6 }, () => ({
+    along: rng.range(-0.8, 0.8),
+    across: rng.range(-0.35, 0.35),
+    length: rng.range(0.1, 0.26),
+    thickness: rng.range(0.08, 0.22),
+    alpha: rng.range(0.2, 0.42),
+    tilt: rng.range(-0.16, 0.16),
   }));
+
+  // Two washes, both cold. Any third colour starts to look decorative.
+  const nebulae = [
+    { x: rng.range(0.2, 0.4), y: rng.range(0.3, 0.5), radius: 0.55, colour: [46, 60, 140], alpha: 0.08 },
+    { x: rng.range(0.6, 0.8), y: rng.range(0.5, 0.75), radius: 0.42, colour: [26, 84, 106], alpha: 0.05 },
+  ].map((n) => ({ ...n, phase: rng.range(0, TAU), drift: rng.range(0.004, 0.011) }));
 
   const shooters = Array.from({ length: 9 }, () => ({
-    x: rng.range(0.02, 0.7),
-    y: rng.range(0.04, 0.46),
-    angle: rng.range(0.2, 0.52),
-    length: rng.range(0.18, 0.34),
-    duration: rng.range(1.1, 1.7),
+    x: rng.range(0.02, 0.6),
+    y: rng.range(0.04, 0.4),
+    angle: rng.range(0.2, 0.5),
+    length: rng.range(0.22, 0.4),
+    duration: rng.range(1.3, 2),
   }));
-
-  // Motes drift in the bed's own design space, so they float along with it.
-  const motes = Array.from({ length: 30 }, () => ({
-    x: rng.range(-430, 430),
-    offset: rng.next(), // where in the rise it starts
-    radius: rng.range(0.9, 2.3),
-    speed: rng.range(9, 26), // design units per second
-    alpha: rng.range(0.25, 0.65),
-    phase: rng.range(0, TAU),
-    sway: rng.range(6, 22),
-  }));
-
-  const planet = {
-    x: rng.range(0.12, 0.22),
-    y: rng.range(0.16, 0.28),
-    radius: rng.range(0.07, 0.1),
-  };
 
   let W = width;
   let H = height;
@@ -117,33 +122,32 @@ export function create({ width, height, seed = meta.id }) {
     },
 
     draw(ctx, t) {
-      // The bed's gentle drift also nudges the sky, which is what sells the parallax.
-      const driftX = wave(t, 23, 0.6) * 0.012 + wave(t, 37, 2.1) * 0.006;
-      const driftY = wave(t, 29, 1.3) * 0.008;
+      // Minutes-long periods, not seconds: the bed is adrift, not bobbing.
+      const driftX = wave(t, 97, 0.4) * 0.055 + wave(t, 53, 2.2) * 0.022;
+      const driftY = wave(t, 71, 1.1) * 0.038 + wave(t, 41, 0.3) * 0.014;
 
-      drawSky(ctx, W, H);
+      drawVoid(ctx, W, H);
       drawNebulae(ctx, W, H, t, nebulae);
-      drawPlanet(ctx, W, H, planet);
+      drawGalacticBand(ctx, W, H, bandStars, dustLanes);
       drawStars(ctx, W, H, t, layers, driftX, driftY);
+      drawKeyStar(ctx, W, H, t);
       drawShootingStar(ctx, W, H, t, shooters);
+      // After the stars, because it blots them out. That silhouette is the whole point.
+      drawPlanet(ctx, W, H);
 
-      const scale = fitContain(W, H, DESIGN_WIDTH, DESIGN_HEIGHT);
-      const bobY = wave(t, 8.4) * 15 + wave(t, 13.1, 1.7) * 7;
-      const swayX = wave(t, 11.6, 0.6) * 20;
-      const tilt = wave(t, 17.3, 2.4) * 0.03;
+      const scale = Math.min(W, H) * BED_SCALE;
+      const cx = W * (0.34 + driftX);
+      const cy = H * (0.37 + driftY);
+      // A tumble so slow you only notice it by looking away and back.
+      const tumble = wave(t, 127, 1.4) * 0.1 + wave(t, 61, 0.2) * 0.028;
 
       ctx.save();
-      ctx.translate(W / 2, H / 2);
+      ctx.translate(cx, cy);
       ctx.scale(scale, scale);
-      ctx.translate(swayX, bobY);
-
-      // The halo is outside the tilt so the light stays anchored to the sleeper, not the frame.
-      glow(ctx, -140, -60, 620, [255, 196, 132], 0.17, 0.05);
-      glow(ctx, 20, 10, 420, [122, 148, 255], 0.08, 0.02);
-
-      ctx.rotate(tilt);
+      // The one warm thing in the frame, and it is very nearly nothing.
+      glow(ctx, -170, -70, 900, [255, 176, 112], 0.055, 0.014);
+      ctx.rotate(tumble);
       drawBed(ctx, t);
-      drawMotes(ctx, t, motes);
       drawZzz(ctx, t);
       ctx.restore();
 
@@ -161,27 +165,22 @@ function makeStarLayer(rng, { count, minRadius, maxRadius, alpha, depth }) {
       x: rng.next(),
       y: rng.next(),
       radius: rng.range(minRadius, maxRadius),
-      alpha: alpha * rng.range(0.55, 1),
-      twinkle: rng.range(0.6, 2.4),
+      alpha: alpha * rng.range(0.4, 1),
+      // Barely there. A twinkling sky reads as friendly; a steady one reads as cold.
+      twinkle: rng.range(0.25, 0.9),
       phase: rng.range(0, TAU),
       tint: rng.pick(STAR_TINTS),
-      spike: rng.next() > 0.72,
+      spike: rng.next() > 0.82,
     })),
   };
 }
 
-function drawSky(ctx, W, H) {
-  const sky = ctx.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, '#070a1e');
-  sky.addColorStop(0.55, '#05060f');
-  sky.addColorStop(1, '#02030a');
+function drawVoid(ctx, W, H) {
+  const sky = ctx.createLinearGradient(W * 0.9, 0, W * 0.1, H);
+  sky.addColorStop(0, VOID_TOP);
+  sky.addColorStop(0.5, VOID_MID);
+  sky.addColorStop(1, VOID_DEEP);
   ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, W, H);
-
-  const depth = ctx.createRadialGradient(W * 0.5, H * 0.5, 0, W * 0.5, H * 0.5, Math.max(W, H) * 0.7);
-  depth.addColorStop(0, 'rgba(42, 54, 120, 0.32)');
-  depth.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  ctx.fillStyle = depth;
   ctx.fillRect(0, 0, W, H);
 }
 
@@ -189,42 +188,69 @@ function drawNebulae(ctx, W, H, t, nebulae) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   for (const n of nebulae) {
-    const cx = (n.x + Math.sin(t * n.driftX + n.phase) * 0.03) * W;
-    const cy = (n.y + Math.cos(t * n.driftY + n.phase) * 0.025) * H;
-    const radius = n.radius * Math.max(W, H);
-    const pulse = 0.85 + 0.15 * Math.sin(t * 0.09 + n.phase);
-    glow(ctx, cx, cy, radius, n.colour, n.alpha * pulse, n.alpha * pulse * 0.4);
+    const cx = (n.x + Math.sin(t * n.drift + n.phase) * 0.02) * W;
+    const cy = (n.y + Math.cos(t * n.drift * 0.8 + n.phase) * 0.016) * H;
+    glow(ctx, cx, cy, n.radius * Math.max(W, H), n.colour, n.alpha, n.alpha * 0.42);
   }
   ctx.restore();
 }
 
-function drawPlanet(ctx, W, H, planet) {
-  const cx = planet.x * W;
-  const cy = planet.y * H;
-  const r = planet.radius * Math.min(W, H);
+/**
+ * The galactic plane: a faint band of light crossing the frame, thick with stars and cut by dark
+ * dust lanes. It costs almost nothing and does more for the sense of depth than anything else
+ * here — it puts something unreachably far behind the bed.
+ */
+function drawGalacticBand(ctx, W, H, bandStars, dustLanes) {
+  const angle = -0.46;
+  const cx = W * 0.52;
+  const cy = H * 0.58;
+  const span = Math.hypot(W, H);
+  const halfWidth = span * 0.16;
 
   ctx.save();
-  ctx.globalAlpha = 0.55;
-  const body = ctx.createRadialGradient(cx - r * 0.4, cy - r * 0.45, r * 0.1, cx, cy, r);
-  body.addColorStop(0, '#3b4880');
-  body.addColorStop(0.55, '#232a55');
-  body.addColorStop(1, '#0d1128');
-  ctx.fillStyle = body;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, TAU);
-  ctx.fill();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
 
-  // A thin lit limb so it reads as a sphere rather than a hole.
-  ctx.strokeStyle = 'rgba(163, 186, 255, 0.22)';
-  ctx.lineWidth = Math.max(0.8, r * 0.022);
-  ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.99, Math.PI * 1.15, Math.PI * 1.7);
-  ctx.stroke();
-  ctx.restore();
-
+  // The diffuse glow of unresolved stars.
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  glow(ctx, cx, cy, r * 2.6, [70, 96, 190], 0.1, 0.03);
+  const wash = ctx.createLinearGradient(0, -halfWidth, 0, halfWidth);
+  wash.addColorStop(0, 'rgba(56, 70, 136, 0)');
+  wash.addColorStop(0.36, 'rgba(54, 66, 128, 0.07)');
+  wash.addColorStop(0.5, 'rgba(100, 116, 186, 0.16)');
+  wash.addColorStop(0.64, 'rgba(54, 66, 128, 0.07)');
+  wash.addColorStop(1, 'rgba(56, 70, 136, 0)');
+  ctx.fillStyle = wash;
+  ctx.fillRect(-span, -halfWidth, span * 2, halfWidth * 2);
+  ctx.restore();
+
+  // Dust lanes, drawn dark over the glow. They have to be soft the whole way out — a hard-edged
+  // dark shape over a near-black field doesn't read as dust, it reads as a rendering fault.
+  for (const lane of dustLanes) {
+    const reach = lane.length * span;
+    ctx.save();
+    ctx.translate(lane.along * span, lane.across * halfWidth);
+    ctx.rotate(lane.tilt);
+    ctx.scale(1, (lane.thickness * halfWidth) / reach);
+    const lane_ = ctx.createRadialGradient(0, 0, 0, 0, 0, reach);
+    lane_.addColorStop(0, `rgba(1, 2, 6, ${lane.alpha})`);
+    lane_.addColorStop(0.55, `rgba(1, 2, 6, ${lane.alpha * 0.45})`);
+    lane_.addColorStop(1, 'rgba(1, 2, 6, 0)');
+    ctx.fillStyle = lane_;
+    ctx.beginPath();
+    ctx.arc(0, 0, reach, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // And the stars that resolve out of it.
+  for (const star of bandStars) {
+    ctx.fillStyle = rgba(star.tint, star.alpha);
+    ctx.beginPath();
+    ctx.arc(star.along * span, star.across * halfWidth, star.radius, 0, TAU);
+    ctx.fill();
+  }
+
   ctx.restore();
 }
 
@@ -233,7 +259,7 @@ function drawStars(ctx, W, H, t, layers, driftX, driftY) {
     const dx = driftX * layer.depth;
     const dy = driftY * layer.depth;
     for (const star of layer.stars) {
-      const alpha = star.alpha * (0.62 + 0.38 * Math.sin(t * star.twinkle + star.phase));
+      const alpha = clamp(star.alpha * (0.88 + 0.12 * Math.sin(t * star.twinkle + star.phase)), 0, 1);
       if (alpha <= 0.01) continue;
       const x = wrap01(star.x + dx) * W;
       const y = wrap01(star.y + dy) * H;
@@ -243,10 +269,10 @@ function drawStars(ctx, W, H, t, layers, driftX, driftY) {
       ctx.arc(x, y, star.radius, 0, TAU);
       ctx.fill();
 
-      if (star.spike && star.radius > 1.4) {
-        const reach = star.radius * 5.5 * (0.7 + 0.3 * alpha);
-        ctx.strokeStyle = rgba(star.tint, alpha * 0.4);
-        ctx.lineWidth = star.radius * 0.4;
+      if (star.spike && star.radius > 1.3) {
+        const reach = star.radius * 6;
+        ctx.strokeStyle = rgba(star.tint, alpha * 0.3);
+        ctx.lineWidth = star.radius * 0.32;
         ctx.beginPath();
         ctx.moveTo(x - reach, y);
         ctx.lineTo(x + reach, y);
@@ -256,6 +282,111 @@ function drawStars(ctx, W, H, t, layers, driftX, driftY) {
       }
     }
   }
+}
+
+/** A distant sun: small, brutally bright, and the reason anything in the frame has an edge. */
+function drawKeyStar(ctx, W, H, t) {
+  const m = Math.min(W, H);
+  const x = W * KEY_STAR.x;
+  const y = H * KEY_STAR.y;
+  const pulse = 0.94 + 0.06 * Math.sin(t * 0.19);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  glow(ctx, x, y, m * 0.26, [128, 160, 240], 0.07 * pulse, 0.018 * pulse);
+  glow(ctx, x, y, m * 0.045, [226, 238, 255], 0.42 * pulse, 0.13 * pulse);
+
+  const spike = (length, thickness, alpha, horizontal) => {
+    const g = horizontal
+      ? ctx.createLinearGradient(x - length, y, x + length, y)
+      : ctx.createLinearGradient(x, y - length, x, y + length);
+    g.addColorStop(0, 'rgba(206, 224, 255, 0)');
+    g.addColorStop(0.5, `rgba(236, 244, 255, ${alpha})`);
+    g.addColorStop(1, 'rgba(206, 224, 255, 0)');
+    ctx.strokeStyle = g;
+    ctx.lineWidth = thickness;
+    ctx.beginPath();
+    if (horizontal) {
+      ctx.moveTo(x - length, y);
+      ctx.lineTo(x + length, y);
+    } else {
+      ctx.moveTo(x, y - length);
+      ctx.lineTo(x, y + length);
+    }
+    ctx.stroke();
+  };
+
+  spike(m * 0.2 * pulse, Math.max(0.7, m * 0.002), 0.5 * pulse, true);
+  spike(m * 0.13 * pulse, Math.max(0.7, m * 0.002), 0.4 * pulse, false);
+
+  ctx.fillStyle = `rgba(255, 255, 255, ${0.95 * pulse})`;
+  ctx.beginPath();
+  ctx.arc(x, y, Math.max(1, m * 0.0035), 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * Something enormous, just off frame, almost entirely unlit — we get its limb and nothing else.
+ * It never moves. It's the thing that makes the bed small.
+ */
+function drawPlanet(ctx, W, H) {
+  const m = Math.min(W, H);
+  const cx = W + m * 0.15;
+  const cy = H + m * 0.75;
+  const r = m * 1.15;
+
+  // The body occludes the star field behind it.
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, TAU);
+  ctx.fillStyle = '#010207';
+  ctx.fill();
+
+  // The faintest suggestion of a surface, only near the edge.
+  ctx.clip();
+  const surface = ctx.createRadialGradient(cx, cy, r * 0.88, cx, cy, r);
+  surface.addColorStop(0, 'rgba(12, 16, 38, 0)');
+  surface.addColorStop(1, 'rgba(34, 46, 96, 0.55)');
+  ctx.fillStyle = surface;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+
+  // The limb: a blade of light, brightest where the surface faces the distant sun. The gradient
+  // runs along the star→planet axis rather than between viewport corners, so the lit arc lands in
+  // the same place whatever the window's shape.
+  const starX = W * KEY_STAR.x;
+  const starY = H * KEY_STAR.y;
+  const distance = Math.hypot(cx - starX, cy - starY);
+  const nearest = clamp((distance - r) / Math.max(distance, 1), 0, 0.9);
+
+  const limbGradient = (alpha) => {
+    const g = ctx.createLinearGradient(starX, starY, cx, cy);
+    g.addColorStop(0, `rgba(224, 238, 255, ${alpha})`);
+    g.addColorStop(nearest, `rgba(220, 236, 255, ${alpha})`);
+    g.addColorStop(Math.min(1, nearest + 0.16), `rgba(150, 182, 245, ${alpha * 0.42})`);
+    g.addColorStop(Math.min(1, nearest + 0.34), 'rgba(90, 120, 200, 0)');
+    g.addColorStop(1, 'rgba(90, 120, 200, 0)');
+    return g;
+  };
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  // Wide and faint first (the atmosphere), then the hard edge on top.
+  for (const [width, alpha] of [
+    [m * 0.055, 0.05],
+    [m * 0.016, 0.1],
+    [Math.max(1.1, m * 0.0032), 0.9],
+  ]) {
+    ctx.strokeStyle = limbGradient(alpha);
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, TAU);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawShootingStar(ctx, W, H, t, shooters) {
@@ -270,10 +401,10 @@ function drawShootingStar(ctx, W, H, t, shooters) {
   const dirY = Math.sin(shooter.angle);
   const headX = shooter.x * W + dirX * span * p;
   const headY = shooter.y * H + dirY * span * p;
-  const tailLength = span * 0.38 * smoothstep(0, 0.25, p);
+  const tailLength = span * 0.45 * smoothstep(0, 0.25, p);
   const tailX = headX - dirX * tailLength;
   const tailY = headY - dirY * tailLength;
-  const alpha = Math.sin(p * Math.PI) * 0.9;
+  const alpha = Math.sin(p * Math.PI) * 0.7;
 
   const streak = ctx.createLinearGradient(tailX, tailY, headX, headY);
   streak.addColorStop(0, 'rgba(255, 255, 255, 0)');
@@ -282,21 +413,20 @@ function drawShootingStar(ctx, W, H, t, shooters) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   ctx.strokeStyle = streak;
-  ctx.lineWidth = 1.9;
+  ctx.lineWidth = 1.1;
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(tailX, tailY);
   ctx.lineTo(headX, headY);
   ctx.stroke();
-  glow(ctx, headX, headY, 26, [255, 250, 235], alpha * 0.55, alpha * 0.16);
   ctx.restore();
 }
 
 function drawVignette(ctx, W, H) {
   const radius = Math.hypot(W, H) * 0.62;
-  const vignette = ctx.createRadialGradient(W / 2, H / 2, radius * 0.42, W / 2, H / 2, radius);
+  const vignette = ctx.createRadialGradient(W / 2, H / 2, radius * 0.3, W / 2, H / 2, radius);
   vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
-  vignette.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
+  vignette.addColorStop(1, 'rgba(0, 0, 0, 0.75)');
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, W, H);
 }
@@ -304,8 +434,8 @@ function drawVignette(ctx, W, H) {
 /* ---------------------------------------------------------------- bed ---- */
 
 function drawBed(ctx, t) {
-  const breath = wave(t, 5.6); // the sleeper's slow, even breathing
-  const flutter = wave(t, 7.3, 0.9); // the duvet's free corner in zero gravity
+  const breath = wave(t, 6.4); // the sleeper's slow, even breathing
+  const flutter = wave(t, 11.5, 0.9); // the duvet's free corner in zero gravity
 
   drawHeadboard(ctx);
   drawFootboard(ctx);
@@ -319,34 +449,15 @@ function drawBed(ctx, t) {
   drawRimLight(ctx, breath);
 }
 
-function woodGradient(ctx, x0, y0, x1, y1) {
-  const g = ctx.createLinearGradient(x0, y0, x1, y1);
-  g.addColorStop(0, WOOD.light);
-  g.addColorStop(0.45, WOOD.mid);
-  g.addColorStop(1, WOOD.dark);
-  return g;
-}
-
 function drawHeadboard(ctx) {
-  ctx.fillStyle = woodGradient(ctx, -352, -196, -316, 44);
+  ctx.fillStyle = FRAME_DARK;
   roundedRect(ctx, -354, -196, 40, 240, 18);
-  ctx.fill();
-
-  // Inset panel, so the headboard has a little joinery instead of reading as a plank.
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
-  roundedRect(ctx, -344, -180, 20, 190, 10);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255, 214, 176, 0.14)';
-  roundedRect(ctx, -344, -180, 7, 190, 4);
   ctx.fill();
 }
 
 function drawFootboard(ctx) {
-  ctx.fillStyle = woodGradient(ctx, 316, -70, 350, 44);
+  ctx.fillStyle = FRAME_DARK;
   roundedRect(ctx, 314, -70, 36, 114, 14);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255, 214, 176, 0.12)';
-  roundedRect(ctx, 316, -66, 8, 104, 4);
   ctx.fill();
 }
 
@@ -354,7 +465,7 @@ function drawLegs(ctx, back) {
   const positions = back ? [-268, 250] : [-300, 282];
   const top = back ? 52 : 56;
   const height = back ? 40 : 52;
-  ctx.fillStyle = back ? WOOD.edge : woodGradient(ctx, 0, top, 0, top + height);
+  ctx.fillStyle = back ? '#04050d' : FRAME_DARK;
   for (const x of positions) {
     ctx.beginPath();
     ctx.moveTo(x, top);
@@ -367,37 +478,25 @@ function drawLegs(ctx, back) {
 }
 
 function drawMattress(ctx) {
-  // Side face.
   const side = ctx.createLinearGradient(0, -10, 0, 36);
-  side.addColorStop(0, '#f4eee2');
-  side.addColorStop(1, '#d9cfbe');
+  side.addColorStop(0, LINEN);
+  side.addColorStop(1, '#171c2c');
   ctx.fillStyle = side;
   roundedRect(ctx, -302, -12, 604, 48, 14);
   ctx.fill();
 
   // The sliver of top surface that makes the view read as slightly-from-above.
   const top = ctx.createLinearGradient(0, -34, 0, -6);
-  top.addColorStop(0, '#fffaf1');
-  top.addColorStop(1, '#eee5d6');
+  top.addColorStop(0, LINEN_LIGHT);
+  top.addColorStop(1, LINEN);
   ctx.fillStyle = top;
   roundedRect(ctx, -298, -34, 596, 30, 14);
   ctx.fill();
-
-  // Quilting seam.
-  ctx.strokeStyle = 'rgba(150, 133, 110, 0.35)';
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.moveTo(-286, 12);
-  ctx.lineTo(286, 12);
-  ctx.stroke();
 }
 
 function drawFrame(ctx) {
-  ctx.fillStyle = woodGradient(ctx, 0, 28, 0, 62);
+  ctx.fillStyle = FRAME_DARK;
   roundedRect(ctx, -318, 28, 636, 34, 10);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255, 216, 178, 0.16)';
-  roundedRect(ctx, -312, 31, 624, 7, 4);
   ctx.fill();
 }
 
@@ -415,66 +514,60 @@ function pillow(ctx, cx, cy, rx, ry, tilt, light, shade) {
 }
 
 function drawPillows(ctx) {
-  pillow(ctx, -266, -78, 80, 34, -0.14, '#efe8dc', '#cbc0b0');
-  pillow(ctx, -248, -50, 78, 32, -0.07, '#fdfaf4', '#ddd3c4');
-  // The dent the head presses into the pillow.
-  ctx.save();
-  ctx.globalAlpha = 0.18;
-  fillEllipse(ctx, -214, -64, 44, 14, '#9c8f7c');
-  ctx.restore();
+  // Kept dark: the brightest things in frame are the sun, the planet's limb, and the sleeper's
+  // face — in that order. A bright pillow steals from all three.
+  pillow(ctx, -266, -78, 80, 34, -0.14, '#2b3146', '#0d1120');
+  pillow(ctx, -248, -50, 78, 32, -0.07, '#454f6c', '#161b29');
 }
 
 function drawSleeper(ctx, breath, t) {
   const lift = breath * 1.5; // the head rides the breath a little
 
-  // Hair spread across the pillow, then the face set on top so a crescent of hair frames it.
+  // Hair spread across the pillow, then the face set well down and to the right of it, so a
+  // thick crescent of hair frames the face instead of the head reading as a bare sphere.
   ctx.fillStyle = HAIR;
-  fillEllipse(ctx, -250, -88 + lift, 30, 22);
+  fillEllipse(ctx, -256, -84 + lift, 34, 26);
   ctx.beginPath();
-  ctx.arc(-223, -103 + lift, 40, 0, TAU);
+  ctx.arc(-228, -106 + lift, 44, 0, TAU);
   ctx.fill();
 
   drawHairWisps(ctx, t, lift);
 
   // Neck, tucked toward the covers (the duvet is drawn after this and hides the join).
   ctx.fillStyle = SKIN_SHADE;
-  roundedRect(ctx, -212, -74 + lift, 34, 34, 12);
+  roundedRect(ctx, -208, -72 + lift, 34, 34, 12);
   ctx.fill();
 
-  // Face.
-  ctx.fillStyle = SKIN;
-  ctx.beginPath();
-  ctx.arc(-210, -94 + lift, 34, 0, TAU);
-  ctx.fill();
-  // Nose.
-  ctx.beginPath();
-  ctx.arc(-179, -90 + lift, 7.5, 0, TAU);
-  ctx.fill();
-
-  // Cheek.
+  // A thin cold graze along the crown, so the skull has a top edge against the void.
   ctx.save();
-  ctx.globalAlpha = 0.22;
-  fillEllipse(ctx, -190, -84 + lift, 11, 7, '#e08a72');
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = 'rgba(150, 180, 240, 0.26)';
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.arc(-228, -106 + lift, 44, Math.PI * 1.5, Math.PI * 1.88);
+  ctx.stroke();
   ctx.restore();
 
-  // Closed eye and a contented mouth.
-  ctx.strokeStyle = '#4a3340';
+  // Face. At this scale it is a handful of pixels — one closed eye is all the detail that
+  // survives. Lit hard from the distant sun and falling to nothing on the far side, so the head
+  // reads as a sphere emerging from the dark rather than a disc pasted on it.
+  const face = ctx.createLinearGradient(-184, -120, -230, -60);
+  face.addColorStop(0, '#dcae86');
+  face.addColorStop(0.5, '#a87c5e');
+  face.addColorStop(1, '#43301f');
+  ctx.fillStyle = face;
+  ctx.beginPath();
+  ctx.arc(-206, -92 + lift, 33, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(-176, -88 + lift, 7, 0, TAU);
+  ctx.fill();
+
+  ctx.strokeStyle = '#2c2028';
   ctx.lineCap = 'round';
-  ctx.lineWidth = 2.6;
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(-193, -100 + lift, 7.5, Math.PI * 1.06, Math.PI * 1.94);
-  ctx.stroke();
-
-  ctx.lineWidth = 1.6;
-  ctx.strokeStyle = 'rgba(74, 51, 64, 0.4)';
-  ctx.beginPath();
-  ctx.arc(-193, -110 + lift, 12, Math.PI * 1.2, Math.PI * 1.8);
-  ctx.stroke();
-
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = 'rgba(150, 84, 82, 0.65)';
-  ctx.beginPath();
-  ctx.arc(-190, -80 + lift, 7, Math.PI * 0.12, Math.PI * 0.62);
+  ctx.arc(-190, -98 + lift, 7.5, Math.PI * 1.06, Math.PI * 1.94);
   ctx.stroke();
 }
 
@@ -482,11 +575,11 @@ function drawSleeper(ctx, breath, t) {
 function drawHairWisps(ctx, t, lift) {
   ctx.strokeStyle = HAIR;
   ctx.lineCap = 'round';
-  for (let i = 0; i < 3; i += 1) {
-    const drift = wave(t, 6.5 + i * 1.3, i * 1.9);
-    const startX = -246 - i * 10;
-    const startY = -116 - i * 8 + lift;
-    ctx.lineWidth = 2.4 - i * 0.4;
+  for (let i = 0; i < 2; i += 1) {
+    const drift = wave(t, 9.5 + i * 1.9, i * 1.9);
+    const startX = -252 - i * 11;
+    const startY = -122 - i * 8 + lift;
+    ctx.lineWidth = 2.2 - i * 0.4;
     ctx.beginPath();
     ctx.moveTo(startX, startY);
     // A short curl that loops back on itself: it can never straighten into an antenna, whatever
@@ -533,25 +626,26 @@ function drawDuvet(ctx, t, breath, flutter) {
   for (let i = 1; i <= steps; i += 1) {
     const x0 = lerp(hemStart, hemEnd, (i - 1) / steps);
     const x1 = lerp(hemStart, hemEnd, i / steps);
-    const dip = 66 + Math.sin(i * 1.7 + t * 0.42) * 9;
-    const end = 50 + Math.sin(i * 2.1 + t * 0.36) * 5;
+    const dip = 66 + Math.sin(i * 1.7 + t * 0.26) * 9;
+    const end = 50 + Math.sin(i * 2.1 + t * 0.22) * 5;
     ctx.quadraticCurveTo((x0 + x1) / 2, dip, x1, end);
   }
   // Soft edge back up to the chin.
   ctx.bezierCurveTo(-198, 22, -196, -18, -180, -50);
   ctx.closePath();
 
+  // Lit along the top, falling away to nothing underneath.
   const body = ctx.createLinearGradient(-220, -140, 240, 90);
-  body.addColorStop(0, '#8ea3e8');
-  body.addColorStop(0.42, '#4f62aa');
-  body.addColorStop(1, '#2a3670');
+  body.addColorStop(0, '#3a4578');
+  body.addColorStop(0.4, '#1a2044');
+  body.addColorStop(1, '#080b1e');
   ctx.fillStyle = body;
   ctx.fill();
 
   // Creases, clipped to the duvet so they never bleed onto the mattress.
   ctx.save();
   ctx.clip();
-  ctx.strokeStyle = 'rgba(22, 30, 68, 0.15)';
+  ctx.strokeStyle = 'rgba(4, 6, 18, 0.22)';
   ctx.lineCap = 'round';
   ctx.lineWidth = 9;
   ctx.beginPath();
@@ -561,15 +655,6 @@ function drawDuvet(ctx, t, breath, flutter) {
   ctx.bezierCurveTo(126, -58, 138, -30, 150, 34);
   ctx.moveTo(232, -58);
   ctx.bezierCurveTo(248, -30, 254, -8, 258, 40);
-  ctx.stroke();
-
-  ctx.strokeStyle = 'rgba(178, 199, 255, 0.11)';
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.moveTo(-40, -86);
-  ctx.bezierCurveTo(-14, -50, 4, -20, 16, 36);
-  ctx.moveTo(170, -78);
-  ctx.bezierCurveTo(190, -44, 198, -18, 204, 38);
   ctx.stroke();
   ctx.restore();
 
@@ -586,81 +671,65 @@ function drawSheetCuff(ctx, breath) {
   ctx.closePath();
 
   const cuff = ctx.createLinearGradient(-190, -110, -110, -40);
-  cuff.addColorStop(0, '#fdfaf3');
-  cuff.addColorStop(1, '#d9d0c1');
+  cuff.addColorStop(0, '#5a667f');
+  cuff.addColorStop(1, '#1c2231');
   ctx.fillStyle = cuff;
   ctx.fill();
-
-  ctx.strokeStyle = 'rgba(120, 108, 92, 0.28)';
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  ctx.moveTo(-180, -50);
-  ctx.bezierCurveTo(-168, -88, -136, shoulder - 6, -96, shoulder);
-  ctx.stroke();
 }
 
-/** A cool additive edge light, as if a distant blue star were off to the upper left. */
+/** The distant sun catching every upward-facing edge. It is the only thing separating the bed
+ *  from the void behind it. */
 function drawRimLight(ctx, breath) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  ctx.strokeStyle = 'rgba(150, 182, 255, 0.28)';
-  ctx.lineWidth = 3;
   ctx.lineCap = 'round';
+
+  // Falls off toward the head end, which is turned away from the light. An even rim reads as
+  // neon piping; an uneven one reads as a surface.
+  const falloff = ctx.createLinearGradient(-220, 0, 360, 0);
+  falloff.addColorStop(0, 'rgba(178, 206, 255, 0.1)');
+  falloff.addColorStop(0.45, 'rgba(178, 206, 255, 0.34)');
+  falloff.addColorStop(1, 'rgba(198, 220, 255, 0.6)');
+  ctx.strokeStyle = falloff;
+  ctx.lineWidth = 3.4;
   ctx.beginPath();
   traceDuvetTop(ctx, breath);
   ctx.stroke();
 
-  // Only the headboard's outer edge — anything crossing the bedding reads as a stray wire.
-  ctx.strokeStyle = 'rgba(150, 182, 255, 0.2)';
-  ctx.lineWidth = 2.4;
+  ctx.strokeStyle = 'rgba(178, 206, 255, 0.22)';
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(-345, -178);
-  ctx.lineTo(-345, 26);
+  ctx.moveTo(-345, -176);
+  ctx.lineTo(-345, 24);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(198, 220, 255, 0.5)';
+  ctx.beginPath();
+  // The footboard's lit face — nearest the sun, so it gets the hardest edge on the bed.
+  ctx.moveTo(346, -58);
+  ctx.lineTo(346, 34);
   ctx.stroke();
   ctx.restore();
 }
 
-/* ------------------------------------------------------------- extras ---- */
-
-// Vertical band the motes recycle through, in design units.
-const MOTE_BAND = 600;
-
-function drawMotes(ctx, t, motes) {
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  for (const mote of motes) {
-    // Rise slowly and wrap, so the bed always sits in a gentle updraft of light.
-    const y = 300 - wrap01(mote.offset + (t * mote.speed) / MOTE_BAND) * MOTE_BAND;
-    const x = mote.x + Math.sin(t * 0.35 + mote.phase) * mote.sway;
-    // Fade in as they enter the band and out as they leave it — no popping.
-    const fade = mote.alpha * Math.min(smoothstep(300, 190, y), smoothstep(-300, -190, y));
-    if (fade <= 0.01) continue;
-    glow(ctx, x, y, mote.radius * 7, [255, 226, 189], fade * 0.5, fade * 0.15);
-    ctx.fillStyle = rgba([255, 245, 230], fade);
-    ctx.beginPath();
-    ctx.arc(x, y, mote.radius, 0, TAU);
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
+/** Barely there — a whisper of breath, dissolving. */
 function drawZzz(ctx, t) {
-  const cycle = 6.4;
+  const cycle = 11;
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   for (let i = 0; i < 3; i += 1) {
     const p = wrap01(t / cycle + i / 3);
-    const alpha = Math.sin(p * Math.PI) * 0.5;
+    const alpha = Math.sin(p * Math.PI) * 0.24;
     if (alpha <= 0.01) continue;
-    const size = 20 + p * 30;
-    const x = -166 + p * 132 + Math.sin(p * 5.5 + i) * 12;
-    const y = -146 - p * 156;
+    const size = 24 + p * 46;
+    const x = -166 + p * 210 + Math.sin(p * 5.5 + i) * 18;
+    const y = -160 - p * 300;
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(Math.sin(p * 3 + i) * 0.18);
-    ctx.font = `italic 700 ${size}px "Trebuchet MS", "Segoe UI", system-ui, sans-serif`;
-    ctx.fillStyle = rgba([228, 236, 255], alpha);
+    ctx.font = `italic 300 ${size}px "Trebuchet MS", "Segoe UI", system-ui, sans-serif`;
+    ctx.fillStyle = rgba([198, 216, 255], alpha);
     ctx.fillText('Z', 0, 0);
     ctx.restore();
   }

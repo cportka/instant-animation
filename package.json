@@ -1,6 +1,6 @@
 {
   "name": "instant-animation",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "An instant animation generator. Animate anything you can describe.",
   "type": "module",

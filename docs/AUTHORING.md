@@ -46,22 +46,37 @@ export const scenes = [floatingBed, myScene];
 
 ## Composing at any size
 
-Scenes get whatever viewport the visitor has — a phone in portrait, an ultrawide monitor. The
-pattern used by `floating-bed.js`:
+Scenes get whatever viewport the visitor has — a phone in portrait, an ultrawide monitor.
 
 - **Backgrounds** are drawn in screen space, using normalised (0–1) coordinates scaled by
   `width`/`height`, so they fill any shape of window.
-- **The subject** is composed against a fixed design box and scaled with `fitContain()`, so its
-  proportions never distort:
+- **The subject** is drawn around its own origin in fixed design units, and placed with one
+  transform. How you pick the scale decides how the composition feels:
 
   ```js
+  // Fill the frame: the subject is as large as it can be without cropping.
   const scale = fitContain(width, height, DESIGN_WIDTH, DESIGN_HEIGHT);
+
+  // Or hold a size against the short edge, so the subject gets *smaller* in frame as the window
+  // grows. This is what `floating-bed.js` does — the bigger your monitor, the more lost it looks.
+  const scale = Math.min(width, height) * BED_SCALE;
+
   ctx.save();
-  ctx.translate(width / 2, height / 2);
+  ctx.translate(width * 0.34, height * 0.37);   // off-centre; negative space is a choice
   ctx.scale(scale, scale);
   // …draw around the origin…
   ctx.restore();
   ```
+
+## One light source
+
+Put the key light in a single constant and light everything from it — edges, gradients, which
+side of a face falls into shadow. `floating-bed.js` keeps a distant sun in `KEY_STAR` and derives
+the planet's lit limb, the duvet's rim, and the sleeper's face from that one position. Scenes fall
+apart the moment two elements disagree about where the light is, and it's very hard to see why.
+
+Rim light that runs at even brightness along a whole silhouette reads as neon piping. Give it a
+gradient that falls off as the surface turns away, and it reads as a surface.
 
 ## Motion that reads as alive
 
