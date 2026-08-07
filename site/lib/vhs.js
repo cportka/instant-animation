@@ -76,6 +76,30 @@ const sourceOf = (ctx, tape) => tape?.source ?? ctx.canvas;
 /** Fold a value back into [-span/2, span/2] by wrapping rather than clipping. */
 const fold = (value, span) => (((value % span) + span * 1.5) % span) - span / 2;
 
+/**
+ * A damage envelope that *dwells* at its peak instead of touching it in passing.
+ *
+ * A plain `sin(u·π)^shape` bump is at full value for a single instant, so the worst moment of a
+ * fault is gone before the eye has settled on it — you register that something happened, not what.
+ * This splices `hold` seconds of the peak into the middle of that bump: the rise and the fall keep
+ * exactly the shape they had, and the top becomes a plateau. The tape stays broken long enough to
+ * be read as broken.
+ *
+ * @param {number} at seconds since the pulse began; outside [0, rise + hold) the envelope is 0
+ * @param {number} rise the width of the original bump — the rise and the fall together
+ * @param {number} hold seconds spent pinned at full value, inserted at the peak
+ * @param {number} shape exponent on the sine; >1 peaks sharply, <1 fattens the shoulders
+ */
+export function heldPulse(at, rise, hold, shape = 1) {
+  if (at < 0 || at >= rise + hold) return 0;
+  const half = rise / 2;
+  if (at > half && at <= half + hold) return 1;
+  // Before the plateau the clock runs straight; after it, rewind by the held time so the fall
+  // resumes from exactly where the rise stopped.
+  const u = at <= half ? at : at - hold;
+  return Math.sin((u / rise) * Math.PI) ** shape;
+}
+
 /** Deterministic value noise — no Math.random, so a frame always looks the same. */
 export const hash = (n) => {
   const x = Math.sin(n * 12.9898) * 43758.5453;

@@ -36,18 +36,32 @@ pushed to neon, long horizontal smears, hexagonal honeycomb dither, head-switchi
 with noise inside them, rolling scanlines and grain. The displacement is real, not an overlay —
 slices of the rendered frame are copied back over it.
 
-Three levels of damage: ambient all the time, the heads giving out for about a second every ten,
-and — every seventy-one seconds — a **surge to ten times that**, which ramps up, briefly leaves
-nothing of the picture at all, and comes all the way back to baseline. The surge multiplies
-*passes* rather than displacement: past about half the frame width a shifted slice simply lands
-off screen, so more distance stops buying anything, while running the same zones again at offset
-times keeps multiplying how much of the picture is torn.
+Three levels of damage: ambient all the time, the heads giving out completely every ten seconds,
+and — every seventy-one seconds — a **surge to ten times that**, which ramps up, leaves nothing of
+the picture at all, and comes all the way back to baseline. The surge multiplies *passes* rather
+than displacement: past about half the frame width a shifted slice simply lands off screen, so more
+distance stops buying anything, while running the same zones again at offset times keeps
+multiplying how much of the picture is torn.
 
-**Wet black paint** (`site/lib/paint.js`) thrown over everything: irregular splotches that read as
-holes punched in the image, with runs that taper, lean off vertical and end in hanging bulbs. The
-whole wet look comes from the specular edge, since the paint itself is near-black. Everything
-creeps on periods of two to five *minutes* — you never see a drip move, only notice later that it
-has. Splotch centres are kept off the sleeper; the runs still cross them.
+Each cycle **dwells at its own maximum** rather than touching it in passing (`heldPulse`). A plain
+sine bump is at full value for a single frame, so the worst moment of a fault is over before the
+eye has settled on it — you register that something happened, not what. The envelope now splices a
+plateau into the peak, with the rise and the fall keeping the shape they had: both cycles spend
+about **five times as long** at full value as the bare bump did, the small one included. The
+artefacts underneath go on churning while the envelope holds, so a held peak stays broken without
+freezing.
+
+**Wet black paint** (`site/lib/paint.js`) thrown over everything: small goopy splotches that read
+as holes punched in the image, and brush strokes that drawl downward from a loaded head and thin as
+they drag. Both are built from one ribbon primitive — a spine with an independent half-width at
+every sample — so a run can bulge where paint gathers and pinch where it has thinned; a shape of
+constant width reads as a bar, and the bulges are the whole difference between paint and ink. The
+wet look comes entirely from the specular edge, since the paint itself is near-black, and a
+catchlight has to sit *inside* its bead: a glow wider than the drop reads as a luminous bubble
+hanging in space. Marks are placed on a jittered grid, because purely random ones clump into a
+single mass while half the frame stays bare. Everything creeps on periods of two to five *minutes*
+— you never see a drip move, only notice later that it has. Centres are kept off the sleeper; the
+runs still cross them.
 
 **The first animation — "Asleep Among the Stars"**, from *"a bed floating in space with someone
 snuggled under the covers peacefully sleeping while the bed gently floats amongst the stars"*:
