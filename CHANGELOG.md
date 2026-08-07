@@ -51,12 +51,15 @@ about **five times as long** at full value as the bare bump did, the small one i
 artefacts underneath go on churning while the envelope holds, so a held peak stays broken without
 freezing.
 
-**Wet black paint** (`site/lib/paint.js`) thrown over everything: small goopy splotches that read
-as holes punched in the image, and brush strokes that drawl downward from a loaded head and thin as
-they drag. Both are built from one ribbon primitive — a spine with an independent half-width at
-every sample — so a run can bulge where paint gathers and pinch where it has thinned; a shape of
-constant width reads as a bar, and the bulges are the whole difference between paint and ink. The
-wet look comes entirely from the specular edge, since the paint itself is near-black, and a
+**Wet black paint** (`site/lib/paint.js`) thrown over everything: small goopy flecks that read as
+holes punched in the image, and brush strokes that drawl downward from a loaded head. Both are
+built from one ribbon primitive — a spine with an independent half-width at every sample — so a run
+bulges where paint gathers and pinches where it has thinned. That variation is the whole point: a
+ribbon of constant width falling straight is a column, and a frame of columns is a fence. Strokes
+swell somewhere along their length and lean by a fraction of that length rather than of the head,
+so a long one wanders instead of hanging plumb.
+
+The wet look comes entirely from the specular edge, since the paint itself is near-black, and a
 catchlight has to sit *inside* its bead: a glow wider than the drop reads as a luminous bubble
 hanging in space. Marks are placed on a jittered grid, because purely random ones clump into a
 single mass while half the frame stays bare. Everything creeps on periods of two to five *minutes*

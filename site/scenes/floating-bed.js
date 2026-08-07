@@ -190,7 +190,7 @@ export function create({ width, height, seed = meta.id, tape = null }) {
   const bars = makeDropoutBars(rng, 3);
   // Kept off the sleeper: the bed drifts around (0.34, 0.37), and a splotch centred there would
   // erase the only thing in the frame worth looking at. Drips still run across it.
-  const splotches = makeSplotches(rng, 14, { avoid: { x: 0.34, y: 0.37, r: 0.13 } });
+  const splotches = makeSplotches(rng, 30, { avoid: { x: 0.34, y: 0.37, r: 0.1 } });
 
   let W = width;
   let H = height;
