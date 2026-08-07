@@ -33,9 +33,21 @@ Skipped entirely under reduced motion.
 
 **VHS artefacts** (`site/lib/vhs.js`), modelled on a real tape failure: per-scanline shred, chroma
 pushed to neon, long horizontal smears, hexagonal honeycomb dither, head-switching dropout bars
-with noise inside them, rolling scanlines and grain. Ambient damage runs constantly and the heads
-give out completely for about a second every ten. The displacement is real, not an overlay —
+with noise inside them, rolling scanlines and grain. The displacement is real, not an overlay —
 slices of the rendered frame are copied back over it.
+
+Three levels of damage: ambient all the time, the heads giving out for about a second every ten,
+and — every seventy-one seconds — a **surge to ten times that**, which ramps up, briefly leaves
+nothing of the picture at all, and comes all the way back to baseline. The surge multiplies
+*passes* rather than displacement: past about half the frame width a shifted slice simply lands
+off screen, so more distance stops buying anything, while running the same zones again at offset
+times keeps multiplying how much of the picture is torn.
+
+**Wet black paint** (`site/lib/paint.js`) thrown over everything: irregular splotches that read as
+holes punched in the image, with runs that taper, lean off vertical and end in hanging bulbs. The
+whole wet look comes from the specular edge, since the paint itself is near-black. Everything
+creeps on periods of two to five *minutes* — you never see a drip move, only notice later that it
+has. Splotch centres are kept off the sleeper; the runs still cross them.
 
 **The first animation — "Asleep Among the Stars"**, from *"a bed floating in space with someone
 snuggled under the covers peacefully sleeping while the bed gently floats amongst the stars"*:

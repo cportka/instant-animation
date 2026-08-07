@@ -73,6 +73,9 @@ export function createTape() {
 
 const sourceOf = (ctx, tape) => tape?.source ?? ctx.canvas;
 
+/** Fold a value back into [-span/2, span/2] by wrapping rather than clipping. */
+const fold = (value, span) => (((value % span) + span * 1.5) % span) - span / 2;
+
 /** Deterministic value noise — no Math.random, so a frame always looks the same. */
 export const hash = (n) => {
   const x = Math.sin(n * 12.9898) * 43758.5453;
@@ -129,7 +132,14 @@ export function tearBands(ctx, W, H, t, bands, intensity = 1, tape = null) {
     // line rather than a wash. Let it finish entering first.
     if (visible < height * 0.5) continue;
 
-    const shift = Math.sin(t * band.wobble * 1.7 + band.phase * 2) * band.shiftFrac * W * intensity;
+    // Clamped rather than folded: there are only six bands, all driven by sines, and folding can
+    // drop several of them near zero at once — so the worst moment of a surge would randomly look
+    // calm. The shred has enough slices for folding to stay varied; this doesn't.
+    const shift = clamp(
+      Math.sin(t * band.wobble * 1.7 + band.phase * 2) * band.shiftFrac * W * intensity,
+      -W * 0.5,
+      W * 0.5,
+    );
     blitSlice(ctx, source, W, H, scale, { top, height: visible, dx: shift });
 
     // The bleed has to run the full height of the band. Fading it out near the edges leaves the
@@ -173,7 +183,11 @@ export function shred(ctx, W, H, t, zones, intensity = 1, tape = null) {
       const noise = hash(seed + i * 3.7) - 0.5;
       // Squaring keeps most lines nearly still and throws a few a long way, which is what the
       // reference does — an evenly jittered comb reads as static, not as a tape fault.
-      const dx = Math.sign(noise) * noise * noise * 4 * zone.shiftFrac * W * intensity;
+      // Wrapped, not clamped. Past about two thirds of the width a slice lands entirely off frame,
+      // but clamping makes every slice saturate at the same offset during a surge — coherent bars
+      // instead of chaos. Folding the displacement back into range keeps it varied at any
+      // magnitude, which is what a ten-times surge needs to still look like shredding.
+      const dx = fold(Math.sign(noise) * noise * noise * 4 * zone.shiftFrac * W * intensity, W * 1.32);
       blitSlice(ctx, source, W, H, scale, { top: y, height: sliceHeight, dx });
     }
   }
