@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Instant Animation</title>
+    <meta
+      name="description"
+      content="Describe anything; watch it animate. A gallery of hand-generated canvas animations."
+    />
+    <meta name="theme-color" content="#04050d" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <canvas id="stage" role="img" aria-label="Animation"></canvas>
+
+    <div class="chrome" id="chrome">
+      <p class="caption">
+        <b id="scene-title"></b>
+        <span id="scene-prompt"></span>
+      </p>
+      <nav class="dots" id="dots" aria-label="Animations"></nav>
+    </div>
+
+    <p id="live" class="sr-only" role="status" aria-live="polite"></p>
+
+    <noscript>
+      <p class="notice">
+        These animations are drawn in real time with JavaScript and canvas.<br />
+        Enable JavaScript to watch them.
+      </p>
+    </noscript>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
