@@ -1,0 +1,20 @@
+{
+  "name": "instant-animation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An instant animation generator. Animate anything you can describe.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://cportka.github.io/instant-animation/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cportka/instant-animation.git"
+  },
+  "scripts": {
+    "test": "node --test",
+    "serve": "node scripts/serve.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
