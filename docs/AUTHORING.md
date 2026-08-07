@@ -93,16 +93,37 @@ in `lib/draw.js` is that in friendlier units.
 
 ## Tape, if you want it
 
-`lib/vhs.js` provides `tearBands`, `scanlines`, `chromaSplit` and `grain`. They work by sampling
-the canvas's own bitmap — `ctx.drawImage(ctx.canvas, …)` — so the displacement is real without a
-second canvas or any DOM. Two things learned the hard way:
+`lib/vhs.js` provides `shred`, `tearBands`, `smearStreaks`, `dropoutBars`, `chromaSplit`,
+`hexDither`, `saturate`, `contrastPunch`, `scanlines` and `grain`. Apply them last, after the
+vignette, so the tape sits over everything including the subject.
+
+**Pass the tape.** Every helper that samples the frame takes an optional last argument — the
+scratch buffer the stage hands you in `create({ tape })`. Forward it. Without it they fall back to
+sampling the destination canvas, which is correct but forces a flush per call: measured at
+2880×1800, 78 slices cost **948ms** self-sampled and **4.2ms** from the buffer.
+
+Three things learned the hard way:
 
 - **Colour bleed must span the whole band.** Fade it out near the edges and the colour collects
   into two thin lines, and the picture ends up ruled with neon instead of softly smeared.
 - **Skip a band until it has fully entered the frame.** A band half off screen squeezes its whole
   gradient into a few pixels, which is the same bright-line problem by another route.
+- **Displacement wants an uneven distribution.** Jitter every line by a similar amount and it
+  reads as static; square the noise so most lines barely move and a few go a long way, and it
+  reads as a tape fault.
 
-Apply them last, after the vignette, so the tape sits over everything including the subject.
+## Making it fast enough
+
+A full-screen effects pipeline is fill-rate bound, so the levers are area and pass count:
+
+- `meta.maxDpr` caps the render scale for your scene. A deliberately lo-fi scene has no use for
+  retina pixels — `floating-bed` renders at `1` and looks better for the softness.
+- The stage drops resolution further on its own if frames get slow, and restores it when they
+  don't. You don't have to do anything for that, but don't fight it by reading canvas dimensions.
+- **Batch fills.** Group by colour and quantise alpha into a few steps, then issue one `fill()`
+  for many shapes. ~900 individually filled stars became a few dozen fills with no visible change.
+- Watch anything that fills a circle bigger than the screen — a few large radial gradients can
+  cost more than everything else together.
 
 ## Checking your work
 

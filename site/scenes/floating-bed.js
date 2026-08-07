@@ -24,7 +24,21 @@ import {
   wave,
   wrap01,
 } from '../lib/draw.js';
-import { chromaSplit, grain, makeTearBands, scanlines, tearBands } from '../lib/vhs.js';
+import {
+  chromaSplit,
+  contrastPunch,
+  dropoutBars,
+  grain,
+  hexDither,
+  makeDropoutBars,
+  makeShredZones,
+  makeTearBands,
+  saturate,
+  scanlines,
+  shred,
+  smearStreaks,
+  tearBands,
+} from '../lib/vhs.js';
 
 export const meta = {
   id: 'floating-bed',
@@ -35,6 +49,10 @@ export const meta = {
   background: '#02010a',
   // Where the still frame is taken when the visitor prefers reduced motion.
   posterTime: 34,
+  // Render at CSS resolution, not retina. The tape artefacts are full-screen fill-rate work, and
+  // four times the pixels buys nothing a scene this deliberately lo-fi wants — on a high-DPI
+  // display the softness the upscale adds is the right look anyway.
+  maxDpr: 1,
 };
 
 // The bed is ~714 units long and is scaled against the viewport's short edge, so the larger the
@@ -49,6 +67,9 @@ const BLACK_HOLE = { x: 0.6, y: 0.75 };
 const SHOOTER_PERIOD = 27; // seconds between shooting stars — rare enough to feel like luck
 const SNORE_PERIOD = 5.4; // one full breath; the Z's and the echoes ride the same clock
 const ECHO_LIFE = 13; // how long a geometric echo takes to leave the frame
+const ROLL_PERIOD = 44; // one full turn about the pillow-to-foot axis
+const GLASSES_CYCLE = 21; // sunglasses drift on, sit a while, drift off, stay away
+const BURST_PERIOD = 9.5; // how often the tape gives out completely
 
 // Vaporwave: magenta and cyan doing all the work, violet holding them together.
 const MAGENTA = [255, 74, 200];
@@ -76,13 +97,14 @@ const SKIN_SHADE = '#6d3a52';
 // Wireframe solids, in the order the sleeper exhales them.
 const ECHO_SHAPES = [3, 4, 0, 6, 5];
 
-export function create({ width, height, seed = meta.id }) {
+export function create({ width, height, seed = meta.id, tape = null }) {
   const rng = createRng(seed);
 
   // Star positions live in normalised space so a resize never reshuffles the sky.
   const layers = [
-    makeStarLayer(rng, { count: 460, minRadius: 0.3, maxRadius: 0.8, alpha: 0.4, depth: 0.06 }),
-    makeStarLayer(rng, { count: 120, minRadius: 0.7, maxRadius: 1.4, alpha: 0.7, depth: 0.14 }),
+    // Brighter than before: the haze raises the floor, and stars have to sit on top of it.
+    makeStarLayer(rng, { count: 460, minRadius: 0.35, maxRadius: 0.9, alpha: 0.6, depth: 0.06 }),
+    makeStarLayer(rng, { count: 120, minRadius: 0.8, maxRadius: 1.5, alpha: 0.9, depth: 0.14 }),
     makeStarLayer(rng, { count: 24, minRadius: 1.3, maxRadius: 2.3, alpha: 1, depth: 0.3 }),
   ];
 
@@ -95,7 +117,7 @@ export function create({ width, height, seed = meta.id }) {
       across,
       radius: rng.range(0.25, 1.05),
       alpha: rng.range(0.2, 0.85),
-      tint: rng.pick(STAR_TINTS),
+      tint: rng.int(0, STAR_TINTS.length - 1),
     };
   });
 
@@ -108,12 +130,24 @@ export function create({ width, height, seed = meta.id }) {
     tilt: rng.range(-0.16, 0.16),
   }));
 
-  // Haze: a few enormous, very faint washes. Vaporwave lives or dies on the colour in the air.
+  // Colour in the air is most of what makes this vaporwave rather than a dark space scene with
+  // pink accents, so the haze is heavy. Three washes, not more: each one fills a circle larger
+  // than the screen with a radial gradient, and that is the single most expensive thing in the
+  // frame — the intensity lives in the alpha, which is free.
   const haze = [
-    { x: 0.26, y: 0.3, radius: 0.5, colour: MAGENTA, alpha: 0.032 },
-    { x: 0.74, y: 0.62, radius: 0.46, colour: CYAN, alpha: 0.026 },
-    { x: 0.48, y: 0.88, radius: 0.42, colour: VIOLET, alpha: 0.03 },
+    { x: 0.26, y: 0.3, radius: 0.55, colour: MAGENTA, alpha: 0.2 },
+    { x: 0.82, y: 0.58, radius: 0.5, colour: CYAN, alpha: 0.12 },
+    { x: 0.46, y: 0.92, radius: 0.5, colour: VIOLET, alpha: 0.16 },
   ].map((h) => ({ ...h, phase: rng.range(0, TAU), drift: rng.range(0.004, 0.011) }));
+
+  // Curve stitching: straight lines whose envelope is a parabola. Placed where nothing else is.
+  const stringArt = [
+    { x: 0.05, y: 0.95, size: 0.62, angle: -Math.PI / 2, spread: Math.PI / 2, lines: 16, colour: MAGENTA, alpha: 0.3 },
+    { x: 0.98, y: 0.3, size: 0.4, angle: Math.PI * 0.55, spread: Math.PI * 0.42, lines: 12, colour: CYAN, alpha: 0.26 },
+    // Tucked into the corner. Anywhere nearer the middle and its straight lines read as a box
+    // thrown across the picture rather than as an envelope.
+    { x: 0.015, y: 0.03, size: 0.22, angle: Math.PI * 0.5, spread: -Math.PI * 0.48, lines: 9, colour: VIOLET, alpha: 0.24 },
+  ].map((s) => ({ ...s, phase: rng.range(0, TAU), sway: rng.range(0.02, 0.05) }));
 
   const shooters = Array.from({ length: 9 }, () => ({
     x: rng.range(0.02, 0.6),
@@ -124,6 +158,8 @@ export function create({ width, height, seed = meta.id }) {
   }));
 
   const bands = makeTearBands(rng, 6);
+  const shredZones = makeShredZones(rng, 3);
+  const bars = makeDropoutBars(rng, 3);
 
   let W = width;
   let H = height;
@@ -145,6 +181,7 @@ export function create({ width, height, seed = meta.id }) {
       drawHaze(ctx, W, H, t, haze);
       drawGalacticBand(ctx, W, H, bandStars, dustLanes);
       drawStars(ctx, W, H, t, layers, driftX, driftY, hole);
+      drawStringArt(ctx, W, H, t, stringArt);
       drawShootingStar(ctx, W, H, t, shooters);
       drawBlackHole(ctx, W, H, t, hole);
       drawNeutronBinary(ctx, W, H, t);
@@ -158,23 +195,55 @@ export function create({ width, height, seed = meta.id }) {
       // The sleeper's shapes leave from roughly where their head is, and keep going.
       drawEchoes(ctx, W, H, t, bedX - 200 * scale, bedY - 95 * scale);
 
+      // A full turn about the axis running from the pillow to the foot of the bed. Seen from the
+      // side that axis is horizontal, so the roll is a vertical squash: cos(roll) collapses the
+      // bed to a line edge-on and inverts it past 90°. Eased so it dwells face-up and sweeps
+      // through the back — still exactly one turn per period, just not at a constant rate.
+      const spin = (t / ROLL_PERIOD) * TAU;
+      const roll = spin - 0.55 * Math.sin(spin);
+      const squash = Math.cos(roll);
+      // Never scale to exactly zero: a degenerate matrix drops the whole frame.
+      const flattened = (squash < 0 ? -1 : 1) * Math.max(Math.abs(squash), 0.04);
+
       ctx.save();
       ctx.translate(bedX, bedY);
       ctx.scale(scale, scale);
       // The one warm thing in the frame, and it is very nearly nothing.
-      glow(ctx, -170, -70, 900, [255, 150, 190], 0.06, 0.015);
+      glow(ctx, -170, -70, 900, [255, 150, 190], 0.07, 0.018);
       ctx.rotate(tumble);
-      drawBed(ctx, t);
+      ctx.save();
+      ctx.scale(1, flattened);
+      drawBed(ctx, t, squash);
+      ctx.restore();
+      // The breath drifts the same way whichever way up the bed is, so it stays outside the roll.
       drawZzz(ctx, t);
       ctx.restore();
 
       drawVignette(ctx, W, H);
 
-      // Tape last, over everything — including the sleeper.
-      tearBands(ctx, W, H, t, bands, 1);
-      chromaSplit(ctx, W, H, t, 1);
-      scanlines(ctx, W, H, t, { spacing: 4, alpha: 0.14, rollSpeed: 5 });
-      grain(ctx, W, H, t, { count: 34, alpha: 0.13, rate: 10 });
+      // Tape last, over everything — including the sleeper. Ambient damage all the time, with the
+      // heads giving out completely for about a second at a time.
+      const burstAt = t - Math.floor(t / BURST_PERIOD) * BURST_PERIOD;
+      const burst = burstAt < 0.95 ? Math.sin((burstAt / 0.95) * Math.PI) ** 0.6 : 0;
+
+      // Ambient damage stays readable; the burst is where it goes to pieces.
+      contrastPunch(ctx, W, H, 0.34 + burst * 0.26, tape);
+      saturate(ctx, W, H, 0.42 + burst * 0.45);
+      // Snapshot *after* the colour grade so displaced slices carry the same colour as the frame
+      // they were torn out of, and before the displacement so the artefacts don't feed each other.
+      tape?.capture(ctx);
+      shred(ctx, W, H, t, shredZones, 0.22 + burst * 3.6, tape);
+      tearBands(ctx, W, H, t, bands, 0.85 + burst * 2.8, tape);
+      smearStreaks(ctx, W, H, t, 5 + Math.round(burst * 13), 0.45 + burst * 1.9, tape);
+      dropoutBars(ctx, W, H, t, bars, 0.3 + burst * 1.45, tape);
+      tape?.capture(ctx);
+      chromaSplit(ctx, W, H, t, 1.1 + burst * 4.2, tape);
+      if (burst > 0.12) {
+        const y = wrap01(t * 0.07) * H;
+        hexDither(ctx, W, y, H * 0.16, Math.max(9, H * 0.024), burst * 0.24);
+      }
+      scanlines(ctx, W, H, t, { spacing: 4, alpha: 0.16, rollSpeed: 5 });
+      grain(ctx, W, H, t, { count: 34 + Math.round(burst * 90), alpha: 0.14, rate: 10 });
     },
   };
 }
@@ -192,7 +261,7 @@ function makeStarLayer(rng, { count, minRadius, maxRadius, alpha, depth }) {
       // Barely there. A twinkling sky reads as friendly; a steady one reads as cold.
       twinkle: rng.range(0.25, 0.9),
       phase: rng.range(0, TAU),
-      tint: rng.pick(STAR_TINTS),
+      tint: rng.int(0, STAR_TINTS.length - 1),
       spike: rng.next() > 0.82,
     })),
   };
@@ -267,18 +336,32 @@ function drawGalacticBand(ctx, W, H, bandStars, dustLanes) {
     ctx.restore();
   }
 
-  // And the stars that resolve out of it.
-  for (const star of bandStars) {
-    ctx.fillStyle = rgba(star.tint, star.alpha);
+  // And the stars that resolve out of it — one path per colour, same batching reason as the sky.
+  for (let tint = 0; tint < STAR_TINTS.length; tint += 1) {
+    ctx.fillStyle = rgba(STAR_TINTS[tint], 0.6);
     ctx.beginPath();
-    ctx.arc(star.along * span, star.across * halfWidth, star.radius, 0, TAU);
-    ctx.fill();
+    let any = false;
+    for (const star of bandStars) {
+      if (star.tint !== tint) continue;
+      const x = star.along * span;
+      const y = star.across * halfWidth;
+      ctx.moveTo(x + star.radius, y);
+      ctx.arc(x, y, star.radius, 0, TAU);
+      any = true;
+    }
+    if (any) ctx.fill();
   }
 
   ctx.restore();
 }
 
 function drawStars(ctx, W, H, t, layers, driftX, driftY, hole) {
+  // Batched by colour and by a coarse alpha step: ~900 stars become a few dozen fills instead of
+  // ~900. Individually filling each one is the single most expensive thing the scene does, and the
+  // banding from quantising alpha to 1/8ths is invisible at these sizes.
+  const batches = new Map();
+  const spikes = [];
+
   for (const layer of layers) {
     const dx = driftX * layer.depth;
     const dy = driftY * layer.depth;
@@ -298,25 +381,42 @@ function drawStars(ctx, W, H, t, layers, driftX, driftY, hole) {
         y = hole.cy + (y - hole.cy) * scale;
         alpha = clamp(alpha * (1 + blend * 0.8), 0, 1);
       }
-      if (alpha <= 0.01) continue;
 
-      ctx.fillStyle = rgba(star.tint, alpha);
-      ctx.beginPath();
-      ctx.arc(x, y, star.radius, 0, TAU);
-      ctx.fill();
-
-      if (star.spike && star.radius > 1.3) {
-        const reach = star.radius * 6;
-        ctx.strokeStyle = rgba(star.tint, alpha * 0.3);
-        ctx.lineWidth = star.radius * 0.32;
-        ctx.beginPath();
-        ctx.moveTo(x - reach, y);
-        ctx.lineTo(x + reach, y);
-        ctx.moveTo(x, y - reach);
-        ctx.lineTo(x, y + reach);
-        ctx.stroke();
+      const step = Math.round(alpha * 8);
+      if (step <= 0) continue;
+      const key = star.tint * 16 + step;
+      let batch = batches.get(key);
+      if (!batch) {
+        batch = { tint: star.tint, alpha: step / 8, points: [] };
+        batches.set(key, batch);
       }
+      batch.points.push(x, y, star.radius);
+      if (star.spike && star.radius > 1.3) spikes.push(x, y, star.radius, star.tint, alpha);
     }
+  }
+
+  for (const batch of batches.values()) {
+    ctx.fillStyle = rgba(STAR_TINTS[batch.tint], batch.alpha);
+    ctx.beginPath();
+    for (let i = 0; i < batch.points.length; i += 3) {
+      const r = batch.points[i + 2];
+      ctx.moveTo(batch.points[i] + r, batch.points[i + 1]);
+      ctx.arc(batch.points[i], batch.points[i + 1], r, 0, TAU);
+    }
+    ctx.fill();
+  }
+
+  for (let i = 0; i < spikes.length; i += 5) {
+    const [x, y, radius, tint, alpha] = spikes.slice(i, i + 5);
+    const reach = radius * 6;
+    ctx.strokeStyle = rgba(STAR_TINTS[tint], alpha * 0.3);
+    ctx.lineWidth = radius * 0.32;
+    ctx.beginPath();
+    ctx.moveTo(x - reach, y);
+    ctx.lineTo(x + reach, y);
+    ctx.moveTo(x, y - reach);
+    ctx.lineTo(x, y + reach);
+    ctx.stroke();
   }
 }
 
@@ -489,6 +589,39 @@ function spike(ctx, x, y, length, thickness, alpha, horizontal) {
 
 /* -------------------------------------------------------------- extras ---- */
 
+/**
+ * Curve stitching: two straight axes, and a line from the i-th point on one to the (n-i)-th on
+ * the other. None of the lines is curved; the parabola is the envelope they leave behind. The
+ * axes sway a little, which makes the envelope breathe without any of the maths changing.
+ */
+function drawStringArt(ctx, W, H, t, sets) {
+  const reach = Math.min(W, H);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round';
+  for (const set of sets) {
+    const ox = set.x * W;
+    const oy = set.y * H;
+    const sway = Math.sin(t * set.sway + set.phase) * 0.09;
+    const a1 = set.angle + sway;
+    const a2 = set.angle + set.spread - sway;
+    const length = set.size * reach;
+    const pulse = 0.75 + 0.25 * Math.sin(t * 0.13 + set.phase);
+
+    ctx.strokeStyle = rgba(set.colour, set.alpha * pulse);
+    ctx.lineWidth = Math.max(0.7, reach * 0.0016);
+    ctx.beginPath();
+    for (let i = 0; i <= set.lines; i += 1) {
+      const f = i / set.lines;
+      ctx.moveTo(ox + Math.cos(a1) * length * (1 - f), oy + Math.sin(a1) * length * (1 - f));
+      ctx.lineTo(ox + Math.cos(a2) * length * f, oy + Math.sin(a2) * length * f);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawShootingStar(ctx, W, H, t, shooters) {
   const index = Math.floor(t / SHOOTER_PERIOD);
   const shooter = shooters[((index % shooters.length) + shooters.length) % shooters.length];
@@ -579,10 +712,16 @@ function drawVignette(ctx, W, H) {
 
 /* ---------------------------------------------------------------- bed ---- */
 
-function drawBed(ctx, t) {
+/**
+ * @param {number} squash cos(roll): +1 face-up, 0 edge-on, -1 showing the underside. The caller
+ *   has already applied it as a vertical scale; it's passed in so the bed can dim as it turns
+ *   away and skip the things you couldn't see from underneath.
+ */
+function drawBed(ctx, t, squash) {
   // One snore: a long draw in, a longer let out. The echoes ride the same clock.
   const breath = wave(t, SNORE_PERIOD);
   const flutter = wave(t, 11.5, 0.9); // the duvet's free corner in zero gravity
+  const faceUp = squash >= 0;
 
   drawHeadboard(ctx);
   drawFootboard(ctx);
@@ -592,8 +731,75 @@ function drawBed(ctx, t) {
   drawLegs(ctx, false);
   drawPillows(ctx);
   drawSleeper(ctx, breath, t);
+  // Sunglasses ride the roll with the face, and there is no face to see from below.
+  if (faceUp) drawSunglasses(ctx, t, breath * 1.5);
   drawDuvet(ctx, t, breath, flutter);
   drawRimLight(ctx, breath);
+}
+
+/**
+ * A pair of shades that drifts in, settles on the sleeper for a while, and drifts off again.
+ * Nobody puts them there; they simply arrive.
+ */
+function drawSunglasses(ctx, t, lift) {
+  const p = wrap01(t / GLASSES_CYCLE);
+  let travel; // 0 = worn, 1 = far away
+  if (p < 0.19) travel = 1 - smoothstep(0, 0.19, p);
+  else if (p < 0.62) travel = 0;
+  else if (p < 0.81) travel = smoothstep(0.62, 0.81, p);
+  else return; // away entirely
+
+  const alpha = 1 - smoothstep(0.55, 1, travel) * 0.9;
+  if (alpha <= 0.02) return;
+
+  ctx.save();
+  ctx.globalAlpha = clamp(alpha, 0, 1);
+  // They come and go from up and to the right, tumbling gently on the way.
+  ctx.translate(travel * 250, -96 + lift - travel * 210);
+  ctx.rotate(travel * 0.85 + Math.sin(t * 0.7) * 0.04 * (1 - travel));
+
+  // Temple arm, receding toward the ear.
+  ctx.strokeStyle = '#0b0320';
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(-243, -6);
+  ctx.lineTo(-210, -2);
+  ctx.stroke();
+
+  // The lens. Near-black, with a hard neon sheen across it.
+  ctx.save();
+  ctx.rotate(-0.08);
+  roundedRect(ctx, -212, -16, 44, 24, 8);
+  const glass = ctx.createLinearGradient(-212, -16, -168, 8);
+  glass.addColorStop(0, '#1a0736');
+  glass.addColorStop(0.55, '#08021a');
+  glass.addColorStop(1, '#160a30');
+  ctx.fillStyle = glass;
+  ctx.fill();
+
+  ctx.save();
+  ctx.clip();
+  ctx.globalCompositeOperation = 'lighter';
+  const sheen = ctx.createLinearGradient(-212, 8, -176, -16);
+  sheen.addColorStop(0, 'rgba(255, 74, 200, 0)');
+  sheen.addColorStop(0.42, 'rgba(255, 74, 200, 0.5)');
+  sheen.addColorStop(0.55, 'rgba(120, 240, 255, 0.65)');
+  sheen.addColorStop(0.72, 'rgba(80, 240, 255, 0)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(-214, -18, 50, 30);
+  ctx.restore();
+
+  // Brow bar along the top of the lens.
+  ctx.strokeStyle = 'rgba(180, 200, 255, 0.4)';
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(-208, -15);
+  ctx.lineTo(-171, -13);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.restore();
 }
 
 function drawHeadboard(ctx) {
