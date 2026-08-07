@@ -14,6 +14,8 @@ import { createRng } from './rng.js';
 // saves is the difference between 60fps and a slideshow on modest hardware.
 const MAX_DPR = 2;
 const TRANSITION_SECONDS = 0.95;
+// Below this the picture is mush; better to drop frames than to keep shrinking.
+const MIN_QUALITY = 0.4;
 
 /**
  * @param {HTMLCanvasElement} canvas
@@ -128,26 +130,30 @@ export function createStage(canvas, options = {}) {
   }
 
   /**
-   * Below ~28fps for half a second, drop the render scale; above ~50fps for four seconds, put it
-   * back. The counters reset on every change, which is the hysteresis that stops it oscillating.
-   * The scene never hears about this: it always draws in CSS pixels.
+   * Drop the render scale when frames get slow, put it back when they don't. Coming down is
+   * deliberately much faster than going up: a visitor should never spend more than about a second
+   * watching a slideshow, but a scale change is visible, so recovering waits until the machine has
+   * been comfortable for a good while. A catastrophically slow frame counts triple, so a machine
+   * that is badly over its budget reaches a usable scale in a handful of frames rather than in
+   * half a minute. The counters resetting on every change is the hysteresis that stops it
+   * oscillating. The scene never hears about any of this: it always draws in CSS pixels.
    */
   function adaptQuality(dt) {
     if (dt > 1 / 28) {
-      slowFrames += 1;
+      slowFrames += dt > 1 / 12 ? 3 : 1;
       fastFrames = 0;
     } else if (dt < 1 / 50) {
       fastFrames += 1;
       slowFrames = 0;
     }
 
-    if (slowFrames > 30 && quality > 0.5) {
-      quality = Math.max(0.5, quality - 0.25);
+    if (slowFrames >= 12 && quality > MIN_QUALITY) {
+      quality = Math.max(MIN_QUALITY, quality - 0.2);
       slowFrames = 0;
       fastFrames = 0;
       measure();
-    } else if (fastFrames > 240 && quality < 1) {
-      quality = Math.min(1, quality + 0.25);
+    } else if (fastFrames > 300 && quality < 1) {
+      quality = Math.min(1, quality + 0.2);
       slowFrames = 0;
       fastFrames = 0;
       measure();

@@ -343,6 +343,28 @@ export function contrastPunch(ctx, W, H, amount, tape = null) {
   ctx.restore();
 }
 
+/**
+ * Bloom: the frame drawn back over itself, blurred, slightly enlarged and slowly drifting. It is
+ * what stops anything reading as clean — every edge in the picture gets a soft double, and because
+ * the offset moves, the softness moves with it.
+ */
+export function diffuse(ctx, W, H, { amount = 0.2, blur = 8, scale = 1.03, dx = 0, dy = 0 } = {}, tape = null) {
+  if (amount <= 0) return;
+  const source = sourceOf(ctx, tape);
+  const sw = source.width || W;
+  const sh = source.height || H;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = clamp(amount, 0, 1);
+  ctx.filter = `blur(${Math.max(0, blur).toFixed(2)}px)`;
+  ctx.translate(W / 2 + dx, H / 2 + dy);
+  ctx.scale(scale, scale);
+  ctx.translate(-W / 2, -H / 2);
+  ctx.drawImage(source, 0, 0, sw, sh, 0, 0, W, H);
+  ctx.restore();
+}
+
 /** Sparse tape dropouts — a handful of bright specks that resettle a few times a second. */
 export function grain(ctx, W, H, t, { count = 40, alpha = 0.16, rate = 12 } = {}) {
   const frame = Math.floor(t * rate);

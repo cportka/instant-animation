@@ -33,6 +33,7 @@ import {
   makeDropoutBars,
   makeShredZones,
   makeTearBands,
+  diffuse,
   saturate,
   scanlines,
   shred,
@@ -140,6 +141,20 @@ export function create({ width, height, seed = meta.id, tape = null }) {
     { x: 0.46, y: 0.92, radius: 0.5, colour: VIOLET, alpha: 0.16 },
   ].map((h) => ({ ...h, phase: rng.range(0, TAU), drift: rng.range(0.004, 0.011) }));
 
+  // Smaller clouds that visibly travel and wrap. The big washes set the colour; these are what
+  // make the haze *move*, so nothing in the frame ever sits still and clean.
+  const clouds = Array.from({ length: 7 }, () => ({
+    x: rng.next(),
+    y: rng.next(),
+    radius: rng.range(0.15, 0.32),
+    colour: rng.pick([MAGENTA, CYAN, VIOLET]),
+    alpha: rng.range(0.035, 0.075),
+    speedX: rng.range(-0.022, 0.022),
+    speedY: rng.range(-0.012, 0.012),
+    phase: rng.range(0, TAU),
+    breathe: rng.range(0.05, 0.13),
+  }));
+
   // Curve stitching: straight lines whose envelope is a parabola. Placed where nothing else is.
   const stringArt = [
     { x: 0.05, y: 0.95, size: 0.62, angle: -Math.PI / 2, spread: Math.PI / 2, lines: 16, colour: MAGENTA, alpha: 0.3 },
@@ -178,12 +193,18 @@ export function create({ width, height, seed = meta.id, tape = null }) {
       const hole = holeGeometry(W, H);
 
       drawVoid(ctx, W, H);
-      drawHaze(ctx, W, H, t, haze);
+      drawHaze(ctx, W, H, t, haze, clouds);
       drawGalacticBand(ctx, W, H, bandStars, dustLanes);
       drawStars(ctx, W, H, t, layers, driftX, driftY, hole);
       drawStringArt(ctx, W, H, t, stringArt);
       drawShootingStar(ctx, W, H, t, shooters);
-      drawBlackHole(ctx, W, H, t, hole);
+      // The accretion disc goes down first, then the whole pocket — background *and* disc — is
+      // dragged through the lens together, and only then does the hard-edged shadow land on top.
+      // Warping the disc along with everything else is what makes the hole distort itself.
+      drawAccretion(ctx, W, H, t, hole);
+      tape?.capture(ctx);
+      drawLensWarp(ctx, W, H, t, hole, tape);
+      drawHorizon(ctx, t, hole);
       drawNeutronBinary(ctx, W, H, t);
 
       const scale = Math.min(W, H) * BED_SCALE;
@@ -220,6 +241,17 @@ export function create({ width, height, seed = meta.id, tape = null }) {
       ctx.restore();
 
       drawVignette(ctx, W, H);
+
+      // Soft the whole picture out before the tape gets to it. The offset drifts, so the bloom
+      // slides over everything instead of sitting on it.
+      tape?.capture(ctx);
+      diffuse(ctx, W, H, {
+        amount: 0.26,
+        blur: Math.max(3, Math.min(W, H) * 0.007),
+        scale: 1.02 + Math.sin(t * 0.09) * 0.006,
+        dx: Math.sin(t * 0.13) * 5,
+        dy: Math.cos(t * 0.11) * 4,
+      }, tape);
 
       // Tape last, over everything — including the sleeper. Ambient damage all the time, with the
       // heads giving out completely for about a second at a time.
@@ -276,7 +308,7 @@ function drawVoid(ctx, W, H) {
   ctx.fillRect(0, 0, W, H);
 }
 
-function drawHaze(ctx, W, H, t, haze) {
+function drawHaze(ctx, W, H, t, haze, clouds) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   for (const wash of haze) {
@@ -284,6 +316,14 @@ function drawHaze(ctx, W, H, t, haze) {
     const cy = (wash.y + Math.cos(t * wash.drift * 0.8 + wash.phase) * 0.024) * H;
     const pulse = 0.85 + 0.15 * Math.sin(t * 0.07 + wash.phase);
     glow(ctx, cx, cy, wash.radius * Math.max(W, H), wash.colour, wash.alpha * pulse, wash.alpha * pulse * 0.4);
+  }
+
+  // Travelling clouds, wrapped so they cross the frame and come back round.
+  for (const cloud of clouds) {
+    const cx = wrap01(cloud.x + t * cloud.speedX) * (W * 1.4) - W * 0.2;
+    const cy = wrap01(cloud.y + t * cloud.speedY) * (H * 1.4) - H * 0.2;
+    const swell = 1 + Math.sin(t * cloud.breathe + cloud.phase) * 0.22;
+    glow(ctx, cx, cy, cloud.radius * Math.max(W, H) * swell, cloud.colour, cloud.alpha, cloud.alpha * 0.35);
   }
   ctx.restore();
 }
@@ -424,12 +464,63 @@ function drawStars(ctx, W, H, t, layers, driftX, driftY, hole) {
 
 function holeGeometry(W, H) {
   const m = Math.min(W, H);
+  const shadow = m * 0.037;
   return {
     cx: W * BLACK_HOLE.x,
     cy: H * BLACK_HOLE.y,
-    shadow: m * 0.037,
-    lens: m * 0.037 * 5.5,
+    shadow,
+    // The pocket of bent spacetime: everything inside this radius is warped, swirled and blurred.
+    lens: shadow * 7,
   };
+}
+
+/**
+ * Gravitational lensing done to the picture rather than to a list of stars: concentric discs of
+ * the frame so far, each magnified, twisted and blurred more than the one outside it, drawn from
+ * the edge of the pocket inward so only the outer band of each survives. Whatever is behind the
+ * hole — haze, the galactic band, stars, the string art — gets dragged around it.
+ *
+ * Reads from the tape rather than the live canvas: fourteen self-blits would cost more than the
+ * rest of the frame put together.
+ */
+function drawLensWarp(ctx, W, H, t, hole, tape) {
+  const source = tape?.source ?? ctx.canvas;
+  const sw = source.width || W;
+  const sh = source.height || H;
+  const { cx, cy, lens, shadow } = hole;
+  const maxBlur = Math.min(W, H) * 0.018;
+  const rings = 8;
+
+  for (let i = 0; i < rings; i += 1) {
+    const radius = lens * (1 - i / rings);
+    if (radius < shadow * 0.55) break;
+    // 0 at the edge of the pocket, 1 at the shadow.
+    const depth = 1 - radius / lens;
+    // The pocket is never still: the magnification breathes and the twist wanders.
+    const ripple = 1 + Math.sin(t * 0.85 + depth * 7) * 0.07 * depth;
+    const magnify = (1 + 1.05 * depth * depth) * ripple;
+    const swirl = depth * depth * (1.15 + Math.sin(t * 0.31) * 0.35) + Math.sin(t * 0.13) * 0.1;
+    const blur = depth * depth * maxBlur;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, TAU);
+    ctx.clip();
+    if (blur > 0.3) ctx.filter = `blur(${blur.toFixed(2)}px)`;
+    ctx.translate(cx, cy);
+    ctx.rotate(swirl);
+    ctx.scale(magnify, magnify);
+    ctx.translate(-cx, -cy);
+    ctx.drawImage(source, 0, 0, sw, sh, 0, 0, W, H);
+    ctx.restore();
+  }
+
+  // Haze hanging in the pocket itself, so the warp reads as thick space rather than a lens.
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  glow(ctx, cx, cy, lens * 1.1, VIOLET, 0.1, 0.04);
+  glow(ctx, cx, cy, lens * 0.55, MAGENTA, 0.07, 0.03);
+  ctx.restore();
 }
 
 /**
@@ -437,7 +528,7 @@ function holeGeometry(W, H) {
  * the shadow. Drawn in three passes — far side, then the shadow and its photon ring, then the
  * near side in front — which is what makes the disc read as wrapping around a sphere of nothing.
  */
-function drawBlackHole(ctx, W, H, t, hole) {
+function drawAccretion(ctx, W, H, t, hole) {
   const { cx, cy, shadow } = hole;
   const outer = shadow * 3.6;
   // Tilted enough that the disc reads as a ring seen in perspective. Near edge-on with a thick
@@ -478,31 +569,6 @@ function drawBlackHole(ctx, W, H, t, hole) {
   }
   ctx.restore();
 
-  // The shadow. Nothing comes out, so nothing is drawn — flat, absolute black.
-  ctx.fillStyle = '#000000';
-  ctx.beginPath();
-  ctx.arc(cx, cy, shadow, 0, TAU);
-  ctx.fill();
-
-  // Photon ring: the hard bright circle right on the edge of the shadow.
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.strokeStyle = `rgba(255, 226, 250, ${0.55 + 0.08 * Math.sin(t * 0.6)})`;
-  ctx.lineWidth = Math.max(1, shadow * 0.045);
-  ctx.beginPath();
-  ctx.arc(cx, cy, shadow * 1.035, 0, TAU);
-  ctx.stroke();
-  ctx.restore();
-
-  // Near side, in front of the shadow — brighter, because we're seeing it lit from behind.
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(cx - outer * 1.4, cy, outer * 2.8, outer * 1.4);
-  ctx.clip();
-  ctx.globalCompositeOperation = 'lighter';
-  strokeDisc(ctx, cx, cy, outer, ry, discGradient(0.46), shadow * 0.42);
-  ctx.restore();
-
   // Material streaming round: short bright arcs that advance, so the disc is visibly turning.
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
@@ -518,7 +584,44 @@ function drawBlackHole(ctx, W, H, t, hole) {
 
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  glow(ctx, cx, cy, outer * 2.2, VIOLET, 0.07, 0.02);
+  glow(ctx, cx, cy, outer * 2.2, VIOLET, 0.09, 0.03);
+  ctx.restore();
+}
+
+/**
+ * Drawn *after* the lens warp, so the shadow and its photon ring stay hard-edged while everything
+ * around them — including the disc's own far side — has been dragged through the pocket.
+ */
+function drawHorizon(ctx, t, hole) {
+  const { cx, cy, shadow } = hole;
+  const outer = shadow * 3.6;
+  const wobble = 1 + Math.sin(t * 0.62) * 0.06;
+
+  // The shadow. Nothing comes out, so nothing is drawn — flat, absolute black.
+  ctx.fillStyle = '#000000';
+  ctx.beginPath();
+  ctx.arc(cx, cy, shadow, 0, TAU);
+  ctx.fill();
+
+  // Photon ring: the hard bright circle right on the edge of the shadow.
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = `rgba(255, 226, 250, ${0.55 + 0.08 * Math.sin(t * 0.6)})`;
+  ctx.lineWidth = Math.max(1, shadow * 0.045);
+  ctx.beginPath();
+  ctx.arc(cx, cy, shadow * 1.035, 0, TAU);
+  ctx.stroke();
+
+  // Near side of the disc, passing in front of the shadow.
+  ctx.beginPath();
+  ctx.rect(cx - outer * 1.5, cy, outer * 3, outer * 1.5);
+  ctx.clip();
+  const near = ctx.createLinearGradient(cx - outer, cy, cx + outer, cy);
+  near.addColorStop(0, 'rgba(80, 240, 255, 0.42)');
+  near.addColorStop(0.35, 'rgba(190, 120, 255, 0.52)');
+  near.addColorStop(0.7, 'rgba(255, 74, 200, 0.52)');
+  near.addColorStop(1, 'rgba(255, 150, 120, 0.4)');
+  strokeDisc(ctx, cx, cy, outer * wobble, outer * 0.3 * (2 - wobble), near, shadow * 0.42);
   ctx.restore();
 }
 
