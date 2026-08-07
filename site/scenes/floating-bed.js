@@ -24,6 +24,7 @@ import {
   wave,
   wrap01,
 } from '../lib/draw.js';
+import { drawSplotches, makeSplotches } from '../lib/paint.js';
 import {
   chromaSplit,
   contrastPunch,
@@ -71,6 +72,9 @@ const ECHO_LIFE = 13; // how long a geometric echo takes to leave the frame
 const ROLL_PERIOD = 44; // one full turn about the pillow-to-foot axis
 const GLASSES_CYCLE = 21; // sunglasses drift on, sit a while, drift off, stay away
 const BURST_PERIOD = 9.5; // how often the tape gives out completely
+// And then, rarely, it gives out an order of magnitude harder before settling back.
+const SURGE_PERIOD = 71;
+const SURGE_LENGTH = 3;
 
 // Vaporwave: magenta and cyan doing all the work, violet holding them together.
 const MAGENTA = [255, 74, 200];
@@ -175,6 +179,9 @@ export function create({ width, height, seed = meta.id, tape = null }) {
   const bands = makeTearBands(rng, 6);
   const shredZones = makeShredZones(rng, 3);
   const bars = makeDropoutBars(rng, 3);
+  // Kept off the sleeper: the bed drifts around (0.34, 0.37), and a splotch centred there would
+  // erase the only thing in the frame worth looking at. Drips still run across it.
+  const splotches = makeSplotches(rng, 5, { avoid: { x: 0.34, y: 0.37, r: 0.2 } });
 
   let W = width;
   let H = height;
@@ -253,29 +260,58 @@ export function create({ width, height, seed = meta.id, tape = null }) {
         dy: Math.cos(t * 0.11) * 4,
       }, tape);
 
+      // Paint over the top of all of it, before the tape — so the runs get shredded and smeared
+      // along with everything else instead of sitting on the picture like a decal.
+      drawSplotches(ctx, W, H, t, splotches);
+
       // Tape last, over everything — including the sleeper. Ambient damage all the time, with the
       // heads giving out completely for about a second at a time.
       const burstAt = t - Math.floor(t / BURST_PERIOD) * BURST_PERIOD;
       const burst = burstAt < 0.95 ? Math.sin((burstAt / 0.95) * Math.PI) ** 0.6 : 0;
 
-      // Ambient damage stays readable; the burst is where it goes to pieces.
-      contrastPunch(ctx, W, H, 0.34 + burst * 0.26, tape);
-      saturate(ctx, W, H, 0.42 + burst * 0.45);
+      // The surge: a second, far rarer cycle that climbs to ten times the burst and comes all the
+      // way back to baseline.
+      const surgeAt = t - Math.floor(t / SURGE_PERIOD) * SURGE_PERIOD;
+      // Sharply peaked rather than flat-topped: a fat envelope holds the picture at total whiteout for
+      // most of the window, which stops reading as a spike and starts reading as a broken page.
+      const surge = surgeAt < SURGE_LENGTH ? Math.sin((surgeAt / SURGE_LENGTH) * Math.PI) ** 2.2 : 0;
+      const chaos = burst + surge * 10;
+
+      // Ambient damage stays readable; the burst is where it goes to pieces, and the surge is
+      // where there is nothing left to read. Colour grading is capped — pushed past about 1.4 it
+      // just flattens to white, which is less destroyed-looking, not more.
+      contrastPunch(ctx, W, H, 0.34 + Math.min(chaos, 1.4) * 0.26, tape);
+      saturate(ctx, W, H, 0.42 + Math.min(chaos, 1.3) * 0.45);
       // Snapshot *after* the colour grade so displaced slices carry the same colour as the frame
       // they were torn out of, and before the displacement so the artefacts don't feed each other.
       tape?.capture(ctx);
-      shred(ctx, W, H, t, shredZones, 0.22 + burst * 3.6, tape);
-      tearBands(ctx, W, H, t, bands, 0.85 + burst * 2.8, tape);
-      smearStreaks(ctx, W, H, t, 5 + Math.round(burst * 13), 0.45 + burst * 1.9, tape);
-      dropoutBars(ctx, W, H, t, bars, 0.3 + burst * 1.45, tape);
+      shred(ctx, W, H, t, shredZones, 0.22 + chaos * 3.6, tape);
+      tearBands(ctx, W, H, t, bands, 0.85 + chaos * 2.8, tape);
+      smearStreaks(ctx, W, H, t, 5 + Math.round(Math.min(chaos, 2) * 13), 0.45 + chaos * 1.9, tape);
+      dropoutBars(ctx, W, H, t, bars, 0.3 + chaos * 1.45, tape);
+
+      // Magnitude alone stops buying anything past about half the frame width — a slice shifted
+      // further just lands off screen. So the surge adds *passes* rather than distance: the same
+      // zones and bands run again at offset times, which multiplies how much of the picture is
+      // torn rather than how far each piece moves. Two seconds in seventy, and reading from the
+      // tape makes each extra pass cost a few milliseconds.
+      if (surge > 0.12) {
+        shred(ctx, W, H, t + 3.1, shredZones, 0.22 + chaos * 3.6, tape);
+        shred(ctx, W, H, t + 7.7, shredZones, 0.22 + chaos * 3.6, tape);
+        tearBands(ctx, W, H, t + 5.3, bands, 0.85 + chaos * 2.8, tape);
+        dropoutBars(ctx, W, H, t + 2.9, bars, 0.3 + chaos * 1.45, tape);
+        smearStreaks(ctx, W, H, t + 1.7, 16, 2.4, tape);
+      }
+
       tape?.capture(ctx);
-      chromaSplit(ctx, W, H, t, 1.1 + burst * 4.2, tape);
-      if (burst > 0.12) {
+      chromaSplit(ctx, W, H, t, 1.1 + chaos * 4.2, tape);
+      if (chaos > 0.12) {
         const y = wrap01(t * 0.07) * H;
-        hexDither(ctx, W, y, H * 0.16, Math.max(9, H * 0.024), burst * 0.24);
+        const band = H * (0.16 + surge * 0.9);
+        hexDither(ctx, W, y - band * surge * 0.5, band, Math.max(9, H * 0.024), Math.min(chaos, 1.6) * 0.24);
       }
       scanlines(ctx, W, H, t, { spacing: 4, alpha: 0.16, rollSpeed: 5 });
-      grain(ctx, W, H, t, { count: 34 + Math.round(burst * 90), alpha: 0.14, rate: 10 });
+      grain(ctx, W, H, t, { count: 34 + Math.round(Math.min(chaos, 6) * 90), alpha: 0.14, rate: 10 });
     },
   };
 }
