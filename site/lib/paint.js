@@ -25,7 +25,7 @@ const RIBBON_SAMPLES = 18;
  *   mark centres are resampled away from it. Paint that lands squarely on the subject doesn't
  *   read as paint over a picture, it reads as no picture.
  */
-export function makeSplotches(rng, count = 13, { avoid } = {}) {
+export function makeSplotches(rng, count = 28, { avoid } = {}) {
   // Placed on a jittered grid rather than at random. Pure random clumps: several marks land on
   // top of each other and read as one big mass while half the frame stays bare, which is the
   // opposite of paint flicked over everything.
@@ -55,32 +55,42 @@ export function makeSplotches(rng, count = 13, { avoid } = {}) {
     return {
       x,
       y,
-      stroke: rng.next() < 0.42,
-      radius: rng.range(0.028, 0.085),
+      stroke: rng.next() < 0.4,
+      // Small. A mark wide enough to be a shape in its own right competes with the picture; these
+      // are meant to be flecks you keep finding, and what they cost the picture is what they hide.
+      radius: rng.range(0.009, 0.03),
       radii: Array.from({ length: lobes }, () => rng.range(0.58, 1.3)),
       rotation: rng.range(0, TAU),
       creep: rng.range(150, 300),
       phase: rng.range(0, TAU),
-      // The ribs give a stroke's edge its loaded, uneven bite.
+      // Long relative to the head, because off a fleck-sized head a stroke that tapers away has
+      // nothing left of it by halfway down. But it has to *drawl*, not descend: the swell below
+      // fattens it somewhere along its length, and the lean is a fraction of the length rather
+      // than of the head, so a long one actually wanders. A ribbon of constant width falling
+      // straight is a column, and a frame of columns is a fence.
       brush: {
-        length: rng.range(2.4, 7),
-        width: rng.range(0.5, 1.05),
+        length: rng.range(4, 10),
+        width: rng.range(0.45, 0.8),
+        taper: rng.range(0.5, 0.8),
         lean: rng.range(-0.5, 0.5),
+        bulge: rng.range(0.25, 0.75),
+        swell: rng.range(0.3, 0.8),
         period: rng.range(170, 340),
         phase: rng.next(),
+        // The ribs give a stroke's edge its loaded, uneven bite.
         ribs: Array.from({ length: RIBBON_SAMPLES }, () => rng.range(0.72, 1.3)),
       },
       drips: Array.from({ length: rng.int(1, 3) }, () => ({
         angle: rng.range(0.15, 0.85) * Math.PI,
-        width: rng.range(0.16, 0.42),
-        length: rng.range(0.8, 4.5),
+        width: rng.range(0.24, 0.5),
+        length: rng.range(1.5, 6),
         period: rng.range(160, 320),
         phase: rng.next(),
-        bulb: rng.range(1.15, 1.65),
-        lean: rng.range(-0.25, 0.25),
+        bulb: rng.range(1.2, 1.75),
+        lean: rng.range(-0.35, 0.35),
         // Where the paint gathers on its way down, and by how much.
         bulge: rng.range(0.3, 0.7),
-        swell: rng.range(0.14, 0.42),
+        swell: rng.range(0.2, 0.55),
       })),
     };
   });
@@ -179,10 +189,12 @@ export function drawSplotches(ctx, W, H, t, splotches, intensity = 1) {
       const { brush } = splotch;
       const creep = 0.45 + 0.55 * (0.5 - 0.5 * Math.cos(wrap01(t / brush.period + brush.phase) * TAU));
       const length = radius * brush.length * creep;
-      const spine = fallingSpine(cx, cy, length, radius * brush.lean * 2);
+      const spine = fallingSpine(cx, cy, length, length * brush.lean * 0.4);
       const halves = brush.ribs.map((rib, i) => {
         const u = i / (RIBBON_SAMPLES - 1);
-        return Math.max(radius * brush.width * rib * (1 - u * 0.82) * swell, 0.4);
+        // Broad gather — paint pooling along a drag, not the tight bead a hanging run makes.
+        const gather = 1 + brush.swell * Math.exp(-((u - brush.bulge) ** 2) / 0.06);
+        return Math.max(radius * brush.width * rib * (1 - u * brush.taper) * gather * swell, 0.6);
       });
       ribbonPath(ctx, spine, halves);
       ctx.fill();
@@ -202,7 +214,7 @@ export function drawSplotches(ctx, W, H, t, splotches, intensity = 1) {
       const halves = spine.map((_, i) => {
         const u = i / (RIBBON_SAMPLES - 1);
         const gather = 1 + drip.swell * Math.exp(-((u - drip.bulge) ** 2) / 0.02);
-        return Math.max(base * (1 - u * 0.5) * gather, 0.5);
+        return Math.max(base * (1 - u * 0.42) * gather, 0.6);
       });
       ribbonPath(ctx, spine, halves);
       ctx.fill();
