@@ -30,6 +30,7 @@ import {
   contrastPunch,
   dropoutBars,
   grain,
+  heldPulse,
   hexDither,
   makeDropoutBars,
   makeShredZones,
@@ -71,10 +72,18 @@ const SNORE_PERIOD = 5.4; // one full breath; the Z's and the echoes ride the sa
 const ECHO_LIFE = 13; // how long a geometric echo takes to leave the frame
 const ROLL_PERIOD = 44; // one full turn about the pillow-to-foot axis
 const GLASSES_CYCLE = 21; // sunglasses drift on, sit a while, drift off, stay away
+// Two cycles of tape damage, peaking an order of magnitude apart. Each rises, then *sits* at its
+// own maximum, then falls: a sine bump touches its peak for one frame, which is over before you
+// can read what broke. The holds below are sized so each cycle spends roughly five times as long
+// at full value as its bare bump did — the small one included, since a fault you can't read is
+// wasted whatever its amplitude.
 const BURST_PERIOD = 9.5; // how often the tape gives out completely
+const BURST_RISE = 0.95;
+const BURST_HOLD = 1;
 // And then, rarely, it gives out an order of magnitude harder before settling back.
 const SURGE_PERIOD = 71;
 const SURGE_LENGTH = 3;
+const SURGE_HOLD = 1.65;
 
 // Vaporwave: magenta and cyan doing all the work, violet holding them together.
 const MAGENTA = [255, 74, 200];
@@ -181,7 +190,7 @@ export function create({ width, height, seed = meta.id, tape = null }) {
   const bars = makeDropoutBars(rng, 3);
   // Kept off the sleeper: the bed drifts around (0.34, 0.37), and a splotch centred there would
   // erase the only thing in the frame worth looking at. Drips still run across it.
-  const splotches = makeSplotches(rng, 5, { avoid: { x: 0.34, y: 0.37, r: 0.2 } });
+  const splotches = makeSplotches(rng, 14, { avoid: { x: 0.34, y: 0.37, r: 0.13 } });
 
   let W = width;
   let H = height;
@@ -267,14 +276,13 @@ export function create({ width, height, seed = meta.id, tape = null }) {
       // Tape last, over everything — including the sleeper. Ambient damage all the time, with the
       // heads giving out completely for about a second at a time.
       const burstAt = t - Math.floor(t / BURST_PERIOD) * BURST_PERIOD;
-      const burst = burstAt < 0.95 ? Math.sin((burstAt / 0.95) * Math.PI) ** 0.6 : 0;
+      const burst = heldPulse(burstAt, BURST_RISE, BURST_HOLD, 0.6);
 
       // The surge: a second, far rarer cycle that climbs to ten times the burst and comes all the
-      // way back to baseline.
+      // way back to baseline. Steep shoulders, so the climb and the recovery are both violent —
+      // and then it stays at the top, because the point of the cycle is the state, not the jolt.
       const surgeAt = t - Math.floor(t / SURGE_PERIOD) * SURGE_PERIOD;
-      // Sharply peaked rather than flat-topped: a fat envelope holds the picture at total whiteout for
-      // most of the window, which stops reading as a spike and starts reading as a broken page.
-      const surge = surgeAt < SURGE_LENGTH ? Math.sin((surgeAt / SURGE_LENGTH) * Math.PI) ** 2.2 : 0;
+      const surge = heldPulse(surgeAt, SURGE_LENGTH, SURGE_HOLD, 2.2);
       const chaos = burst + surge * 10;
 
       // Ambient damage stays readable; the burst is where it goes to pieces, and the surge is
