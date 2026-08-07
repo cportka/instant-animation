@@ -141,3 +141,19 @@ automatically — replacing a file in `~/.claude` is outside the plugin's own di
 your explicit go-ahead: `bootstrap-repo.sh --heal-stop-hook` (a `.stock.bak` backup is kept). The
 SessionStart hook only *reports* that the stock hook is present.
 <!-- END portka-standard -->
+
+# This repo's specifics (outside the managed block, so a bootstrap refresh keeps them)
+
+The block above is the generic Portka standard. Two things are concrete **in this repository**:
+
+- **MAJOR means "an animation is finished."** Versioning still follows SemVer mechanically, but
+  the MAJOR bump has a specific meaning here: it marks the point where the current animation is
+  **done** and work starts on the next one. So `1.0.0` is cut when *Asleep Among the Stars* is
+  finished and a second animation begins; `2.0.0` when that one is finished; and so on. While an
+  animation is still being worked on, changes to it are MINOR (a new capability, a recomposition)
+  or PATCH (a fix). The version source of truth is `package.json`, mirrored in `CHANGELOG.md` and
+  the README `**Version:**` line — `tests/run-tests.sh` fails if they drift.
+- **The gallery is ordered newest → oldest.** `site/scenes/index.js` lists scenes newest-first,
+  a new animation goes at the **front** of that array, and `tests/scenes.test.js` fails if the
+  order stops matching `meta.created` descending. The front-end depends on it: down means older,
+  up means newer.

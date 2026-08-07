@@ -27,12 +27,19 @@ export function create({ width, height, seed }) {
 `create()` runs once per mount; `draw()` runs every frame. Sizes arrive in **CSS pixels** — the
 stage has already applied the device pixel ratio, so draw as if the display were 1×.
 
-Then register it in `site/scenes/index.js`:
+Then register it in `site/scenes/index.js` — **at the front**, because the gallery runs newest to
+oldest and the front-end depends on that order:
 
 ```js
 import * as myScene from './my-scene.js';
-export const scenes = [floatingBed, myScene];
+export const scenes = [myScene, floatingBed];
 ```
+
+A new animation is also the moment to cut a **MAJOR** version: in this repo that bump means the
+previous animation is finished. See `.claude/CLAUDE.md`.
+
+You get the channel change between scenes for free — it lives in the stage and works on rendered
+pixels, so it never needs anything from the scene.
 
 ## The three rules
 
@@ -83,6 +90,19 @@ gradient that falls off as the surface turns away, and it reads as a surface.
 Layer slow sine waves at *different, non-harmonic* periods (8.4s, 13.1s, 17.3s) instead of one
 fast one. The result never visibly repeats and never looks mechanical. `wave(t, period, phase)`
 in `lib/draw.js` is that in friendlier units.
+
+## Tape, if you want it
+
+`lib/vhs.js` provides `tearBands`, `scanlines`, `chromaSplit` and `grain`. They work by sampling
+the canvas's own bitmap — `ctx.drawImage(ctx.canvas, …)` — so the displacement is real without a
+second canvas or any DOM. Two things learned the hard way:
+
+- **Colour bleed must span the whole band.** Fade it out near the edges and the colour collects
+  into two thin lines, and the picture ends up ruled with neon instead of softly smeared.
+- **Skip a band until it has fully entered the frame.** A band half off screen squeezes its whole
+  gradient into a few pixels, which is the same bright-line problem by another route.
+
+Apply them last, after the vignette, so the tape sits over everything including the subject.
 
 ## Checking your work
 

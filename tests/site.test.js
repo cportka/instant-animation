@@ -18,6 +18,33 @@ test('index.html exists and names the app', () => {
   assert.match(html, /<script type="module" src="app\.js">/);
 });
 
+test('nothing is written on the page', () => {
+  // The animation is the interface. The only text allowed in the body is what a screen reader
+  // needs (the live region, the noscript fallback) and it must never be visible.
+  const body = html.slice(html.indexOf('<body>'), html.indexOf('</body>'));
+  const withoutHidden = body
+    .replace(/<p id="live"[\s\S]*?<\/p>/, '')
+    .replace(/<noscript>[\s\S]*?<\/noscript>/, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<[^>]+>/g, '')
+    .trim();
+  assert.equal(withoutHidden, '', `visible text found in index.html: ${JSON.stringify(withoutHidden)}`);
+});
+
+test('navigation is two chevrons, hidden until there is somewhere to go', () => {
+  for (const id of ['nav-up', 'nav-down']) {
+    const button = html.match(new RegExp(`<button[^>]*id="${id}"[^>]*>`))?.[0];
+    assert.ok(button, `missing ${id} button`);
+    assert.match(button, /aria-label="/, `${id} needs an accessible name — it has no text`);
+    assert.match(button, /\bhidden\b/, `${id} must start hidden and be revealed by app.js`);
+  }
+});
+
+test('the canvas and live region carry the description for screen readers', () => {
+  assert.match(html, /<canvas[^>]+aria-label="/);
+  assert.match(html, /id="live"[^>]*class="sr-only"[^>]*role="status"/);
+});
+
 test('every asset index.html references exists', () => {
   const refs = [...html.matchAll(/(?:src|href)="([^"#]+)"/g)].map((m) => m[1]);
   assert.ok(refs.length >= 3, 'expected index.html to reference its stylesheet, icon and script');
@@ -70,4 +97,12 @@ test('styles keep the animation full-bleed', () => {
   const css = read('styles.css');
   assert.match(css, /#stage\s*\{[^}]*position:\s*fixed/);
   assert.match(css, /overflow:\s*hidden/);
+});
+
+test('the floating chevrons hold still for reduced motion', () => {
+  const css = read('styles.css');
+  assert.match(css, /@keyframes float-down/);
+  assert.match(css, /@keyframes float-up/);
+  const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+  assert.match(reduced, /animation:\s*none/, 'the chevrons must stop bobbing for reduced motion');
 });

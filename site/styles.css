@@ -1,10 +1,9 @@
-/* The animation is the interface. Everything else gets out of the way. */
+/* The animation is the interface. There is no text on this page. */
 
 :root {
   color-scheme: dark;
-  --ink: rgba(255, 255, 255, 0.82);
-  --ink-dim: rgba(255, 255, 255, 0.46);
-  --chrome-fade: 420ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* Soft, but not so soft that the only way to know there's more is to guess. */
+  --nav-idle: 0.42;
 }
 
 * {
@@ -15,18 +14,10 @@ html,
 body {
   height: 100%;
   margin: 0;
-  background: #04050d;
+  background: #02010a;
   overflow: hidden;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
-}
-
-body {
-  cursor: default;
-}
-
-body[data-chrome="hidden"] {
-  cursor: none;
 }
 
 #stage {
@@ -35,94 +26,93 @@ body[data-chrome="hidden"] {
   display: block;
   width: 100%;
   height: 100%;
-  touch-action: pan-y;
+  touch-action: none;
 }
 
-/* ------------------------------------------------------------- chrome -- */
+/* ---------------------------------------------------------------- nav -- */
 
-.chrome {
+.nav {
   position: fixed;
-  inset: auto 0 0 0;
-  padding: 1.5rem clamp(1rem, 4vw, 2.75rem) calc(1.5rem + env(safe-area-inset-bottom, 0px));
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1.5rem;
-  opacity: 1;
-  transition: opacity var(--chrome-fade);
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 4.5rem;
+  height: 3rem;
+  margin-left: -2.25rem;
+  padding: 0;
+  appearance: none;
+  border: 0;
+  background: none;
+  color: #d8c6ff;
+  opacity: var(--nav-idle);
+  cursor: pointer;
+  transition: opacity 300ms ease, transform 300ms ease;
 }
 
-body[data-chrome="hidden"] .chrome {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.caption {
-  margin: 0;
-  max-width: min(48ch, 70vw);
-  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.65);
-}
-
-.caption b {
-  display: block;
-  font-size: 0.95rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--ink);
-}
-
-.caption span {
-  display: block;
-  margin-top: 0.35rem;
-  font-size: 0.78rem;
-  font-weight: 400;
-  line-height: 1.45;
-  color: var(--ink-dim);
-}
-
-.dots {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  flex-shrink: 0;
-}
-
-.dots:empty,
-.dots[hidden] {
+.nav[hidden] {
   display: none;
 }
 
-.dots button {
-  appearance: none;
-  width: 0.7rem;
-  height: 0.7rem;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.28);
-  cursor: pointer;
-  transition: background 200ms ease, transform 200ms ease;
+.nav svg {
+  width: 2.75rem;
+  height: 1.5rem;
+  overflow: visible;
 }
 
-.dots button:hover {
-  background: rgba(255, 255, 255, 0.6);
+.nav path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* Two shadows in the scene's own magenta and cyan, so the arrow belongs to the picture. */
+  filter: drop-shadow(0 0 6px rgba(255, 74, 200, 0.55)) drop-shadow(0 0 14px rgba(80, 240, 255, 0.35));
 }
 
-.dots button[aria-current="true"] {
-  background: rgba(255, 255, 255, 0.95);
-  transform: scale(1.15);
+.nav--down {
+  bottom: calc(1.75rem + env(safe-area-inset-bottom, 0px));
+  animation: float-down 3.4s ease-in-out infinite;
 }
 
-.dots button:focus-visible,
-.chrome :focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.85);
-  outline-offset: 3px;
+.nav--up {
+  top: calc(1.75rem + env(safe-area-inset-top, 0px));
+  animation: float-up 3.4s ease-in-out infinite;
 }
 
-/* Keep focused controls reachable even while the chrome is idle-hidden. */
-body[data-chrome="hidden"] .chrome:focus-within {
-  opacity: 1;
-  pointer-events: auto;
+.nav:hover,
+.nav:focus-visible {
+  opacity: 0.95;
+}
+
+.nav:focus-visible {
+  outline: 2px solid rgba(216, 198, 255, 0.9);
+  outline-offset: 6px;
+  border-radius: 0.5rem;
+}
+
+.nav:active {
+  transform: scale(0.92);
+}
+
+@keyframes float-down {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(0.4rem);
+  }
+}
+
+@keyframes float-up {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-0.4rem);
+  }
 }
 
 /* -------------------------------------------------------------- notes -- */
@@ -136,7 +126,7 @@ body[data-chrome="hidden"] .chrome:focus-within {
   text-align: center;
   font-size: 0.9rem;
   line-height: 1.6;
-  color: var(--ink-dim);
+  color: rgba(255, 255, 255, 0.46);
 }
 
 .sr-only {
@@ -152,7 +142,13 @@ body[data-chrome="hidden"] .chrome:focus-within {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chrome {
+  .nav {
+    animation: none;
     transition: none;
+    opacity: 0.6;
+  }
+
+  .nav:active {
+    transform: none;
   }
 }
