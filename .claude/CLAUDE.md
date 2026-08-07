@@ -144,7 +144,14 @@ SessionStart hook only *reports* that the stock hook is present.
 
 # This repo's specifics (outside the managed block, so a bootstrap refresh keeps them)
 
-The block above is the generic Portka standard. Two things are concrete **in this repository**:
+The block above is the generic Portka standard. Three things are concrete **in this repository**:
+
+- **Don't mint a version that hasn't been released.** The managed block says every change bumps the
+  version; here, changes **fold into the current unreleased version** instead. A number that was
+  never tagged isn't a release, and stacking up `0.2.0`, `0.3.0`, … while none of them exist just
+  makes `CHANGELOG.md` a work log. So: rewrite the current section, adding what's new and
+  **removing what has been superseded**, until the owner actually cuts the release. Only once a
+  version is tagged and published does the next change open a new section and bump the number.
 
 - **MAJOR means "an animation is finished."** Versioning still follows SemVer mechanically, but
   the MAJOR bump has a specific meaning here: it marks the point where the current animation is

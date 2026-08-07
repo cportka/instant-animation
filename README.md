@@ -2,7 +2,7 @@
 
 An instant animation generator. Animate anything you can describe.
 
-**Version:** 0.3.0 · **Live:** https://cportka.github.io/instant-animation/
+**Version:** 0.3.0 (unreleased) · **Live:** https://cportka.github.io/instant-animation/
 
 Describe something. It becomes a hand-drawn canvas animation and joins the gallery. There is no
 text on the site — the animation *is* the page. The only chrome is a soft chevron floating at each
@@ -75,9 +75,15 @@ each scene reads best, the chevrons stop bobbing, and the channel change is skip
 
 ## Versioning
 
-SemVer, with one repo-specific meaning: a **MAJOR** bump marks an animation being *finished* and
-the next one starting. `1.0.0` is cut when *Asleep Among the Stars* is done. See
-`.claude/CLAUDE.md`.
+SemVer, with two repo-specific rules:
+
+- A **MAJOR** bump marks an animation being *finished* and the next one starting. `1.0.0` is cut
+  when *Asleep Among the Stars* is done.
+- **Changes fold into the current unreleased version** rather than minting a new number each
+  round. Nothing has been released yet, so `CHANGELOG.md` has one section describing what the
+  project *is* — not a log of every intermediate state it passed through.
+
+See `.claude/CLAUDE.md`.
 
 ## Deployment
 
