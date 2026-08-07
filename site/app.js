@@ -1,18 +1,20 @@
 // Front-end shell: mount a scene, and otherwise stay invisible.
 //
-// The chrome (title, prompt, dots) surfaces on interaction and fades back out after a couple of
-// idle seconds, so what's on screen is the animation and nothing else.
+// The gallery runs newest at the top to oldest at the bottom, so "next" means down and "previous"
+// means up. Two floating chevrons are the only chrome, and each only exists when there is
+// somewhere to go — with a single animation the page is nothing but the animation.
 
 import { scenes, findScene } from './scenes/index.js';
 import { createStage } from './lib/stage.js';
 
-const CHROME_IDLE_MS = 2600;
+// One wheel gesture should move one animation, not fifty.
+const WHEEL_THRESHOLD = 60;
+const INPUT_LOCK_MS = 1100;
 const SWIPE_THRESHOLD = 60;
 
 const canvas = document.getElementById('stage');
-const titleEl = document.getElementById('scene-title');
-const promptEl = document.getElementById('scene-prompt');
-const dotsEl = document.getElementById('dots');
+const navUp = document.getElementById('nav-up');
+const navDown = document.getElementById('nav-down');
 const liveEl = document.getElementById('live');
 
 const stage = createStage(canvas, {
@@ -23,61 +25,43 @@ const stage = createStage(canvas, {
 });
 
 let current = -1;
-let idleTimer = 0;
-
-/* ------------------------------------------------------------- chrome -- */
-
-function showChrome() {
-  document.body.dataset.chrome = 'visible';
-  window.clearTimeout(idleTimer);
-  idleTimer = window.setTimeout(() => {
-    // Don't hide controls out from under a keyboard user.
-    if (dotsEl.contains(document.activeElement)) return showChrome();
-    document.body.dataset.chrome = 'hidden';
-  }, CHROME_IDLE_MS);
-}
-
-function buildDots() {
-  dotsEl.replaceChildren();
-  // A single animation needs no navigation at all.
-  dotsEl.hidden = scenes.length < 2;
-  if (dotsEl.hidden) return;
-
-  scenes.forEach((scene, index) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.title = scene.meta.title;
-    button.setAttribute('aria-label', scene.meta.title);
-    button.addEventListener('click', () => show(index));
-    dotsEl.append(button);
-  });
-}
-
-function syncDots() {
-  [...dotsEl.children].forEach((button, index) => {
-    button.setAttribute('aria-current', String(index === current));
-  });
-}
+let locked = false;
+let lockTimer = 0;
+let wheelTravel = 0;
 
 /* -------------------------------------------------------------- scene -- */
 
-function show(index, { updateHash = true } = {}) {
-  const next = ((index % scenes.length) + scenes.length) % scenes.length;
+function show(index, { direction, updateHash = true } = {}) {
+  const next = Math.max(0, Math.min(index, scenes.length - 1));
   if (next === current) return;
   current = next;
 
   const scene = scenes[current];
-  document.body.style.background = scene.meta.background || '#04050d';
-  titleEl.textContent = scene.meta.title;
-  promptEl.textContent = scene.meta.prompt;
+  document.body.style.background = scene.meta.background || '#02010a';
   canvas.setAttribute('aria-label', `${scene.meta.title}. ${scene.meta.prompt}`);
   document.title = `${scene.meta.title} · Instant Animation`;
+  // Nothing is written on the page, but the description still reaches a screen reader.
   liveEl.textContent = `${scene.meta.title}: ${scene.meta.prompt}`;
   if (updateHash) history.replaceState(null, '', `#${scene.meta.id}`);
 
-  syncDots();
-  stage.mount(scene);
-  showChrome();
+  navUp.hidden = current === 0;
+  navDown.hidden = current === scenes.length - 1;
+
+  stage.mount(scene, { direction });
+}
+
+function travel(delta) {
+  if (locked) return;
+  const next = current + delta;
+  if (next < 0 || next > scenes.length - 1) return;
+
+  locked = true;
+  window.clearTimeout(lockTimer);
+  lockTimer = window.setTimeout(() => {
+    locked = false;
+  }, INPUT_LOCK_MS);
+
+  show(next, { direction: delta > 0 ? 'down' : 'up' });
 }
 
 function indexFromHash() {
@@ -86,18 +70,51 @@ function indexFromHash() {
   return scene ? scenes.indexOf(scene) : 0;
 }
 
-/* --------------------------------------------------------------- input -- */
+/* -------------------------------------------------------------- input -- */
+
+navUp.addEventListener('click', () => travel(-1));
+navDown.addEventListener('click', () => travel(1));
 
 window.addEventListener('keydown', (event) => {
-  showChrome();
-  if (event.key === 'ArrowRight' || event.key === 'PageDown') show(current + 1);
-  else if (event.key === 'ArrowLeft' || event.key === 'PageUp') show(current - 1);
-  else if (event.key === 'Home') show(0);
-  else if (event.key === 'End') show(scenes.length - 1);
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  switch (event.key) {
+    case 'ArrowDown':
+    case 'PageDown':
+    case ' ':
+    case 'Spacebar':
+      event.preventDefault();
+      travel(1);
+      break;
+    case 'ArrowUp':
+    case 'PageUp':
+      event.preventDefault();
+      travel(-1);
+      break;
+    case 'Home':
+      event.preventDefault();
+      show(0, { direction: 'up' });
+      break;
+    case 'End':
+      event.preventDefault();
+      show(scenes.length - 1, { direction: 'down' });
+      break;
+    default:
+      break;
+  }
 });
 
-window.addEventListener('pointermove', showChrome, { passive: true });
-window.addEventListener('pointerdown', showChrome, { passive: true });
+window.addEventListener(
+  'wheel',
+  (event) => {
+    if (locked) return;
+    // Accumulate so a trackpad's many small deltas add up to one deliberate gesture.
+    wheelTravel = Math.sign(event.deltaY) === Math.sign(wheelTravel) ? wheelTravel + event.deltaY : event.deltaY;
+    if (Math.abs(wheelTravel) < WHEEL_THRESHOLD) return;
+    travel(wheelTravel > 0 ? 1 : -1);
+    wheelTravel = 0;
+  },
+  { passive: true },
+);
 
 let swipeStart = null;
 canvas.addEventListener(
@@ -114,9 +131,8 @@ canvas.addEventListener(
     const dx = event.clientX - swipeStart.x;
     const dy = event.clientY - swipeStart.y;
     swipeStart = null;
-    if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
-      show(current + (dx < 0 ? 1 : -1));
-    }
+    // Swiping up pulls the next animation into view, the way a feed does.
+    if (Math.abs(dy) > SWIPE_THRESHOLD && Math.abs(dy) > Math.abs(dx)) travel(dy < 0 ? 1 : -1);
   },
   { passive: true },
 );
@@ -125,5 +141,4 @@ window.addEventListener('hashchange', () => show(indexFromHash(), { updateHash: 
 
 /* ---------------------------------------------------------------- boot -- */
 
-buildDots();
 show(indexFromHash());

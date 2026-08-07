@@ -44,6 +44,16 @@ test('scene ids are unique and resolvable', () => {
   }
 });
 
+test('the gallery is ordered newest first', () => {
+  const dates = scenes.map((scene) => scene.meta.created);
+  const sorted = [...dates].sort().reverse();
+  assert.deepEqual(
+    dates,
+    sorted,
+    'site/scenes/index.js must list scenes newest-first — down means older, up means newer',
+  );
+});
+
 test('every scene file is registered, and every id matches its filename', () => {
   const files = readdirSync(sceneDir)
     .filter((name) => name.endsWith('.js') && name !== 'index.js')

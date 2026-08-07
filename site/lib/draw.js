@@ -58,6 +58,36 @@ export function ellipsePath(ctx, cx, cy, rx, ry) {
   ctx.closePath();
 }
 
+/** Regular polygon, flat-topped at rotation 0. `sides < 3` falls back to a circle. */
+export function polygonPath(ctx, cx, cy, radius, sides, rotation = 0) {
+  ctx.beginPath();
+  if (sides < 3) {
+    ctx.arc(cx, cy, radius, 0, TAU);
+    return;
+  }
+  for (let i = 0; i < sides; i += 1) {
+    const angle = rotation + (i / sides) * TAU - Math.PI / 2;
+    const x = cx + Math.cos(angle) * radius;
+    const y = cy + Math.sin(angle) * radius;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+
+/**
+ * Elliptical arc as a path, built under a scale transform and left in device space so the caller's
+ * stroke width stays uniform. Caller fills or strokes.
+ */
+export function ellipseArcPath(ctx, cx, cy, rx, ry, start, end) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(1, ry / rx);
+  ctx.beginPath();
+  ctx.arc(0, 0, rx, start, end);
+  ctx.restore();
+}
+
 /** Fill an ellipse in one call. */
 export function fillEllipse(ctx, cx, cy, rx, ry, fillStyle) {
   ellipsePath(ctx, cx, cy, rx, ry);

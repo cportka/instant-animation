@@ -2,12 +2,18 @@
 
 An instant animation generator. Animate anything you can describe.
 
-**Version:** 0.2.0 · **Live:** https://cportka.github.io/instant-animation/
+**Version:** 0.3.0 · **Live:** https://cportka.github.io/instant-animation/
 
-Describe something. It becomes a hand-drawn canvas animation and joins the gallery. The site
-shows the animations and nothing else — chrome fades out after a couple of idle seconds.
+Describe something. It becomes a hand-drawn canvas animation and joins the gallery. There is no
+text on the site — the animation *is* the page. The only chrome is a soft chevron floating at each
+edge, and each one exists only when there is somewhere to go.
 
 ## The gallery
+
+Newest at the top, oldest at the bottom. **Down** goes further back in time, **up** returns toward
+the present — by clicking a chevron, scrolling, pressing space or the arrow keys, or swiping.
+Moving between animations plays a channel change: the two scenes push past each other while the
+picture tears itself apart, then settles.
 
 | Animation | From the description |
 | --- | --- |
@@ -21,14 +27,20 @@ whole site is static files served straight from `site/`.
 
 ```
 site/
-  index.html         the shell: a full-bleed canvas and some chrome that gets out of the way
-  app.js             mounts scenes, handles arrows/swipe/#deep-links
-  lib/stage.js       DPR, resizing, the frame loop, pausing a hidden tab, reduced motion
+  index.html         the shell: a full-bleed canvas and two chevrons
+  app.js             mounts scenes, handles chevrons/scroll/keys/swipe/#deep-links
+  lib/stage.js       DPR, resizing, the frame loop, hidden-tab pausing, reduced motion,
+                     and the channel change between scenes
+  lib/vhs.js         tracking bands, scanlines, chroma split, tape dropouts
   lib/rng.js         seeded randomness — scenes never call Math.random()
   lib/draw.js        shared geometry and colour helpers
-  scenes/index.js    the registry
+  scenes/index.js    the registry, newest first
   scenes/*.js        one file per animation
 ```
+
+The VHS distortion is real displacement, not an overlay: a 2D context can sample its own bitmap
+via `ctx.drawImage(ctx.canvas, …)`, so slices of the frame are genuinely pushed sideways with no
+second canvas, no WebGL, and nothing that would stop the scene rendering in Node.
 
 Because scenes only ever touch a 2D context, they render headlessly in Node — so CI draws every
 animation at three viewports and eight timestamps and fails on NaN geometry, colours built from
@@ -55,9 +67,17 @@ Node 20+. There are no dependencies to install.
 
 ## Accessibility
 
-The canvas carries the description as its label, scene changes are announced to screen readers,
-navigation works from the keyboard (`←` `→` `Home` `End`), and visitors who ask for reduced motion
-get a still frame held at the moment each scene reads best rather than a moving one.
+Nothing is written on the page, so the description has to reach a screen reader another way: the
+canvas carries it as its label, and scene changes are announced through a live region. The
+chevrons are real buttons with accessible names. Navigation works from the keyboard (`↑` `↓`
+`Space` `Home` `End`). Visitors who ask for reduced motion get a still frame held at the moment
+each scene reads best, the chevrons stop bobbing, and the channel change is skipped entirely.
+
+## Versioning
+
+SemVer, with one repo-specific meaning: a **MAJOR** bump marks an animation being *finished* and
+the next one starting. `1.0.0` is cut when *Asleep Among the Stars* is done. See
+`.claude/CLAUDE.md`.
 
 ## Deployment
 

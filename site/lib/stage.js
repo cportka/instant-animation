@@ -1,12 +1,17 @@
-// The stage: one canvas, one scene at a time.
+// The stage: one canvas, one scene at a time — and the channel change between them.
 //
-// It owns everything a scene shouldn't have to think about — device pixel ratio, resizing, the
-// animation loop, pausing in a hidden tab, and honouring `prefers-reduced-motion`. A scene only
-// ever receives a 2D context, a clock, and its size, which is also what makes scenes testable in
-// Node against a stub context.
+// It owns everything a scene shouldn't have to think about: device pixel ratio, resizing, the
+// animation loop, pausing in a hidden tab, honouring `prefers-reduced-motion`, and the transition.
+// A scene only ever receives a 2D context, a clock, and its size, which is also what makes scenes
+// testable in Node against a stub context.
+
+import { smoothstep } from './draw.js';
+import { chromaSplit, makeTearBands, seam, tearBands } from './vhs.js';
+import { createRng } from './rng.js';
 
 // Past 2x the extra pixels cost far more than they show.
 const MAX_DPR = 2;
+const TRANSITION_SECONDS = 0.95;
 
 /**
  * @param {HTMLCanvasElement} canvas
@@ -14,12 +19,15 @@ const MAX_DPR = 2;
  */
 export function createStage(canvas, options = {}) {
   const ctx = canvas.getContext('2d', { alpha: false });
+  const glitchBands = makeTearBands(createRng('channel-change'), 7);
 
-  let scene = null; // the mounted module
-  let instance = null; // its per-mount state
-  let frame = 0; // requestAnimationFrame handle
+  let current = null; // { module, instance, elapsed }
+  let outgoing = null; // the scene being pushed off screen, during a transition
+  let transition = 0; // 0 → 1
+  let direction = 1; // +1 when travelling down the gallery, -1 when travelling up
+
+  let frame = 0;
   let lastTimestamp = 0;
-  let elapsed = 0; // seconds of *visible* animation, so a hidden tab doesn't jump on return
   let width = 0;
   let height = 0;
   let running = false;
@@ -48,11 +56,11 @@ export function createStage(canvas, options = {}) {
     return changed;
   }
 
-  function renderFrame(dt) {
-    if (!instance) return;
+  function paint(entry, offsetY, dt) {
     ctx.save();
     try {
-      instance.draw(ctx, elapsed, dt);
+      ctx.translate(0, offsetY);
+      entry.instance.draw(ctx, entry.elapsed, dt);
     } catch (error) {
       // A broken scene shouldn't spin at 60fps throwing — freeze on its last good frame.
       stop();
@@ -63,17 +71,49 @@ export function createStage(canvas, options = {}) {
     }
   }
 
+  function renderFrame(dt) {
+    if (!current) return;
+
+    if (!outgoing) {
+      paint(current, 0, dt);
+      return;
+    }
+
+    // Channel change: the two scenes are exactly adjacent, so between them they always cover the
+    // full frame — one slides out while the other slides in behind it.
+    const p = smoothstep(0, 1, transition);
+    paint(outgoing, -p * height * direction, dt);
+    paint(current, (1 - p) * height * direction, dt);
+
+    // Then wreck the composite. Peaks in the middle of the move and settles at both ends.
+    const violence = Math.sin(p * Math.PI);
+    ctx.save();
+    tearBands(ctx, width, height, current.elapsed, glitchBands, 0.6 + violence * 5);
+    chromaSplit(ctx, width, height, current.elapsed, violence * 6);
+    seam(ctx, width, (1 - p) * height * direction + (direction > 0 ? 0 : height), violence);
+    ctx.restore();
+  }
+
   function tick(timestamp) {
     frame = window.requestAnimationFrame(tick);
     // Clamp the step so a backgrounded tab or a slow first frame can't teleport the animation.
     const dt = lastTimestamp ? Math.min((timestamp - lastTimestamp) / 1000, 0.1) : 0;
     lastTimestamp = timestamp;
-    elapsed += dt;
+
+    if (current) current.elapsed += dt;
+    if (outgoing) {
+      outgoing.elapsed += dt;
+      transition += dt / TRANSITION_SECONDS;
+      if (transition >= 1) {
+        transition = 0;
+        outgoing = null;
+      }
+    }
     renderFrame(dt);
   }
 
   function start() {
-    if (running || !instance) return;
+    if (running || !current) return;
     running = true;
     lastTimestamp = 0;
     frame = window.requestAnimationFrame(tick);
@@ -86,39 +126,57 @@ export function createStage(canvas, options = {}) {
   }
 
   function resize() {
-    if (!instance) return;
+    if (!current) return;
     const changed = measure();
-    instance.resize?.(width, height);
+    current.instance.resize?.(width, height);
+    outgoing?.instance.resize?.(width, height);
     // A still frame has no loop to repaint it, and a resize wipes the canvas either way.
     if (changed && !running) renderFrame(0);
   }
 
   function handleVisibility() {
-    if (!instance) return;
+    if (!current) return;
     if (document.hidden) stop();
     else if (!prefersReducedMotion()) start();
   }
 
-  /**
-   * Mount a scene module. Replaces whatever was on the stage.
-   * @param {{ meta: object, create: Function }} module
-   */
-  function mount(module) {
-    stop();
-    scene = module;
-    elapsed = 0;
-    measure();
-    instance = module.create({ width, height, seed: module.meta.seed || module.meta.id });
+  function build(module) {
+    return {
+      module,
+      elapsed: prefersReducedMotion() ? (module.meta.posterTime ?? 0) : 0,
+      instance: module.create({ width, height, seed: module.meta.seed || module.meta.id }),
+    };
+  }
 
-    if (prefersReducedMotion()) {
-      // Still image, held at the moment the scene says it reads best.
-      elapsed = module.meta.posterTime ?? 0;
+  /**
+   * Mount a scene module. Pass a direction to play the channel change into it.
+   * @param {{ meta: object, create: Function }} module
+   * @param {{ direction?: 'down' | 'up' }} [opts]
+   */
+  function mount(module, opts = {}) {
+    measure();
+    const reduced = prefersReducedMotion();
+    const next = build(module);
+
+    // A transition is motion for its own sake — skip it entirely when that's unwelcome.
+    if (current && opts.direction && !reduced) {
+      outgoing = current;
+      transition = 0;
+      direction = opts.direction === 'up' ? -1 : 1;
+    } else {
+      outgoing = null;
+      transition = 0;
+    }
+    current = next;
+
+    if (reduced) {
+      stop();
       renderFrame(0);
     } else {
       renderFrame(0);
       start();
     }
-    return instance;
+    return current.instance;
   }
 
   function destroy() {
@@ -127,8 +185,8 @@ export function createStage(canvas, options = {}) {
     window.removeEventListener('orientationchange', resize);
     document.removeEventListener('visibilitychange', handleVisibility);
     observer?.disconnect();
-    instance = null;
-    scene = null;
+    current = null;
+    outgoing = null;
   }
 
   const observer =
@@ -143,10 +201,13 @@ export function createStage(canvas, options = {}) {
     destroy,
     resize,
     get scene() {
-      return scene;
+      return current?.module ?? null;
     },
     get running() {
       return running;
+    },
+    get transitioning() {
+      return outgoing !== null;
     },
   };
 }

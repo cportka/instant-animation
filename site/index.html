@@ -8,20 +8,25 @@
       name="description"
       content="Describe anything; watch it animate. A gallery of hand-generated canvas animations."
     />
-    <meta name="theme-color" content="#04050d" />
+    <meta name="theme-color" content="#02010a" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <canvas id="stage" role="img" aria-label="Animation"></canvas>
 
-    <div class="chrome" id="chrome">
-      <p class="caption">
-        <b id="scene-title"></b>
-        <span id="scene-prompt"></span>
-      </p>
-      <nav class="dots" id="dots" aria-label="Animations"></nav>
-    </div>
+    <!-- The only things on screen besides the animation, and only when there is somewhere to go. -->
+    <button class="nav nav--up" id="nav-up" type="button" aria-label="Previous animation" hidden>
+      <svg viewBox="0 0 44 24" aria-hidden="true" focusable="false">
+        <path d="M4 18 L22 6 L40 18" />
+      </svg>
+    </button>
+
+    <button class="nav nav--down" id="nav-down" type="button" aria-label="Next animation" hidden>
+      <svg viewBox="0 0 44 24" aria-hidden="true" focusable="false">
+        <path d="M4 6 L22 18 L40 6" />
+      </svg>
+    </button>
 
     <p id="live" class="sr-only" role="status" aria-live="polite"></p>
 
