@@ -52,12 +52,18 @@ snuggled under the covers peacefully sleeping while the bed gently floats amongs
   them there.
 - The sleeper **snores**: the mouth opens on the out-breath, and every snore pushes a wireframe
   solid out into space. Breathing, the Z's and the echoes all run off one clock.
-- A **black hole** whose accretion disc is lensed up over the shadow, with a photon ring, material
-  visibly streaming round, and star positions bent outward as they pass it.
+- A **black hole** with a pocket of visibly bent spacetime around it. Concentric discs of the
+  frame are each magnified, twisted and blurred more than the one outside it — and the pass runs
+  *between* the accretion disc and the shadow, so the disc is dragged through its own lens while
+  the shadow and photon ring stay hard-edged. The magnification breathes and the twist wanders, so
+  the pocket is never still.
 - An **orbiting pair of neutron stars**, the scene's single light source: the disc's lit limb, the
   duvet's rim and the sleeper's face all derive their edges from that one position.
-- **Curve stitching** — sets of straight lines whose envelope is a parabola — and heavy coloured
-  haze, over a galactic band of clustered stars cut by soft dust lanes.
+- **Curve stitching** — sets of straight lines whose envelope is a parabola — over a galactic band
+  of clustered stars cut by soft dust lanes.
+- **Nothing is clean.** Heavy coloured haze in three big washes plus seven smaller clouds that
+  visibly travel and wrap, and a bloom pass that draws the whole frame back over itself blurred,
+  slightly enlarged and slowly drifting, so every edge has a soft double that moves.
 
 **The front-end** (`site/index.html`, `app.js`, `styles.css`): **no text at all.** The animation is
 the page; the title and description survive only as the canvas label and a screen-reader live
@@ -83,15 +89,20 @@ SemVer version sync, a test suite, and CI.
 
 ### Performance
 
-The tape effects are the whole frame's cost. Two findings worth keeping:
+The full-screen effects are the whole frame's cost. Three findings worth keeping:
 
 - **Never sample the canvas you are drawing into.** `drawImage(ctx.canvas, …)` forces a flush per
   call: 78 slices cost **948ms**, the same 78 read from a separate buffer cost **4.2ms**, and the
   one full copy that fills that buffer is free. The stage owns the buffer and hands it to scenes,
   so scenes still never touch the DOM. Measured in headless Chromium at 2880×1800.
 - **Resolution is the only lever that reliably works** on a fill-rate-bound pipeline, which is why
-  `meta.maxDpr` and the adaptive fallback exist. Star fills are batched by colour and alpha step
-  for the same reason — ~900 individual fills became a few dozen.
+  `meta.maxDpr` and the adaptive fallback exist. Coming down is much faster than going up, and a
+  catastrophically slow frame counts triple, so a machine well over its budget reaches a usable
+  scale in about a second rather than half a minute. Star fills are batched by colour and alpha
+  step for the same reason — ~900 individual fills became a few dozen.
+- Profiling by wrapping `fill`/`drawImage` is useless here: it accounted for 6.5ms of a 94ms
+  frame, because Skia defers rasterisation to flush. Measure end-to-end frame time and real
+  achieved frame rate instead.
 
 ### Versioning
 
