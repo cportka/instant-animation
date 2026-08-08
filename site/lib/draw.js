@@ -25,8 +25,17 @@ export const rgba = ([r, g, b], alpha) => `rgba(${r}, ${g}, ${b}, ${alpha})`;
  * ever touch the small, universally supported slice of the 2D API the test harness models.
  */
 export function roundedRect(ctx, x, y, width, height, radius) {
-  const r = Math.min(radius, Math.abs(width) / 2, Math.abs(height) / 2);
   ctx.beginPath();
+  roundedRectPath(ctx, x, y, width, height, radius);
+}
+
+/**
+ * The same shape appended to whatever path is already open, so several can be combined into one
+ * fill or stroke — which is how a shape made of more than one rectangle stays a single object
+ * under `clip()` and under a composite mode.
+ */
+export function roundedRectPath(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, Math.abs(width) / 2, Math.abs(height) / 2);
   ctx.moveTo(x + r, y);
   ctx.lineTo(x + width - r, y);
   ctx.quadraticCurveTo(x + width, y, x + width, y + r);

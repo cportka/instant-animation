@@ -34,7 +34,17 @@ Skipped entirely under reduced motion.
 **VHS artefacts** (`site/lib/vhs.js`), modelled on a real tape failure: per-scanline shred, chroma
 pushed to neon, long horizontal smears, hexagonal honeycomb dither, head-switching dropout bars
 with noise inside them, rolling scanlines and grain. The displacement is real, not an overlay —
-slices of the rendered frame are copied back over it.
+slices of the rendered frame are copied back over it. At any moment roughly half the picture is in
+pieces; the rest is what you are there to look at.
+
+Two of them are about *digital* failure rather than tape wear. **The stuck macroblock**
+(`blockRepeat`) samples one small rectangle and stamps it again and again across a strip, so a
+stretch of picture becomes a print of itself — each cell holds its source for a beat before picking
+another, which is what makes it read as stuck rather than as noise. And the **honeycomb is not a
+lattice**: a mathematically perfect comb is the one thing in frame that looks authored, so every
+row gets its own shear, squash, line weight and colour, cells wobble and resize against their
+neighbours, some drop out and a few flood solid — all on a slow seed, so it holds a shape for a
+beat instead of boiling.
 
 Three levels of damage: ambient all the time, the heads giving out completely every ten seconds,
 and — every seventy-one seconds — a **surge to ten times that**, which ramps up, leaves nothing of
@@ -77,8 +87,19 @@ snuggled under the covers peacefully sleeping while the bed gently floats amongs
   face-up and sweeps through the back, one turn every 44 seconds.
 - Drift periods in **minutes, not seconds** (97s, 71s, and a 127s tumble), so it wanders the frame
   instead of bobbing in place.
-- **Sunglasses** drift in, settle on the sleeper for a while, and drift off again. Nobody puts
-  them there.
+- **Sunglasses** arrive out of nowhere, settle on the sleeper for a while, and leave. Nobody puts
+  them there. They are lit like a sign rather than like glass — three weights of neon rim over
+  black, a bar of light raking across, and chroma copies running either side — and they never
+  commit to existing: they stutter on their own clock, arrive three times too big and shrink onto
+  the face, then swing between about two thirds and one and a half while worn. Sized deliberately
+  wider than the skull, because a pair fitted to a head this small is twenty screen pixels of
+  nothing.
+- **The sleeper is not reliably there.** Once every thirty-seven seconds they come apart into
+  horizontal bands — each displaced by its own amount, some missing altogether, echoes thrown
+  either side and magenta/cyan leaking out of the edges — stay gone long enough that you start
+  looking for them, and reassemble. The bed never goes: an empty bed still adrift is the point.
+  The bands are clipped in the bed's own coordinate space, so the effect composes with the roll and
+  the tumble without knowing about either, and costs nothing while the sleeper is simply present.
 - The sleeper **snores**: the mouth opens on the out-breath, and every snore pushes a wireframe
   solid out into space. Breathing, the Z's and the echoes all run off one clock.
 - A **black hole** with a pocket of visibly bent spacetime around it. Concentric discs of the

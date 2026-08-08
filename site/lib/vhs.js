@@ -326,32 +326,142 @@ export function chromaSplit(ctx, W, H, t, intensity = 1, tape = null) {
 /**
  * The honeycomb that fills the reference's flat colour fields. Scoped to a band rather than the
  * whole frame — everywhere at once reads as wallpaper, not as a compression artefact.
+ *
+ * And it must not be a *lattice*. A mathematically perfect comb is the one thing in the frame that
+ * looks authored: real block-decode garbage shears row against row, drops cells, floods some solid,
+ * and changes its mind several times a second. So every row gets its own shear, its own line
+ * weight and its own colour, cells drop out on a hashed roll, and a few fill instead of stroking.
+ * All of it keyed to a slow seed so the comb holds a shape for a beat rather than boiling.
  */
-export function hexDither(ctx, W, y, height, radius, alpha) {
+export function hexDither(ctx, W, y, height, radius, alpha, t = 0, chaos = 1) {
   if (alpha <= 0.005 || height <= 0) return;
   const stepX = radius * Math.sqrt(3);
   const stepY = radius * 1.5;
+  const seed = Math.floor(t * 3.2) * 149;
+  const damage = clamp(chaos, 0, 3);
 
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  ctx.strokeStyle = `rgba(120, 220, 255, ${clamp(alpha, 0, 1)})`;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
+  ctx.lineJoin = 'bevel';
+
   for (let row = 0, cy = y; cy < y + height + stepY; row += 1, cy += stepY) {
-    const inset = row % 2 ? stepX / 2 : 0;
-    for (let cx = inset; cx < W + stepX; cx += stepX) {
+    const n = hash(seed + row * 7.31);
+    // Whole rows drop, the way a decoder loses a strip of blocks.
+    if (n < 0.1 * damage) continue;
+
+    // Each row slides independently, so the comb shears instead of tiling.
+    const shear = (hash(seed + row * 3.17) - 0.5) * stepX * 3.4 * damage;
+    const squash = 1 + (hash(seed + row * 11.9) - 0.5) * 0.5 * damage;
+    const inset = (row % 2 ? stepX / 2 : 0) + shear;
+    const rowAlpha = clamp(alpha * (0.55 + n * 0.9), 0, 1);
+    const cyan = hash(seed + row * 5.11) > 0.34;
+
+    ctx.lineWidth = 0.6 + hash(seed + row * 2.71) * 1.9;
+    ctx.strokeStyle = cyan
+      ? `rgba(120, 220, 255, ${rowAlpha})`
+      : `rgba(255, 110, 215, ${rowAlpha})`;
+    ctx.fillStyle = cyan
+      ? `rgba(70, 170, 220, ${rowAlpha * 0.5})`
+      : `rgba(210, 80, 180, ${rowAlpha * 0.5})`;
+
+    ctx.beginPath();
+    const solid = [];
+    for (let cx = inset - stepX, column = 0; cx < W + stepX; cx += stepX, column += 1) {
+      const c = hash(seed + row * 17.3 + column * 1.93);
+      // Scattered cells simply aren't there.
+      if (c < 0.16 * damage) continue;
+      // Per-cell wobble as well as per-row shear. Without it a row is still a ruler: the shear
+      // makes the rows disagree, this makes the cells within one disagree too.
+      const jx = (hash(seed + row * 23.1 + column * 4.41) - 0.5) * radius * 0.7 * damage;
+      const jy = (hash(seed + row * 6.53 + column * 8.09) - 0.5) * radius * 0.5 * damage;
+      const size = radius * (1 + (c - 0.5) * 0.45 * damage);
+      const cell = [];
       for (let i = 0; i < 6; i += 1) {
         const a = (i / 6) * TAU - Math.PI / 2;
-        const px = cx + Math.cos(a) * radius;
-        const py = cy + Math.sin(a) * radius;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
+        cell.push([cx + jx + Math.cos(a) * size, cy + jy + Math.sin(a) * size * squash]);
       }
-      ctx.closePath();
+      // A handful flood solid — the block that decoded to one flat colour.
+      if (c > 1 - 0.1 * damage) solid.push(cell);
+      else {
+        ctx.moveTo(cell[0][0], cell[0][1]);
+        for (let i = 1; i < 6; i += 1) ctx.lineTo(cell[i][0], cell[i][1]);
+        ctx.closePath();
+      }
+    }
+    ctx.stroke();
+
+    if (solid.length) {
+      ctx.beginPath();
+      for (const cell of solid) {
+        ctx.moveTo(cell[0][0], cell[0][1]);
+        for (let i = 1; i < 6; i += 1) ctx.lineTo(cell[i][0], cell[i][1]);
+        ctx.closePath();
+      }
+      ctx.fill();
     }
   }
-  ctx.stroke();
   ctx.restore();
+}
+
+export function makeRepeatCells(rng, count = 5) {
+  return Array.from({ length: count }, () => ({
+    offset: rng.next(),
+    drift: rng.range(0.008, 0.045),
+    heightFrac: rng.range(0.04, 0.12),
+    widthFrac: rng.range(0.05, 0.17),
+    // How often the stuck block picks a new source. Slow: the whole point is that it repeats.
+    churn: rng.range(0.5, 2.2),
+    // Only part of each cell's cycle is spent stuck. Low on purpose: at full duty every cell is
+    // printing at once and the picture underneath is gone, which is a different effect — the
+    // brief is half the frame in pieces, not all of it.
+    duty: rng.range(0.22, 0.5),
+    phase: rng.range(0, 10),
+  }));
+}
+
+/**
+ * The stuck macroblock: one small piece of the frame stamped again and again across a strip, so a
+ * stretch of picture becomes a print of itself. This is the artefact that reads as *digital*
+ * failure rather than tape wear — the tear and the smear are analogue, this is a decoder repeating
+ * its last good block because the next one never arrived.
+ *
+ * Each cell holds its source for a beat before picking another, which is what makes it read as
+ * stuck rather than as noise, and tiles jitter vertically so the strip doesn't become a neat row.
+ */
+export function blockRepeat(ctx, W, H, t, cells, intensity = 1, tape = null) {
+  if (intensity <= 0) return;
+  const scale = deviceScale(ctx, W, H);
+  const source = sourceOf(ctx, tape);
+
+  for (const cell of cells) {
+    const cycle = wrap01(cell.offset + t * cell.drift);
+    if (cycle > cell.duty) continue;
+
+    const seed = Math.floor(t * cell.churn) * 197 + cell.phase * 43;
+    const height = Math.max(4, cell.heightFrac * H);
+    const width = Math.max(6, cell.widthFrac * W * clamp(1.4 - intensity * 0.3, 0.45, 1.4));
+    const top = clamp((cycle / cell.duty) * (H + height) - height, 0, Math.max(0, H - 1));
+    const visible = Math.min(height, H - top);
+    if (visible < 2) continue;
+
+    // The block being repeated, sampled once and reused for every tile.
+    const from = hash(seed) * Math.max(1, W - width);
+    const sx = Math.round(from * scale.sx);
+    const sy = Math.round(top * scale.sy);
+    const sw = Math.max(1, Math.round(width * scale.sx));
+    const sh = Math.max(1, Math.round(visible * scale.sy));
+    const tiles = Math.min(18, Math.max(2, Math.ceil(W / width)));
+
+    ctx.save();
+    for (let i = 0; i < tiles; i += 1) {
+      const n = hash(seed + i * 5.7);
+      // Gaps in the run: the strip is a print of one block, not a wall of them.
+      if (n < 0.14) continue;
+      const jitter = (hash(seed + i * 2.3) - 0.5) * visible * 0.5 * intensity;
+      ctx.drawImage(source, sx, sy, sw, sh, i * width, top + jitter, width, visible);
+    }
+    ctx.restore();
+  }
 }
 
 /**
