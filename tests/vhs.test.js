@@ -4,7 +4,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { heldPulse, hash } from '../site/lib/vhs.js';
+import { heldPulse, hash, hexDither, blockRepeat, makeRepeatCells } from '../site/lib/vhs.js';
+import { roundedRect, roundedRectPath } from '../site/lib/draw.js';
+import { createRng } from '../site/lib/rng.js';
+import { createRecordingContext } from './helpers/recording-context.mjs';
 
 /** Seconds the envelope spends at (or within a hair of) full value, sampled at 1ms. */
 function timeAtPeak(f, until = 20) {
@@ -58,6 +61,66 @@ test('heldPulse has no discontinuity at either seam of the plateau', () => {
   }
   // A seam would show up as a jump far larger than the envelope's own slope.
   assert.ok(worst < 0.01, `largest step was ${worst}`);
+});
+
+test('roundedRectPath appends to the open path instead of starting a new one', () => {
+  // The sunglasses are two lenses filled and stroked as one object; if this ever calls beginPath
+  // the second lens silently erases the first, which looks like a monocle rather than an error.
+  const appended = createRecordingContext();
+  appended.ctx.beginPath();
+  roundedRectPath(appended.ctx, 0, 0, 10, 10, 2);
+  roundedRectPath(appended.ctx, 20, 0, 10, 10, 2);
+  assert.equal(appended.ops.filter((op) => op.startsWith('beginPath')).length, 1);
+
+  // ...while the convenience wrapper still opens its own.
+  const standalone = createRecordingContext();
+  roundedRect(standalone.ctx, 0, 0, 10, 10, 2);
+  assert.equal(standalone.ops.filter((op) => op.startsWith('beginPath')).length, 1);
+});
+
+test('the honeycomb is never a clean lattice', () => {
+  const render = (t, chaos) => {
+    const rec = createRecordingContext({ width: 800, height: 600 });
+    hexDither(rec.ctx, 800, 100, 300, 24, 0.3, t, chaos);
+    return rec;
+  };
+
+  // Cells drop, rows shear and a few flood solid, so damage must change what is drawn.
+  const calm = render(4, 0.2).ops.join('|');
+  const wrecked = render(4, 2.5).ops.join('|');
+  assert.notEqual(calm, wrecked, 'chaos does not affect the comb');
+
+  // And it must keep changing over time rather than sitting still.
+  assert.notEqual(render(4, 1).ops.join('|'), render(9, 1).ops.join('|'));
+
+  // Same inputs, same comb — it still has to survive the determinism check.
+  assert.deepEqual(render(4, 1).ops, render(4, 1).ops);
+  assert.deepEqual(render(4, 1).problems, []);
+});
+
+test('blockRepeat stamps one source rect many times over', () => {
+  const cells = makeRepeatCells(createRng('repeat-test'), 5);
+  const rec = createRecordingContext({ width: 800, height: 600 });
+  // Sweep time so at least one cell is inside its duty window.
+  for (let t = 0; t < 40; t += 0.5) blockRepeat(rec.ctx, 800, 600, t, cells, 1);
+
+  const blits = rec.ops.filter((op) => op.startsWith('drawImage('));
+  assert.ok(blits.length > 0, 'no blocks were ever drawn');
+  assert.deepEqual(rec.problems, []);
+  assert.equal(rec.depth, 0, 'unbalanced save/restore');
+
+  // The signature of the artefact: the same source rectangle reused across many destinations.
+  // drawImage args are (source, sx, sy, sw, sh, dx, dy, dw, dh) — group by the source quad.
+  const bySource = new Map();
+  for (const op of blits) {
+    const args = op.slice('drawImage('.length, -1).split(',');
+    const key = args.slice(1, 5).join(',');
+    bySource.set(key, (bySource.get(key) || 0) + 1);
+  }
+  assert.ok(
+    Math.max(...bySource.values()) >= 3,
+    'every blit used a different source — that is a smear, not a repeat',
+  );
 });
 
 test('hash is deterministic and stays in [0, 1)', () => {

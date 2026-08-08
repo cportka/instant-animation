@@ -20,19 +20,23 @@ import {
   polygonPath,
   rgba,
   roundedRect,
+  roundedRectPath,
   smoothstep,
   wave,
   wrap01,
 } from '../lib/draw.js';
 import { drawSplotches, makeSplotches } from '../lib/paint.js';
 import {
+  blockRepeat,
   chromaSplit,
   contrastPunch,
   dropoutBars,
   grain,
+  hash,
   heldPulse,
   hexDither,
   makeDropoutBars,
+  makeRepeatCells,
   makeShredZones,
   makeTearBands,
   diffuse,
@@ -72,6 +76,8 @@ const SNORE_PERIOD = 5.4; // one full breath; the Z's and the echoes ride the sa
 const ECHO_LIFE = 13; // how long a geometric echo takes to leave the frame
 const ROLL_PERIOD = 44; // one full turn about the pillow-to-foot axis
 const GLASSES_CYCLE = 21; // sunglasses drift on, sit a while, drift off, stay away
+// The sleeper is not reliably there. One long cycle: present, torn apart, absent, reassembled.
+const SLEEPER_CYCLE = 37;
 // Two cycles of tape damage, peaking an order of magnitude apart. Each rises, then *sits* at its
 // own maximum, then falls: a sine bump touches its peak for one frame, which is over before you
 // can read what broke. The holds below are sized so each cycle spends roughly five times as long
@@ -188,6 +194,7 @@ export function create({ width, height, seed = meta.id, tape = null }) {
   const bands = makeTearBands(rng, 6);
   const shredZones = makeShredZones(rng, 3);
   const bars = makeDropoutBars(rng, 3);
+  const repeatCells = makeRepeatCells(rng, 5);
   // Kept off the sleeper: the bed drifts around (0.34, 0.37), and a splotch centred there would
   // erase the only thing in the frame worth looking at. Drips still run across it.
   const splotches = makeSplotches(rng, 30, { avoid: { x: 0.34, y: 0.37, r: 0.1 } });
@@ -293,10 +300,14 @@ export function create({ width, height, seed = meta.id, tape = null }) {
       // Snapshot *after* the colour grade so displaced slices carry the same colour as the frame
       // they were torn out of, and before the displacement so the artefacts don't feed each other.
       tape?.capture(ctx);
-      shred(ctx, W, H, t, shredZones, 0.22 + chaos * 3.6, tape);
-      tearBands(ctx, W, H, t, bands, 0.85 + chaos * 2.8, tape);
-      smearStreaks(ctx, W, H, t, 5 + Math.round(Math.min(chaos, 2) * 13), 0.45 + chaos * 1.9, tape);
-      dropoutBars(ctx, W, H, t, bars, 0.3 + chaos * 1.45, tape);
+      shred(ctx, W, H, t, shredZones, 0.5 + chaos * 3.6, tape);
+      tearBands(ctx, W, H, t, bands, 1.5 + chaos * 2.8, tape);
+      smearStreaks(ctx, W, H, t, 9 + Math.round(Math.min(chaos, 2) * 13), 0.8 + chaos * 1.9, tape);
+      dropoutBars(ctx, W, H, t, bars, 0.6 + chaos * 1.45, tape);
+      // The stuck block, re-read off the tape so it repeats what the artefacts above have already
+      // done to the picture rather than the clean frame underneath them.
+      tape?.capture(ctx);
+      blockRepeat(ctx, W, H, t, repeatCells, 0.7 + chaos * 1.1, tape);
 
       // Magnitude alone stops buying anything past about half the frame width — a slice shifted
       // further just lands off screen. So the surge adds *passes* rather than distance: the same
@@ -304,20 +315,25 @@ export function create({ width, height, seed = meta.id, tape = null }) {
       // torn rather than how far each piece moves. Two seconds in seventy, and reading from the
       // tape makes each extra pass cost a few milliseconds.
       if (surge > 0.12) {
-        shred(ctx, W, H, t + 3.1, shredZones, 0.22 + chaos * 3.6, tape);
-        shred(ctx, W, H, t + 7.7, shredZones, 0.22 + chaos * 3.6, tape);
-        tearBands(ctx, W, H, t + 5.3, bands, 0.85 + chaos * 2.8, tape);
-        dropoutBars(ctx, W, H, t + 2.9, bars, 0.3 + chaos * 1.45, tape);
+        shred(ctx, W, H, t + 3.1, shredZones, 0.5 + chaos * 3.6, tape);
+        shred(ctx, W, H, t + 7.7, shredZones, 0.5 + chaos * 3.6, tape);
+        tearBands(ctx, W, H, t + 5.3, bands, 1.5 + chaos * 2.8, tape);
+        dropoutBars(ctx, W, H, t + 2.9, bars, 0.6 + chaos * 1.45, tape);
         smearStreaks(ctx, W, H, t + 1.7, 16, 2.4, tape);
+        blockRepeat(ctx, W, H, t + 4.6, repeatCells, 1.6, tape);
       }
 
       tape?.capture(ctx);
-      chromaSplit(ctx, W, H, t, 1.1 + chaos * 4.2, tape);
-      if (chaos > 0.12) {
-        const y = wrap01(t * 0.07) * H;
-        const band = H * (0.16 + surge * 0.9);
-        hexDither(ctx, W, y - band * surge * 0.5, band, Math.max(9, H * 0.024), Math.min(chaos, 1.6) * 0.24);
-      }
+      chromaSplit(ctx, W, H, t, 2.2 + chaos * 4.2, tape);
+      // Two combs, always. One is a slow band wandering down the picture, the other rides the
+      // repeat cells' clock and covers whatever the damage is currently worst over — between them
+      // there is comb somewhere in frame at all times, which is what "half of it is garbage" means.
+      const comb = Math.max(9, H * 0.024);
+      const slowBand = H * (0.28 + surge * 0.8);
+      hexDither(ctx, W, wrap01(t * 0.07) * H - slowBand * 0.5, slowBand, comb,
+        (0.2 + Math.min(chaos, 1.6) * 0.22), t, 1 + chaos * 0.6);
+      hexDither(ctx, W, wrap01(0.43 - t * 0.041) * H - H * 0.1, H * (0.2 + burst * 0.5),
+        comb * 1.6, 0.16 + Math.min(chaos, 2) * 0.13, t * 1.7, 1.4 + chaos * 0.5);
       scanlines(ctx, W, H, t, { spacing: 4, alpha: 0.16, rollSpeed: 5 });
       grain(ctx, W, H, t, { count: 34 + Math.round(Math.min(chaos, 6) * 90), alpha: 0.14, rate: 10 });
     },
@@ -877,16 +893,105 @@ function drawBed(ctx, t, squash) {
   drawFrame(ctx);
   drawLegs(ctx, false);
   drawPillows(ctx);
-  drawSleeper(ctx, breath, t);
-  // Sunglasses ride the roll with the face, and there is no face to see from below.
+  // The sleeper comes and goes. The bed never does — an empty bed still adrift is the point of
+  // them being gone, and if the whole thing vanished there would be nothing to miss.
+  drawGlitched(ctx, SLEEPER_BOX, t, sleeperPresence(t), 401, (c) => drawSleeper(c, breath, t));
+  // Sunglasses ride the roll with the face, and there is no face to see from below. They keep
+  // their own clock, so they can be hanging in the air over an empty pillow.
   if (faceUp) drawSunglasses(ctx, t, breath * 1.5);
   drawDuvet(ctx, t, breath, flutter);
   drawRimLight(ctx, breath);
 }
 
+// The sleeper's own bounding box in bed coordinates — hair, face, neck and the wisps above.
+const SLEEPER_BOX = { x: -318, y: -178, w: 190, h: 152 };
+const GLITCH_BANDS = 15;
+
 /**
- * A pair of shades that drifts in, settles on the sleeper for a while, and drifts off again.
- * Nobody puts them there; they simply arrive.
+ * How much of the sleeper is there. One long cycle: present for most of it, torn apart over a few
+ * seconds, absent long enough that you start looking for them, then reassembled.
+ */
+function sleeperPresence(t) {
+  const p = wrap01(t / SLEEPER_CYCLE);
+  if (p < 0.6) return 1;
+  if (p < 0.69) return 1 - smoothstep(0.6, 0.69, p);
+  if (p < 0.89) return 0;
+  return smoothstep(0.89, 1, p);
+}
+
+/**
+ * Draw something as though the picture is losing hold of it: horizontal bands each displaced by
+ * their own amount, some missing altogether, and the colour channels running away from the rest.
+ *
+ * The bands are clipped in the *caller's* coordinate space, so this composes with the bed's roll
+ * and tumble without knowing about either. At full presence it is a plain call — the glitch costs
+ * nothing for the twenty-odd seconds the sleeper is simply there.
+ */
+function drawGlitched(ctx, box, t, presence, seed, drawFn) {
+  if (presence >= 1) {
+    drawFn(ctx);
+    return;
+  }
+  if (presence <= 0) return;
+
+  const damage = 1 - presence;
+  const step = box.h / GLITCH_BANDS;
+  // Re-seeded about eleven times a second: fast enough to be unstable, slow enough that each
+  // arrangement is legible for a frame or two rather than boiling into mush.
+  const churn = Math.floor(t * 11) * 313 + seed;
+
+  for (let i = 0; i < GLITCH_BANDS; i += 1) {
+    if (hash(churn + i * 4.73) < damage * 0.62) continue;
+    const dx = (hash(churn + i * 9.17) - 0.5) * box.w * 1.5 * damage;
+    const y = box.y + i * step;
+
+    ctx.save();
+    ctx.beginPath();
+    // Wide clip: the band's content is being dragged sideways, and it should be allowed to leave.
+    ctx.rect(box.x - box.w, y, box.w * 3, step + 0.7);
+    ctx.clip();
+    ctx.translate(dx, 0);
+
+    // Echoes of the band thrown either side, additively. The content sets its own colours, so
+    // these can't be tinted at the source — the chroma comes from the wash below instead, which
+    // is the same trick the tracking bands use.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha *= 0.42 * damage;
+    for (const side of [-1, 1]) {
+      ctx.save();
+      ctx.translate(side * (3 + damage * 24), 0);
+      drawFn(ctx);
+      ctx.restore();
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha *= clamp(0.4 + presence * 0.6, 0, 1);
+    drawFn(ctx);
+    ctx.restore();
+
+    // Magenta above, cyan below, across the band only — the colour that leaks out of an edge the
+    // decoder has lost track of.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const bleed = ctx.createLinearGradient(0, y, 0, y + step);
+    bleed.addColorStop(0, rgba(MAGENTA, 0.3 * damage));
+    bleed.addColorStop(0.5, rgba(VIOLET, 0.04 * damage));
+    bleed.addColorStop(1, rgba(CYAN, 0.3 * damage));
+    ctx.fillStyle = bleed;
+    ctx.fillRect(box.x - box.w * 0.35, y, box.w * 1.7, step);
+    ctx.restore();
+
+    ctx.restore();
+  }
+}
+
+/**
+ * A pair of shades that arrives out of nowhere, settles on the sleeper for a while, and leaves.
+ * Nobody puts them there. They are also the one object in the frame that never quite commits to
+ * existing: they stutter, they arrive far too big and shrink onto the face, and they are lit like
+ * a sign rather than like glass.
  */
 function drawSunglasses(ctx, t, lift) {
   const p = wrap01(t / GLASSES_CYCLE);
@@ -896,57 +1001,143 @@ function drawSunglasses(ctx, t, lift) {
   else if (p < 0.81) travel = smoothstep(0.62, 0.81, p);
   else return; // away entirely
 
-  const alpha = 1 - smoothstep(0.55, 1, travel) * 0.9;
+  // Present, gone, back again — several times a second, on its own clock rather than the tape's,
+  // so the shades disagree with the picture they are sitting in.
+  const flick = stutter(t, 6.4, 0.31, 17.7) * stutter(t, 2.3, 0.14, 91.3);
+  if (flick <= 0) return;
+
+  const alpha = (1 - smoothstep(0.55, 1, travel) * 0.9) * flick;
   if (alpha <= 0.02) return;
+
+  // Far too big on arrival, shrinking onto the face — and once worn, never quite settling: a slow
+  // breath in scale plus a hashed jump whenever the stutter re-seats them.
+  // Worn, they swing between about two thirds and one and a half — big, then small, then big
+  // again, on two clocks so it never settles. Arriving, they are three and a half times that.
+  const jump = 1 + (hash(Math.floor(t * 6.4) * 53.1) - 0.5) * 0.4;
+  const size = 1.05 * (1 + travel * 2.6) * (1 + Math.sin(t * 0.44) * 0.24) * jump;
 
   ctx.save();
   ctx.globalAlpha = clamp(alpha, 0, 1);
   // They come and go from up and to the right, tumbling gently on the way.
-  ctx.translate(travel * 250, -96 + lift - travel * 210);
-  ctx.rotate(travel * 0.85 + Math.sin(t * 0.7) * 0.04 * (1 - travel));
+  ctx.translate(-190 + travel * 250, -96 + lift - travel * 210);
+  ctx.rotate(travel * 0.85 + Math.sin(t * 0.7) * 0.06 * (1 - travel));
+  ctx.scale(size, size);
+  ctx.translate(190, 0);
+
+  // Three passes, offset sideways and tinted — the frame can't decide where they are. The middle
+  // pass is the object; the outer two are its chroma running ahead of and behind it.
+  const split = 4 + (hash(Math.floor(t * 6.4) * 11.7) * 14) * (1 - travel * 0.5);
+  ctx.globalCompositeOperation = 'lighter';
+  glassesGhost(ctx, -split, MAGENTA, 0.55, t);
+  glassesGhost(ctx, split, CYAN, 0.55, t);
+  ctx.globalCompositeOperation = 'source-over';
+  glassesBody(ctx, t);
+  ctx.restore();
+}
+
+/** One chroma copy of the shades, flat and coloured, offset from the body. */
+function glassesGhost(ctx, dx, tint, alpha, t) {
+  ctx.save();
+  ctx.translate(dx, 0);
+  ctx.globalAlpha *= alpha;
+  ctx.fillStyle = rgba(tint, 0.5);
+  ctx.strokeStyle = rgba(tint, 0.9);
+  ctx.lineWidth = 3;
+  glassesPath(ctx, t);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** The shades themselves: black glass behind a hot neon rim, with a bar of light across it. */
+function glassesBody(ctx, t) {
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
 
   // Temple arm, receding toward the ear.
-  ctx.strokeStyle = '#0b0320';
-  ctx.lineCap = 'round';
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#150540';
+  ctx.lineWidth = 4.5;
   ctx.beginPath();
-  ctx.moveTo(-243, -6);
-  ctx.lineTo(-210, -2);
+  ctx.moveTo(-243, -7);
+  ctx.lineTo(-212, -3);
   ctx.stroke();
 
-  // The lens. Near-black, with a hard neon sheen across it.
-  ctx.save();
-  ctx.rotate(-0.08);
-  roundedRect(ctx, -212, -16, 44, 24, 8);
-  const glass = ctx.createLinearGradient(-212, -16, -168, 8);
-  glass.addColorStop(0, '#1a0736');
-  glass.addColorStop(0.55, '#08021a');
-  glass.addColorStop(1, '#160a30');
+  glassesPath(ctx, t);
+  const glass = ctx.createLinearGradient(-214, -20, -152, 10);
+  glass.addColorStop(0, '#2a0348');
+  glass.addColorStop(0.5, '#07001a');
+  glass.addColorStop(1, '#1d0740');
   ctx.fillStyle = glass;
   ctx.fill();
 
+  // The rim is the whole look: a hot outline that survives every distortion downstream. Three
+  // weights of it — a wide soft magenta bloom, the rim proper, and a thin white-hot core.
   ctx.save();
-  ctx.clip();
   ctx.globalCompositeOperation = 'lighter';
-  const sheen = ctx.createLinearGradient(-212, 8, -176, -16);
+  ctx.strokeStyle = 'rgba(255, 60, 190, 0.28)';
+  ctx.lineWidth = 13;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255, 90, 210, 0.95)';
+  ctx.lineWidth = 5;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(190, 250, 255, 0.9)';
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  // A hard bar of light raking across the glass, sliding as they turn.
+  ctx.save();
+  glassesPath(ctx, t);
+  ctx.clip();
+  const slide = Math.sin(t * 0.9) * 13;
+  const sheen = ctx.createLinearGradient(-218 + slide, 12, -172 + slide, -22);
   sheen.addColorStop(0, 'rgba(255, 74, 200, 0)');
-  sheen.addColorStop(0.42, 'rgba(255, 74, 200, 0.5)');
-  sheen.addColorStop(0.55, 'rgba(120, 240, 255, 0.65)');
-  sheen.addColorStop(0.72, 'rgba(80, 240, 255, 0)');
+  sheen.addColorStop(0.38, 'rgba(255, 74, 200, 0.85)');
+  sheen.addColorStop(0.52, 'rgba(190, 255, 255, 1)');
+  sheen.addColorStop(0.68, 'rgba(80, 240, 255, 0.7)');
+  sheen.addColorStop(1, 'rgba(80, 240, 255, 0)');
   ctx.fillStyle = sheen;
-  ctx.fillRect(-214, -18, 50, 30);
+  ctx.fillRect(-228, -26, 90, 40);
   ctx.restore();
 
-  // Brow bar along the top of the lens.
-  ctx.strokeStyle = 'rgba(180, 200, 255, 0.4)';
-  ctx.lineWidth = 2.4;
+  // Brow bar along the top, brighter than anything on the face.
+  ctx.strokeStyle = 'rgba(215, 245, 255, 0.9)';
+  ctx.lineWidth = 2.6;
   ctx.beginPath();
-  ctx.moveTo(-208, -15);
-  ctx.lineTo(-171, -13);
+  ctx.moveTo(-211, -18);
+  ctx.lineTo(-156, -14);
   ctx.stroke();
   ctx.restore();
 
   ctx.restore();
+}
+
+/**
+ * Both lenses and the bridge as one path. Seen from the side the far lens is mostly hidden behind
+ * the near one — but a single lens reads as a monocle, and the sliver is what says "a pair".
+ */
+function glassesPath(ctx, t) {
+  const wobble = Math.sin(t * 1.3) * 0.9;
+  ctx.beginPath();
+  // Deliberately too big for the face. The bed is about a quarter of the frame and the head a
+  // fraction of that, so a pair sized to the head is twenty screen pixels of nothing — these are
+  // wider than the skull on purpose, which is also the only way shades this neon read as a look
+  // rather than as a glint.
+  roundedRectPath(ctx, -222, -24 + wobble, 58, 34, 11);
+  roundedRectPath(ctx, -158, -21 - wobble, 20, 31, 8);
+  ctx.moveTo(-164, -14);
+  ctx.lineTo(-154, -13);
+}
+
+/**
+ * A square pulse: 1 for most of a cycle, 0 for a slice of it, with the slice landing in a
+ * different place each time. Two of these multiplied give a stutter that never finds a rhythm.
+ */
+function stutter(t, rate, gap, seed) {
+  const cycle = Math.floor(t * rate);
+  const within = t * rate - cycle;
+  const at = hash(cycle * 7.31 + seed) * (1 - gap);
+  return within > at && within < at + gap ? 0 : 1;
 }
 
 function drawHeadboard(ctx) {
