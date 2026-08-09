@@ -110,6 +110,36 @@ test('the floating chevrons hold still for reduced motion', () => {
   assert.match(reduced, /opacity:\s*[\d.]+/, 'reduced motion must give the chevrons a fixed opacity');
 });
 
+test('the arrows wear whichever scene is mounted', async () => {
+  const html = read('index.html');
+  const css = read('styles.css');
+  const app = read('app.js');
+  const { scenes } = await import('../site/scenes/index.js');
+
+  // Every chrome a scene asks for must have a glyph in the markup and a rule that shows it —
+  // a scene naming one that does not exist would silently render no arrow at all.
+  const declared = new Set(scenes.map((scene) => scene.meta.chrome).filter(Boolean));
+  assert.ok(declared.size > 1, 'at least two scenes must differ, or this is one style with extra steps');
+
+  for (const chrome of declared) {
+    for (const id of ['nav-up', 'nav-down']) {
+      const button = html.slice(html.indexOf(`id="${id}"`));
+      const body = button.slice(0, button.indexOf('</button>'));
+      assert.match(body, new RegExp(`nav__glyph--${chrome}\\b`), `${id} has no ${chrome} glyph`);
+    }
+    assert.match(
+      css,
+      new RegExp(`\\[data-chrome='${chrome}'\\][^{]*\\.nav__glyph--${chrome}\\s*\\{[^}]*display:\\s*block`),
+      `no rule reveals the ${chrome} glyph`,
+    );
+  }
+
+  // Glyphs are hidden by default, so a missing or unknown chrome must still leave one showing.
+  assert.match(css, /\.nav__glyph\s*\{[^}]*display:\s*none/, 'glyphs must start hidden');
+  assert.match(css, /\.nav:not\(\[data-chrome\]\)\s+\.nav__glyph--neon/, 'no fallback glyph for a scene with no chrome');
+  assert.match(app, /dataset\.chrome\s*=\s*scene\.meta\.chrome\s*\|\|\s*'neon'/, 'app.js must apply the scene chrome with a fallback');
+});
+
 test('the chevrons are invisible until they peek, once every ten seconds', () => {
   const css = read('styles.css');
 

@@ -46,6 +46,10 @@ function show(index, { direction, updateHash = true } = {}) {
 
   navUp.hidden = current === 0;
   navDown.hidden = current === scenes.length - 1;
+  // The chrome wears the scene. An arrow drawn in one animation's language sitting on top of
+  // another reads as a control bolted to the picture rather than as part of it — which is the one
+  // thing this page is trying not to be. Scenes that say nothing get the original chevron.
+  for (const nav of [navUp, navDown]) nav.dataset.chrome = scene.meta.chrome || 'neon';
 
   stage.mount(scene, { direction });
 }

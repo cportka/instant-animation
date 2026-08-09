@@ -56,13 +56,25 @@ body {
   display: none;
 }
 
-.nav svg {
+.nav__glyph {
+  grid-area: 1 / 1;
   width: 2.75rem;
   height: 1.5rem;
   overflow: visible;
+  /* Only the glyph the mounted scene asked for is drawn; the rest sit in the same grid cell. */
+  display: none;
 }
 
-.nav path {
+/* ---- the chrome each scene wears -------------------------------------- */
+
+/* `neon` — soft stroked chevron with a magenta/cyan bloom. Belongs to the VHS scene, and is the
+   fallback for any scene that does not say otherwise. */
+.nav[data-chrome='neon'] .nav__glyph--neon,
+.nav:not([data-chrome]) .nav__glyph--neon {
+  display: block;
+}
+
+.nav__glyph--neon path {
   fill: none;
   stroke: currentColor;
   stroke-width: 2.5;
@@ -70,6 +82,25 @@ body {
   stroke-linejoin: round;
   /* Two shadows in the scene's own magenta and cyan, so the arrow belongs to the picture. */
   filter: drop-shadow(0 0 6px rgba(255, 74, 200, 0.55)) drop-shadow(0 0 14px rgba(80, 240, 255, 0.35));
+}
+
+/* `pixel` — a stepped triangle in sodium amber with a hard offset shadow. A blurred glow here
+   would give the whole thing away: the scene it belongs to has no soft edge anywhere in it, and
+   one is enough to make the rest look accidental. */
+.nav[data-chrome='pixel'] .nav__glyph--pixel {
+  display: block;
+}
+
+.nav[data-chrome='pixel'] {
+  color: #ffc65e;
+}
+
+.nav__glyph--pixel rect {
+  fill: currentColor;
+}
+
+.nav__glyph--pixel {
+  filter: drop-shadow(3px 3px 0 rgba(138, 82, 35, 0.95));
 }
 
 /* Two animations on each: the float they always had, and the ten-second peek. Both chevrons share
@@ -120,6 +151,39 @@ body {
   }
   50% {
     transform: translateY(-0.4rem);
+  }
+}
+
+/* The pixel chrome hops instead of gliding: two states, four pixels apart, no interpolation. A
+   sprite that slides smoothly through fractions of a pixel is the one tell that would undo the
+   whole style — only the animation-name list is overridden, so the peek cycle carries on. */
+.nav[data-chrome='pixel'].nav--down {
+  animation-name: float-down-pixel, peek;
+}
+
+.nav[data-chrome='pixel'].nav--up {
+  animation-name: float-up-pixel, peek;
+}
+
+@keyframes float-down-pixel {
+  0%,
+  49% {
+    transform: translateY(0);
+  }
+  50%,
+  100% {
+    transform: translateY(4px);
+  }
+}
+
+@keyframes float-up-pixel {
+  0%,
+  49% {
+    transform: translateY(0);
+  }
+  50%,
+  100% {
+    transform: translateY(-4px);
   }
 }
 

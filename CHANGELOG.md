@@ -3,9 +3,10 @@
 All notable changes to this project are documented here. The format follows Keep a Changelog
 (https://keepachangelog.com) and the project uses Semantic Versioning (https://semver.org).
 
-**Until a release is actually cut, changes fold into the current unreleased version** rather than
-minting a new number each round — a version that was never tagged isn't a version. Once a release
-has been published, the next change opens a new section. See `.claude/CLAUDE.md`.
+**Changes fold into the current version** rather than minting a new number each round, so each
+section describes what the project *is* rather than logging every state it passed through. A new
+section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
+use git tags or GitHub Releases; the version in `package.json` is the record.
 
 ## [1.0.0] - 2026-08-09
 
@@ -236,6 +237,14 @@ or keyboard focus — cancels the cycle and brings it back immediately, because 
 answers on its own schedule is a puzzle rather than an interface. Under `prefers-reduced-motion`
 they simply stay visible and still.
 
+**The arrows wear whichever scene is mounted** (`meta.chrome`). Each button carries every glyph the
+gallery knows how to draw and shows the one the scene asks for: *Asleep Among the Stars* gets the
+soft stroked chevron with its magenta and cyan bloom; *Westbound on Grizzly Peak* gets a stepped
+sprite in sodium amber with a hard offset shadow, which **hops** four pixels rather than gliding.
+No blurred glow and no sub-pixel motion, because the scene it belongs to has no soft edge anywhere
+in it and one would be enough to make the rest look accidental. A scene that names no chrome gets
+the original chevron.
+
 The gallery runs **newest → oldest**: down goes further back in time, up returns toward the present,
 by chevron, scroll, space, arrow keys, or a vertical swipe. `#scene-id` deep links work.
 
@@ -273,8 +282,8 @@ The full-screen effects are the whole frame's cost. Three findings worth keeping
 
 ### Versioning
 
-- A **MAJOR** bump means *an animation is finished and the next one begins*. `1.0.0` will be cut
-  when *Asleep Among the Stars* is done and a second animation starts.
-- Changes fold into the current unreleased version until a release is actually published.
+- A **MAJOR** bump means *an animation is finished and the next one begins* — that and nothing
+  else. `.claude/CLAUDE.md` keeps the ledger of which version finished which animation.
+- Everything else folds into the current version rather than minting a number per round.
 
 Both recorded in `.claude/CLAUDE.md`.

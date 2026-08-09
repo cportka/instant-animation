@@ -15,16 +15,36 @@
   <body>
     <canvas id="stage" role="img" aria-label="Animation"></canvas>
 
-    <!-- The only things on screen besides the animation, and only when there is somewhere to go. -->
+    <!--
+      The only things on screen besides the animation, and only when there is somewhere to go.
+
+      Each button carries every glyph the gallery knows how to draw, and `data-chrome` — set from
+      the mounted scene's `meta.chrome` — decides which one is shown. Markup rather than innerHTML
+      so the shapes stay declarative and the site tests can read them straight off the file.
+    -->
     <button class="nav nav--up" id="nav-up" type="button" aria-label="Previous animation" hidden>
-      <svg viewBox="0 0 44 24" aria-hidden="true" focusable="false">
+      <svg class="nav__glyph nav__glyph--neon" viewBox="0 0 44 24" aria-hidden="true" focusable="false">
         <path d="M4 18 L22 6 L40 18" />
+      </svg>
+      <svg class="nav__glyph nav__glyph--pixel" viewBox="0 0 44 24" aria-hidden="true" focusable="false" shape-rendering="crispEdges">
+        <rect x="20" y="2" width="4" height="4" />
+        <rect x="16" y="6" width="12" height="4" />
+        <rect x="12" y="10" width="20" height="4" />
+        <rect x="8" y="14" width="28" height="4" />
+        <rect x="4" y="18" width="36" height="4" />
       </svg>
     </button>
 
     <button class="nav nav--down" id="nav-down" type="button" aria-label="Next animation" hidden>
-      <svg viewBox="0 0 44 24" aria-hidden="true" focusable="false">
+      <svg class="nav__glyph nav__glyph--neon" viewBox="0 0 44 24" aria-hidden="true" focusable="false">
         <path d="M4 6 L22 18 L40 6" />
+      </svg>
+      <svg class="nav__glyph nav__glyph--pixel" viewBox="0 0 44 24" aria-hidden="true" focusable="false" shape-rendering="crispEdges">
+        <rect x="4" y="2" width="36" height="4" />
+        <rect x="8" y="6" width="28" height="4" />
+        <rect x="12" y="10" width="20" height="4" />
+        <rect x="16" y="14" width="12" height="4" />
+        <rect x="20" y="18" width="4" height="4" />
       </svg>
     </button>
 

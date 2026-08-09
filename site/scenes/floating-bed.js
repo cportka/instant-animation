@@ -61,6 +61,8 @@ export const meta = {
   background: '#02010a',
   // Where the still frame is taken when the visitor prefers reduced motion.
   posterTime: 34,
+  // The nav arrows wear the scene: the soft neon chevron this animation was designed around.
+  chrome: 'neon',
   // Render at CSS resolution, not retina. The tape artefacts are full-screen fill-rate work, and
   // four times the pixels buys nothing a scene this deliberately lo-fi wants — on a high-DPI
   // display the softness the upscale adds is the right look anyway.
