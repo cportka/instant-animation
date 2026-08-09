@@ -37,10 +37,31 @@ and the light comes out as scattered specks with gaps between them.
   what makes the lamps bunch toward the vanishing point and the centre line accelerate as it comes
   at you; with a linear map, things spaced evenly along the road are spaced evenly on screen too,
   which is not perspective at all.
+- **The road climbs out over the bay.** Its vanishing point is at the waterline rather than on the
+  ground, and it bends left on the way — quadratically in distance, so it is straight under the car
+  and leans harder the further off it goes. A constant offset would just move the vanishing point,
+  which is a different road, not a curved one. It is the one thing in the scene not trying to be
+  plausible.
+- **A cliff, not a verge.** The drop to the right of the road is drawn as a real face: a band of
+  near-black hanging off the edge and deepening as it comes toward you, ragged where the rock
+  breaks up, with a second dimmer line partway down so the eye has something to measure the depth
+  against. Along the very edge is a **cool** pale lip, catching sky rather than lamplight — in
+  copper it disappeared into the pools the lamps were throwing over it. A guard rail runs the
+  length, posts spaced in world distance with a cable sagging between them, which does more for the
+  drop than the shading does: a rail is a thing people put where you would otherwise fall.
 - **Bronze lamps** on the hill side of the road, sodium heads on copper poles with the arm reaching
   back out over the tarmac. Wide flat pools of light, because a street lamp lights a long ellipse
   down the road rather than a circle under itself — and those pools are the only reason the road is
   legible.
+- **Lamps do not simply stop being drawn.** As one reaches the near end its light collapses, the
+  metal comes apart from the top down, and the current it was carrying leaves in every direction as
+  a burst of jagged bolts — warm at the outside, arc-white at the core, detaching from the fitting
+  and flying outward as they go. There is no distance at which an object the size of a street lamp
+  can vanish between two frames and be taken for anything but a bug.
+- **The stars sparkle** in four soft tints, each on its own slow swell — a field that pulses
+  together is a strobe. At the top of a swell the brightest of them throw a four-point cross, which
+  at this resolution is the same star with four chunks added, so it reads as light rather than as a
+  bigger dot. Batched one path per tint: four fills a frame instead of two hundred and sixty.
 - **The bay**, with the sun half into it and its glitter path broken into chunks that widen and
   quicken as they come toward you. A city across the water as blocks with a few lit windows.
 - **Trees** on the slope, eucalyptus and pine, canopies built row by row — drawn as whole

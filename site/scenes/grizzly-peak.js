@@ -45,20 +45,34 @@ const LAMP_DEEP = '#a85a20';
 const COPPER = '#8a5223';
 const COPPER_LIT = '#c98a3f';
 
+// Stars are not white. Four soft tints, none of them saturated — the sweetness is in how narrow
+// the range is, and one properly bright star among a field of dim ones.
+const STAR_TINTS = ['#cdd8ff', '#ffeedd', '#ffd7e6', '#d4fbff'];
+// The arc a lamp goes out over, as a fraction of its approach. It has to finish before the lamp
+// reaches the corner, or the burst is cut off by the edge of frame instead of by the fade.
+const LAMP_EXIT = { from: 0.68, to: 0.96 };
+
 /* ------------------------------------------------------------- horizons ---- */
 
 // The frame is cut into bands once, in normalised height, and everything hangs off these.
 const HORIZON = 0.44; // where the water meets the far shore
 const WATER_END = 0.57; // the near edge of the bay, at the foot of the drop-off
 const RIDGE_END = 0.71; // the bottom of the treed slope, where the roadside starts
-const VP = { x: 0.3, y: 0.7 }; // the road's vanishing point, up and to the left
+// The road's vanishing point sits *at the waterline*, not on the ground — so the road climbs out
+// of the bottom-right corner and runs out over the bay, floating in front of the sunset. It is
+// the one thing in the scene that is not trying to be plausible.
+const VP = { x: 0.28, y: 0.4 };
+// How far the road bends left on its way out. Quadratic in distance, so it is straight under the
+// car and leans harder the further off it goes — a constant offset would just move the vanishing
+// point, which is a different road, not a curved one.
+const CURVE = 0.2;
 
 // Travel. More sideways than upward — the brief is diagonal, but mostly left.
 const SPEED = 46;
 const DRIFT_X = 1;
 const DRIFT_Y = 0.32;
 
-const LAMP_COUNT = 9;
+const LAMP_COUNT = 12;
 const LAMP_SPACING = 1 / LAMP_COUNT;
 
 /* ------------------------------------------------------------ the scene ---- */
@@ -66,12 +80,17 @@ const LAMP_SPACING = 1 / LAMP_COUNT;
 export function create({ width, height, seed = meta.id }) {
   const rng = createRng(seed);
 
-  const stars = Array.from({ length: 150 }, () => ({
+  const stars = Array.from({ length: 260 }, () => ({
     x: rng.next(),
     y: rng.range(0, HORIZON * 0.92),
     bright: rng.next(),
-    rate: rng.range(0.4, 1.9),
+    // Slow rates, and each star on its own — a field that pulses together is a strobe. These are
+    // meant to be noticed one at a time, out of the corner of the eye.
+    rate: rng.range(0.22, 0.95),
     phase: rng.range(0, TAU),
+    tint: rng.int(0, STAR_TINTS.length - 1),
+    // Only some ever throw a cross. If they all did, the sky would be a christmas tree.
+    sparkles: rng.next() < 0.3,
   }));
 
   // The far shore: Marin to the right of the gate, the city to the left of it. Chunky blocks, no
@@ -276,20 +295,45 @@ function drawSky(ctx, W, H, t, px) {
   ditherGlow(ctx, W * 0.32, H * HORIZON, H * 0.17, FIRE[1], glow * 0.55, px, 0.6);
 }
 
+/**
+ * The sky. Each star runs its own slow swell and, at the top of it, the brightest ones throw a
+ * four-point cross — the whole trick of a sparkle, at this resolution, is that it is the same star
+ * with four chunks added, so it reads as light rather than as a bigger dot.
+ *
+ * Batched by tint: one path per colour rather than one fill per star, which is the difference
+ * between four fills a frame and two hundred and sixty.
+ */
 function drawStars(ctx, W, H, t, stars, travel, px) {
-  ctx.beginPath();
-  ctx.fillStyle = '#cdd8ff';
+  const paths = STAR_TINTS.map(() => []);
+
   for (const star of stars) {
     // The sky is the slowest layer there is — the stars barely acknowledge that the car is moving.
     const x = wrap01(star.x + travel * 0.00002 * DRIFT_X) * W;
     const y = star.y * H + travel * 0.00002 * DRIFT_Y * H;
     // Nothing survives near the fire.
     const drowned = smoothstep(HORIZON * 0.45, HORIZON, y / H);
-    const twinkle = 0.55 + Math.sin(t * star.rate + star.phase) * 0.45;
-    if (star.bright * twinkle * (1 - drowned) < 0.42) continue;
-    chunk(ctx, x, y, px, px, px);
+    if (drowned >= 1) continue;
+
+    const swell = 0.5 + Math.sin(t * star.rate + star.phase) * 0.5;
+    const level = star.bright * (0.35 + swell * 0.85) * (1 - drowned);
+    if (level < 0.34) continue;
+    paths[star.tint].push([x, y, star.sparkles && level > 0.86]);
   }
-  ctx.fill();
+
+  for (let i = 0; i < STAR_TINTS.length; i += 1) {
+    if (!paths[i].length) continue;
+    ctx.fillStyle = STAR_TINTS[i];
+    ctx.beginPath();
+    for (const [x, y, cross] of paths[i]) {
+      chunk(ctx, x, y, px, px, px);
+      if (!cross) continue;
+      chunk(ctx, x - px, y, px, px, px);
+      chunk(ctx, x + px, y, px, px, px);
+      chunk(ctx, x, y - px, px, px, px);
+      chunk(ctx, x, y + px, px, px, px);
+    }
+    ctx.fill();
+  }
 }
 
 /** The sun, half gone into the water: a stepped disc, banded hot to deep. */
@@ -485,7 +529,7 @@ function drawNearTrees(ctx, W, H, t, trees, travel, px) {
 
 const FOCAL = 9;
 const ROAD_END = 1.06; // where the road's edges leave the bottom of frame
-const EDGE_X = { left: -0.42, right: 0.99 };
+const EDGE_X = { left: -0.12, right: 0.8 };
 
 /**
  * Screen position of a point on the road at world distance `z` ahead of the car.
@@ -497,38 +541,84 @@ const EDGE_X = { left: -0.42, right: 0.99 };
  */
 function onRoad(z, W, H, side) {
   const p = FOCAL / (FOCAL + Math.max(0, z));
+  return { x: edgeAt(p, side) * W, y: (VP.y + (ROAD_END - VP.y) * p) * H, scale: p };
+}
+
+/** The bend, in normalised width. Zero under the car, growing with the square of the distance. */
+const bendAt = (p) => -CURVE * (1 - p) * (1 - p);
+
+/** Normalised x of one road edge at projection factor `p`. */
+function edgeAt(p, side) {
   const edgeX = side < 0 ? EDGE_X.left : EDGE_X.right;
-  return {
-    x: (VP.x + (edgeX - VP.x) * p) * W,
-    y: (VP.y + (ROAD_END - VP.y) * p) * H,
-    scale: p,
-  };
+  return VP.x + (edgeX - VP.x) * p + bendAt(p);
 }
 
 /** How far down the road one world distance sits, as a fraction of the way to the bottom edge. */
-const ROAD_RANGE = 190;
+const ROAD_RANGE = 82;
 
 function drawRoad(ctx, W, H, t, travel, px) {
-  const bandTop = H * RIDGE_END;
-
-  // The roadside, then the road, both as flat wedges built out of rows.
-  ctx.fillStyle = LAND[2];
-  ctx.beginPath();
-  ctx.rect(0, bandTop, W, H - bandTop);
-  ctx.fill();
-
-  // The wedge, row by row. Screen y maps straight back to the projection factor — no inversion
-  // needed, because y is a plain interpolation between the vanishing point and the bottom edge.
+  // The road starts at the vanishing point now, which is up at the waterline — so it is drawn
+  // over the bay for most of its length and needs its own ground underneath it.
+  const bandTop = H * VP.y;
   const rows = Math.ceil((H - bandTop) / px) + 2;
-  ctx.fillStyle = '#2a2440';
-  ctx.beginPath();
-  for (let r = 0; r < rows; r += 1) {
+  const rowAt = (r) => {
     const y = bandTop + r * px;
     const p = (y / H - VP.y) / (ROAD_END - VP.y);
-    if (p <= 0) continue;
-    const left = (VP.x + (EDGE_X.left - VP.x) * p) * W;
-    const right = (VP.x + (EDGE_X.right - VP.x) * p) * W;
-    chunk(ctx, left, y, right - left, px, px);
+    return p <= 0 ? null : { y, p, left: edgeAt(p, -1) * W, right: edgeAt(p, 1) * W };
+  };
+
+  // The roadside on the hill side only — beyond the right-hand edge there is nothing to stand on.
+  ctx.fillStyle = LAND[2];
+  ctx.beginPath();
+  ctx.rect(0, H * RIDGE_END, W, H - H * RIDGE_END);
+  ctx.fill();
+
+  // The cliff. Everything to the right of the road falls away, and the drop is drawn as a real
+  // face rather than implied by a change of colour: a band of near-black hanging off the edge,
+  // deepening as it comes toward you, with the far side of it ragged where the rock breaks up.
+  // This is the whole difference between a road with a dark verge and a road on a precipice.
+  ctx.fillStyle = LAND[0];
+  ctx.beginPath();
+  for (let r = 0; r < rows; r += 1) {
+    const row = rowAt(r);
+    if (!row) continue;
+    const depth = row.p * W * 0.17;
+    const ragged = 1 + Math.sin(row.y * 0.09) * 0.12 + Math.sin(row.y * 0.31) * 0.06;
+    chunk(ctx, row.right, row.y, depth * ragged, px, px);
+  }
+  ctx.fill();
+
+  // The wedge itself, row by row. Screen y maps straight back to the projection factor — no
+  // inversion needed, because y interpolates between the vanishing point and the bottom edge.
+  ctx.fillStyle = '#241f38';
+  ctx.beginPath();
+  for (let r = 0; r < rows; r += 1) {
+    const row = rowAt(r);
+    if (row) chunk(ctx, row.left, row.y, row.right - row.left, px, px);
+  }
+  ctx.fill();
+
+  // The lip: the last strip of tarmac before the drop. A hard bright line on the very edge is what
+  // the eye reads as "this stops here" — and it is deliberately *cool*, catching sky rather than
+  // lamplight, because in copper it disappeared into the pools the lamps were throwing over it.
+  ctx.fillStyle = '#cfc2f0';
+  ctx.beginPath();
+  for (let r = 0; r < rows; r += 1) {
+    const row = rowAt(r);
+    if (!row) continue;
+    const lip = Math.max(px, row.p * W * 0.012);
+    chunk(ctx, row.right - lip, row.y, lip, px, px);
+  }
+  ctx.fill();
+
+  // A second, dimmer line a little way down the face, so the drop has a near edge and a far one
+  // and the eye has something to measure the depth against.
+  ctx.fillStyle = '#3a2f5c';
+  ctx.beginPath();
+  for (let r = 0; r < rows; r += 1) {
+    const row = rowAt(r);
+    if (!row) continue;
+    chunk(ctx, row.right + row.p * W * 0.05, row.y, Math.max(px, row.p * W * 0.02), px, px);
   }
   ctx.fill();
 
@@ -554,15 +644,60 @@ function drawRoad(ctx, W, H, t, travel, px) {
   }
   ctx.fill();
 
-  // The white line along the drop-off side, which is the only thing between us and the bay.
+  // The white line on the hill side.
   ctx.fillStyle = '#c9c2d8';
   ctx.beginPath();
   for (let r = 0; r < rows; r += 1) {
-    const y = bandTop + r * px;
-    const p = (y / H - VP.y) / (ROAD_END - VP.y);
-    if (p <= 0) continue;
-    const left = (VP.x + (EDGE_X.left - VP.x) * p) * W;
-    chunk(ctx, left, y, Math.max(px, p * W * 0.03), px, px);
+    const row = rowAt(r);
+    if (row) chunk(ctx, row.left, row.y, Math.max(px, row.p * W * 0.025), px, px);
+  }
+  ctx.fill();
+
+  drawGuardRail(ctx, W, H, travel, px);
+}
+
+/**
+ * The rail along the cliff edge. Posts spaced in world distance so they rush past at the same rate
+ * as everything else on the road, with a slack cable strung between them.
+ *
+ * It does more for the drop than the black face does: a rail is a thing people put where you would
+ * otherwise fall, so the eye reads the danger off the object rather than off the shading.
+ */
+function drawGuardRail(ctx, W, H, travel, px) {
+  const POSTS = 26;
+  const GAP = 7;
+  const posts = [];
+  for (let i = 0; i < POSTS; i += 1) {
+    const z = ((i + wrap01(-travel * 0.02)) % POSTS) * GAP;
+    const at = onRoad(z, W, H, 1);
+    if (at.scale < 0.05 || at.scale > 1.02) continue;
+    posts.push(at);
+  }
+  posts.sort((a, b) => a.scale - b.scale);
+
+  // The cable first, behind the posts, sagging between them.
+  ctx.fillStyle = '#6d5f8a';
+  ctx.beginPath();
+  for (let i = 0; i < posts.length - 1; i += 1) {
+    const a = posts[i];
+    const b = posts[i + 1];
+    const steps = Math.max(2, Math.round(Math.abs(b.x - a.x) / px));
+    for (let s = 0; s <= steps; s += 1) {
+      const u = s / steps;
+      const x = a.x + (b.x - a.x) * u;
+      const scale = a.scale + (b.scale - a.scale) * u;
+      const top = a.y + (b.y - a.y) * u - scale * H * 0.055;
+      chunk(ctx, x, top + Math.sin(u * Math.PI) * scale * H * 0.006, px, Math.max(px, scale * H * 0.008), px);
+    }
+  }
+  ctx.fill();
+
+  ctx.fillStyle = '#4a3f63';
+  ctx.beginPath();
+  for (const at of posts) {
+    const h = at.scale * H * 0.06;
+    if (h < px) continue;
+    chunk(ctx, at.x - Math.max(px, at.scale * W * 0.004), at.y - h, Math.max(px, at.scale * W * 0.007), h, px);
   }
   ctx.fill();
 }
@@ -586,11 +721,15 @@ function drawLamps(ctx, W, H, t, lamps, travel, px) {
       const z = wrap01(lamp.offset - travel * 0.0016) * ROAD_RANGE;
       return { lamp, at: onRoad(z, W, H, 1) };
     })
-    .filter((p) => p.at.scale > 0.035 && p.at.scale < 0.98)
+    .filter((p) => p.at.scale > 0.035 && p.at.scale < 1.02)
     .sort((a, b) => a.at.scale - b.at.scale);
 
   for (const { lamp, at } of placed) {
     const s = at.scale;
+    // How far through going out this one is. It used to simply stop being drawn at the near end,
+    // which reads as a bug however fast it happens — there is no distance at which an object the
+    // size of a street lamp can vanish between two frames and be taken for anything else.
+    const exit = smoothstep(LAMP_EXIT.from, LAMP_EXIT.to, s);
     const height = H * 0.34 * s;
     const poleW = Math.max(px, H * 0.008 * s);
     // The arm reaches out over the road — which from this side means back toward the left.
@@ -600,7 +739,10 @@ function drawLamps(ctx, W, H, t, lamps, travel, px) {
 
     // Sodium lamps hum and dip; the flicker is slow and shallow or it reads as a fault.
     const flick = lamp.flicker * (0.9 + Math.sin(t * 2.7 + lamp.phase) * 0.06 + Math.sin(t * 11 + lamp.phase * 3) * 0.03);
-    const fade = clamp(smoothstep(0.02, 0.12, s), 0, 1);
+    // Fading in at the vanishing point, and dying hard at the near end — the light collapses
+    // faster than the metal does, so the pole is briefly a dark shape in its own dying halo.
+    const fade = clamp(smoothstep(0.02, 0.12, s), 0, 1) * (1 - exit) ** 2;
+    const solid = 1 - smoothstep(0.25, 0.75, exit);
 
     // The pool it throws on the road, drawn before the pole so the pole stands in its own light.
     // Wide and flat: a street lamp lights a long ellipse down the road, not a circle under itself,
@@ -609,10 +751,14 @@ function drawLamps(ctx, W, H, t, lamps, travel, px) {
     ditherGlow(ctx, headX, at.y, height * 0.66, LAMP_MID, 0.85 * flick * fade, px, 0.28, 1.2);
     ditherGlow(ctx, headX, at.y, height * 0.34, LAMP_HOT, 0.8 * flick * fade, px, 0.26, 1.3);
 
-    // Pole and arm. Lit down the side facing the head.
+    // Pole and arm. Lit down the side facing the head. As the lamp goes out the metal comes apart
+    // from the top down, so what is left standing is the base — the part furthest from the fault.
+    ctx.save();
+    ctx.globalAlpha = clamp(solid, 0, 1);
     ctx.fillStyle = COPPER;
     ctx.beginPath();
-    chunk(ctx, at.x - poleW / 2, headY, poleW, height, px);
+    const standing = height * solid;
+    chunk(ctx, at.x - poleW / 2, at.y - standing, poleW, standing, px);
     for (let a = 0; a <= armLen; a += px) {
       const u = a / Math.max(px, armLen);
       chunk(ctx, at.x - a, headY - Math.sin(u * Math.PI * 0.5) * armLen * 0.34, poleW, poleW, px);
@@ -622,20 +768,83 @@ function drawLamps(ctx, W, H, t, lamps, travel, px) {
     // One lit edge down the side facing the lamp, which is what makes a flat bar read as copper.
     ctx.fillStyle = COPPER_LIT;
     ctx.beginPath();
-    chunk(ctx, at.x - poleW / 2, headY, px, height, px);
+    chunk(ctx, at.x - poleW / 2, at.y - standing, px, standing, px);
     ctx.fill();
 
     // The head: a squat shade with the lamp burning under it.
     const headW = Math.max(px * 2, H * 0.026 * s);
     const headH = Math.max(px, H * 0.009 * s);
     const lampY = headY - armLen * 0.34 + headH;
+    block(ctx, headX - headW / 2, headY - armLen * 0.34, headW, headH, COPPER, px);
+    block(ctx, headX - headW * 0.32, headY - armLen * 0.34 + headH, headW * 0.64, headH, LAMP_CORE, px);
+    ctx.restore();
+
     ditherGlow(ctx, headX, lampY, height * 0.34, LAMP_DEEP, 0.8 * flick * fade, px, 1, 1.5);
     ditherGlow(ctx, headX, lampY, height * 0.17, LAMP_MID, 0.9 * flick * fade, px, 1, 1.5);
     ditherGlow(ctx, headX, lampY, height * 0.075, LAMP_HOT, 1 * flick * fade, px, 1, 1.2);
-    block(ctx, headX - headW / 2, headY - armLen * 0.34, headW, headH, COPPER, px);
-    block(ctx, headX - headW * 0.32, headY - armLen * 0.34 + headH, headW * 0.64, headH, LAMP_CORE, px);
+
+    // And the way out: the lamp fails, and the current it was carrying leaves in every direction.
+    if (exit > 0) drawBolts(ctx, headX, lampY, height * 0.7, exit, lamp.phase * 97, px);
   }
 }
+
+/**
+ * A lamp letting go of its electricity. Jagged bolts strike outward in every direction, and as the
+ * burst develops the inner end of each one lifts off the lamp and chases the outer end away — so
+ * the bolts detach and fly rather than staying pinned to a fitting that is no longer there.
+ *
+ * The jag is the whole read. A straight ray is a sparkle; the direction has to keep changing its
+ * mind along the length or the eye files it as light rather than as current.
+ */
+function drawBolts(ctx, cx, cy, reach, progress, seed, px) {
+  const BOLTS = 10;
+  const STEPS = 6;
+  const alpha = Math.sin(Math.min(1, progress) * Math.PI) ** 0.5;
+  if (alpha < 0.02) return;
+
+  // The span each bolt currently occupies, sliding outward and thinning as it goes.
+  const inner = progress * progress * reach;
+  const outer = Math.min(reach, inner + reach * 0.45 * (1 - progress * 0.5));
+
+  ctx.save();
+  ctx.globalAlpha = clamp(alpha, 0, 1);
+  // Warm at the outside, tying it back to the lamp, then straight to arc-white through cyan. The
+  // widths are what keep it electric: three strokes, each barely wider than the last, so it reads
+  // as one bright line with a fringe. Fatter and it is a firework; there is not much room between.
+  for (const [colour, spread, width] of [[LAMP_MID, 1, 1.5], ['#8fdcff', 0.6, 0.9], ['#ffffff', 0.3, 0.5]]) {
+    ctx.fillStyle = colour;
+    ctx.beginPath();
+    for (let b = 0; b < BOLTS; b += 1) {
+      let angle = (b / BOLTS) * TAU + hash01(seed + b * 3.7) * 0.5;
+      let r = inner;
+      let x = cx + Math.cos(angle) * r;
+      let y = cy + Math.sin(angle) * r;
+      for (let s = 0; s < STEPS; s += 1) {
+        // Each segment kinks off the last, harder near the tip where the charge is thinnest.
+        angle += (hash01(seed + b * 11.3 + s * 5.9) - 0.5) * 2.1 * spread * (0.4 + s / STEPS);
+        const step = (outer - inner) / STEPS;
+        const nx = x + Math.cos(angle) * step;
+        const ny = y + Math.sin(angle) * step;
+        const along = Math.max(2, Math.round(step / px));
+        for (let i = 0; i <= along; i += 1) {
+          const u = i / along;
+          chunk(ctx, x + (nx - x) * u, y + (ny - y) * u, px * width * 0.6, px * width * 0.6, px);
+        }
+        x = nx;
+        y = ny;
+        r += step;
+      }
+    }
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** The same deterministic value noise the tape uses, kept local so the scene owns no imports. */
+const hash01 = (n) => {
+  const v = Math.sin(n * 12.9898) * 43758.5453;
+  return v - Math.floor(v);
+};
 
 /* -------------------------------------------------------------- figments ---- */
 
