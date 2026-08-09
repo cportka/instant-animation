@@ -7,11 +7,52 @@ All notable changes to this project are documented here. The format follows Keep
 minting a new number each round — a version that was never tagged isn't a version. Once a release
 has been published, the next change opens a new section. See `.claude/CLAUDE.md`.
 
-## [0.3.0] - Unreleased
+## [1.0.0] - 2026-08-09
 
-Nothing has been released yet, so this is the whole project to date in one section. Intermediate
-states that were later replaced — the cosy first composition, the cold monochrome pass, the
-fading caption chrome, the distant planet — are not listed: they left nothing behind.
+**The first animation is finished, and a second one begins.** In this repo that is exactly what a
+MAJOR bump means — see `.claude/CLAUDE.md`. Everything below is the whole project to date in one
+section, since nothing had been released before now. Intermediate states that were later replaced —
+the cosy first composition, the cold monochrome pass, the fading caption chrome, the distant planet
+— are not listed: they left nothing behind.
+
+### The second animation — "Westbound on Grizzly Peak"
+
+From *"2.5D 16-bit from the perspective of a car travelling diagonally up and to the left, a series
+of copper bronze street lamps, a cliff drop-off overlooking the bay from Grizzly Peak west to the
+water, trees, and a fiery sunset in a night sky — with a car spinning as a figment across it on
+occasion"*.
+
+Nothing in it is anti-aliased on purpose. Every coordinate snaps to a chunk a few screen pixels
+across, there are about twenty colours in the whole scene, and **every gradient is flat bands with
+ordered Bayer dither between them** — a `createLinearGradient` would be one call and would look
+completely wrong, because smooth colour is the thing the hardware being imitated could not do and
+its absence is most of why the style reads. Halos are dithered the same way, scanned as a box
+rather than as rings: rings sound cheaper and are wrong, since successive rings don't tile the grid
+and the light comes out as scattered specks with gaps between them.
+
+- **Yellow, red, blue.** One fire ramp runs hot to deep and doubles as the water's reflection; one
+  night ramp runs the other way. The sky's join is the whole palette in one place — deep blue
+  straight into red, with only the dither mixing them.
+- **A real perspective divide** on the road: `focal / (focal + z)`, not a lerp. That one division is
+  what makes the lamps bunch toward the vanishing point and the centre line accelerate as it comes
+  at you; with a linear map, things spaced evenly along the road are spaced evenly on screen too,
+  which is not perspective at all.
+- **Bronze lamps** on the hill side of the road, sodium heads on copper poles with the arm reaching
+  back out over the tarmac. Wide flat pools of light, because a street lamp lights a long ellipse
+  down the road rather than a circle under itself — and those pools are the only reason the road is
+  legible.
+- **The bay**, with the sun half into it and its glitter path broken into chunks that widen and
+  quicken as they come toward you. A city across the water as blocks with a few lit windows.
+- **Trees** on the slope, eucalyptus and pine, canopies built row by row — drawn as whole
+  rectangles they are boxes on sticks, and at this distance the silhouette is the entire tree. They
+  go down *before* the tarmac: a canopy anywhere near the middle of frame is wide enough to erase
+  the road, the lamps and the light on both.
+- **A car spins across the night sky** every twenty-three seconds, end over end, half transparent
+  and never explained — the one thing in frame that does not obey the road.
+
+### The first animation is done
+
+*Asleep Among the Stars* is finished as of this release. What follows is its whole record.
 
 ### Added
 
