@@ -196,6 +196,12 @@ export function create({ width, height, seed = meta.id, tape = null }) {
   // Kept off the sleeper: the bed drifts around (0.34, 0.37), and a splotch centred there would
   // erase the only thing in the frame worth looking at. Drips still run across it.
   const splotches = makeSplotches(rng, 30, { avoid: { x: 0.34, y: 0.37, r: 0.1 } });
+  // Split across two depths in the chain rather than laid down as one sheet — every third mark
+  // rides on top of the damage, the rest go under the bloom with the scene. Taking every third
+  // keeps the jittered grid intact in both sets; taking a contiguous slice would put all of one
+  // depth down one side of the frame.
+  const paintUnder = splotches.filter((_, i) => i % 3 !== 0);
+  const paintOver = splotches.filter((_, i) => i % 3 === 0);
 
   let W = width;
   let H = height;
@@ -263,6 +269,12 @@ export function create({ width, height, seed = meta.id, tape = null }) {
 
       drawVignette(ctx, W, H);
 
+      // Most of the paint goes down *here*, under the bloom — so the same soft double that lands
+      // on every other edge in the frame lands on the paint too, and it belongs to the picture
+      // rather than sitting in front of it. The tape then shreds and smears it along with
+      // everything else. The rest goes on last, over the damage; see below.
+      drawSplotches(ctx, W, H, t, paintUnder);
+
       // Soft the whole picture out before the tape gets to it. The offset drifts, so the bloom
       // slides over everything instead of sitting on it.
       tape?.capture(ctx);
@@ -273,10 +285,6 @@ export function create({ width, height, seed = meta.id, tape = null }) {
         dx: Math.sin(t * 0.13) * 5,
         dy: Math.cos(t * 0.11) * 4,
       }, tape);
-
-      // Paint over the top of all of it, before the tape — so the runs get shredded and smeared
-      // along with everything else instead of sitting on the picture like a decal.
-      drawSplotches(ctx, W, H, t, splotches);
 
       // The picture as it stands before the tape gets to it. Kept aside as its own layer so the
       // artefacts below can bleed it back through: this is the thing that shows in the cracks.
@@ -342,6 +350,12 @@ export function create({ width, height, seed = meta.id, tape = null }) {
         tape?.capture(ctx);
         shatter(ctx, W, H, break_, tape, CLEAN);
       }
+
+      // The rest of the paint, on the glass rather than in the picture: after every artefact, so
+      // it is the one thing the tape cannot tear. Two depths is what stops the paint reading as a
+      // single flat decal — some of it is behind the damage taking the same beating as the scene,
+      // some of it is in front of it and untouched, and both are travelling.
+      drawSplotches(ctx, W, H, t, paintOver, 0.82);
 
       scanlines(ctx, W, H, t, { spacing: 4, alpha: 0.16, rollSpeed: 5 });
       grain(ctx, W, H, t, { count: 34 + Math.round(Math.min(chaos, 6) * 90), alpha: 0.14, rate: 10 });

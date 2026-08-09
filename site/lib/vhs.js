@@ -462,10 +462,23 @@ export function shatter(ctx, W, H, event, tape = null, bleed = 'clean') {
     ctx.drawImage(source, 0, 0, Math.round(W * scale.sx), Math.round(H * scale.sy), 0, 0, W, H);
     ctx.restore();
 
-    // The lit edge of a piece of broken glass, brightest while it is still nearly in place.
+    // The lit edge of a piece of broken glass: a wide magenta bloom, a cyan body, and a hard
+    // white core that stays one pixel wide however far the bloom spreads. The core is what makes
+    // it read as *sharp* — a crack drawn only as a glow is a smudge, and the eye reads the
+    // thinnest bright line in a stack as the edge, with everything softer around it as light.
+    const lit = crack * (1 - fall);
     ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = `rgba(190, 245, 255, ${0.5 * crack * (1 - fall)})`;
-    ctx.lineWidth = 1 + part * 1.6;
+    ctx.strokeStyle = `rgba(255, 60, 190, ${0.2 * lit})`;
+    ctx.lineWidth = 10 + part * 7;
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(120, 90, 255, ${0.35 * lit})`;
+    ctx.lineWidth = 4.5 + part * 2.5;
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(90, 235, 255, ${0.65 * lit})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(245, 253, 255, ${0.95 * lit})`;
+    ctx.lineWidth = 1;
     ctx.stroke();
     ctx.restore();
   }

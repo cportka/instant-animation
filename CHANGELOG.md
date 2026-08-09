@@ -70,7 +70,11 @@ picture is torn.
 **The frame breaks** (`shatter`). Cracks run out from an impact point at unevenly spaced angles,
 the pieces separate, spin and fall out of shot — inner shards flung hard, outer ones heavier and
 dropping further. Rare and on its own slotted schedule, so it stays an event you wait for rather
-than a rhythm you learn.
+than a rhythm you learn. The crack edges are drawn as four strokes stacked — a wide magenta bloom,
+a violet body, a cyan edge and a **white core that stays one pixel wide** however far the bloom
+spreads. The core is what makes it read as sharp: a crack drawn only as a glow is a smudge, and the
+eye takes the thinnest bright line in a stack as the edge with everything softer around it as
+light.
 
 **Three ways the picture bleeds through itself.** A glitch that removes picture is just a hole; a
 glitch that removes one layer to show another is the frame arguing with itself. The tape holds more
@@ -99,9 +103,18 @@ so a long one wanders instead of hanging plumb.
 The wet look comes entirely from the specular edge, since the paint itself is near-black, and a
 catchlight has to sit *inside* its bead: a glow wider than the drop reads as a luminous bubble
 hanging in space. Marks are placed on a jittered grid, because purely random ones clump into a
-single mass while half the frame stays bare. Everything creeps on periods of two to five *minutes*
-— you never see a drip move, only notice later that it has. Centres are kept off the sleeper; the
-runs still cross them.
+single mass while half the frame stays bare. Parked centres are kept off the sleeper.
+
+**The paint is part of the scene, not a sheet over it.** Two things do that. It sits at *two
+depths in the chain*: most marks go down before the bloom, so the same soft double that lands on
+every other edge in the frame lands on them too and the tape then shreds and smears them with
+everything else — the rest go on after every artefact, on the glass, as the one thing the tape
+cannot tear. And every mark is **travelling**: it parks and creeps for most of a two-to-eight
+minute cycle, then lets go, accelerates out of the bottom of frame, and comes back in over the top
+in a different lane. At any moment about four of the thirty are crossing an edge and one is fully
+out of shot, so marks drip in and out rather than the field scrolling together — a field where
+everything moves at once is a texture going past; a field where one thing lets go at a time is
+paint.
 
 **The first animation — "Asleep Among the Stars"**, from *"a bed floating in space with someone
 snuggled under the covers peacefully sleeping while the bed gently floats amongst the stars"*:

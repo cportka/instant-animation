@@ -56,6 +56,18 @@ export function makeSplotches(rng, count = 28, { avoid } = {}) {
       x,
       y,
       stroke: rng.next() < 0.4,
+      // Each mark's own slow journey down the glass. It parks for most of a cycle, creeping, then
+      // lets go and runs out of the bottom of frame — and comes back in over the top somewhere
+      // else. Periods of two to eight minutes, so at any moment most marks are parked and one or
+      // two are travelling. A field where everything moves together is a texture scrolling past;
+      // a field where one thing lets go at a time is paint.
+      journey: {
+        period: rng.range(120, 480),
+        phase: rng.next(),
+        hold: rng.range(0.62, 0.86),
+        creep: rng.range(0.01, 0.05),
+        wander: rng.range(-0.06, 0.06),
+      },
       // Small. A mark wide enough to be a shape in its own right competes with the picture; these
       // are meant to be flecks you keep finding, and what they cost the picture is what they hide.
       radius: rng.range(0.009, 0.03),
@@ -161,6 +173,46 @@ function fallingSpine(x, y, length, lean) {
 }
 
 /**
+ * Where a mark is right now. Parked and creeping for most of its cycle, then it lets go and
+ * accelerates out of the bottom of frame; the next cycle brings it back in over the top at a
+ * different place across.
+ *
+ * Returned in normalised coordinates, running from above the frame to below it, so a mark part-way
+ * through a run is genuinely half off the edge rather than squeezed against it.
+ */
+function placeAt(splotch, t) {
+  const { journey } = splotch;
+  const cycles = t / journey.period + journey.phase;
+  const p = cycles - Math.floor(cycles);
+  // A new lane across each time it comes back, so a mark never re-enters down its own old track.
+  const lane = hash01(Math.floor(cycles) * 7.31 + splotch.x * 91.7);
+
+  let travel;
+  if (p < journey.hold) {
+    // Parked: a slow creep down, the whole width of a mark over minutes.
+    travel = (p / journey.hold) * journey.creep;
+  } else {
+    // Let go. Squared, so it starts as a slide and ends as a fall.
+    const u = (p - journey.hold) / (1 - journey.hold);
+    travel = journey.creep + u * u * 1.45;
+  }
+
+  const y = splotch.y + travel;
+  return {
+    x: splotch.x + journey.wander * (lane - 0.5) * 2,
+    // Wrapped through a band that starts above the frame and ends below it: a mark leaving the
+    // bottom is the same mark arriving at the top, one cycle later.
+    y: ((y + 0.22) % 1.44 + 1.44) % 1.44 - 0.22,
+  };
+}
+
+/** The same deterministic value noise the tape uses, kept local so paint owns no imports of it. */
+const hash01 = (n) => {
+  const x = Math.sin(n * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+/**
  * @param {number} intensity 0 hides the paint entirely, 1 is full coverage.
  */
 export function drawSplotches(ctx, W, H, t, splotches, intensity = 1) {
@@ -168,8 +220,9 @@ export function drawSplotches(ctx, W, H, t, splotches, intensity = 1) {
   const reach = Math.min(W, H);
 
   for (const splotch of splotches) {
-    const cx = splotch.x * W;
-    const cy = splotch.y * H;
+    const at = placeAt(splotch, t);
+    const cx = at.x * W;
+    const cy = at.y * H;
     const radius = splotch.radius * reach;
     const swell = 1 + Math.sin((t / splotch.creep) * TAU + splotch.phase) * 0.04;
 
