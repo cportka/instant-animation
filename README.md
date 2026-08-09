@@ -80,9 +80,10 @@ SemVer, with two repo-specific rules:
 - A **MAJOR** bump marks an animation being *finished* and the next one starting — that, and
   nothing else. `1.0.0` finished *Asleep Among the Stars* and started *Westbound on Grizzly Peak*;
   `2.0.0` will finish that one and start a third. If a bump can't name both, it isn't a MAJOR.
-- **Changes fold into the current unreleased version** rather than minting a new number each
-  round. Nothing has been released yet, so `CHANGELOG.md` has one section describing what the
-  project *is* — not a log of every intermediate state it passed through.
+- **Changes fold into the current version** rather than minting a new number each round, so
+  `CHANGELOG.md` describes what the project *is* rather than logging every intermediate state it
+  passed through. A new section opens when an animation is finished, not on any other signal —
+  this project doesn't use git tags or GitHub Releases, and nothing waits on them.
 
 See `.claude/CLAUDE.md`.
 

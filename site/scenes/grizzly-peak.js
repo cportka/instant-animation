@@ -23,6 +23,8 @@ export const meta = {
   created: '2026-08-09',
   background: '#050b2e',
   posterTime: 12,
+  // The nav arrows wear the scene: a stepped sprite in sodium amber, hard shadow, no glow.
+  chrome: 'pixel',
   // Pixel art wants one device pixel per drawn pixel. At 2x the chunks are drawn twice as fine and
   // the whole point of the grid — that you can see it — goes away.
   maxDpr: 1,

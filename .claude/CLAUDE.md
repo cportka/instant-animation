@@ -146,12 +146,16 @@ SessionStart hook only *reports* that the stock hook is present.
 
 The block above is the generic Portka standard. Three things are concrete **in this repository**:
 
-- **Don't mint a version that hasn't been released.** The managed block says every change bumps the
-  version; here, changes **fold into the current unreleased version** instead. A number that was
-  never tagged isn't a release, and stacking up `0.2.0`, `0.3.0`, … while none of them exist just
-  makes `CHANGELOG.md` a work log. So: rewrite the current section, adding what's new and
-  **removing what has been superseded**, until the owner actually cuts the release. Only once a
-  version is tagged and published does the next change open a new section and bump the number.
+- **Changes fold into the current version.** The managed block says every change bumps the version;
+  here, a round of work on the animation in progress **rewrites the current section** instead —
+  adding what's new and **removing what has been superseded**. Stacking a new MINOR for every round
+  just turns `CHANGELOG.md` into a work log.
+
+  **Tagging is not part of this repo's workflow, and nothing waits on it.** The owner does not cut
+  git tags or GitHub Releases, so don't ask about them, don't offer, and never make a version bump
+  conditional on one having happened. The version in `package.json` is the record; a tag would only
+  be a copy of it. What opens a new section is an animation being **finished** — the MAJOR rule
+  below — not a tag.
 
 - **MAJOR means "an animation is finished."** Versioning still follows SemVer mechanically, but
   the MAJOR bump has one meaning here and only one: **it marks the animation being worked on as
