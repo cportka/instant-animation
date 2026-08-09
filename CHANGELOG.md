@@ -40,26 +40,53 @@ pieces; the rest is what you are there to look at.
 Two of them are about *digital* failure rather than tape wear. **The stuck macroblock**
 (`blockRepeat`) samples one small rectangle and stamps it again and again across a strip, so a
 stretch of picture becomes a print of itself — each cell holds its source for a beat before picking
-another, which is what makes it read as stuck rather than as noise. And the **honeycomb is not a
-lattice**: a mathematically perfect comb is the one thing in frame that looks authored, so every
-row gets its own shear, squash, line weight and colour, cells wobble and resize against their
-neighbours, some drop out and a few flood solid — all on a slow seed, so it holds a shape for a
-beat instead of boiling.
+another, which is what makes it read as stuck rather than as noise. And the **block field is
+neither a lattice nor one shape** (`cellDither`): a regular comb of identical hexagons is the one
+thing in frame that looks authored, so every row takes its own shear, squash, pitch, line weight
+and colour, and every cell picks its own number of sides — triangles through octagons — its own
+rotation, its own size, and a per-vertex wobble that stops even a single cell from being a regular
+polygon. Cells drop out, a few flood solid, and all of it runs on a slow seed so the field holds a
+shape for a beat instead of boiling.
 
-Three levels of damage: ambient all the time, the heads giving out completely every ten seconds,
-and — every seventy-one seconds — a **surge to ten times that**, which ramps up, leaves nothing of
-the picture at all, and comes all the way back to baseline. The surge multiplies *passes* rather
-than displacement: past about half the frame width a shifted slice simply lands off screen, so more
-distance stops buying anything, while running the same zones again at offset times keeps
-multiplying how much of the picture is torn.
+**Damage arrives on a schedule, not a beat** (`damageAt`). Ambient damage runs the whole time; on
+top of it, time is cut into slots and each slot *may or may not* contain an event, at a hashed
+offset inside it with a hashed length and amplitude. Empty slots run together into real silences —
+sixteen seconds of them, measured — while two events either side of a slot boundary land almost on
+top of each other. Amplitude is biased hard toward small, so most events are a flicker and, roughly
+once a minute, one is an order of magnitude worse with no warning. A fixed period was the one thing
+that gave the effect away: once you have heard the beat you stop being surprised by it, and the
+tape stops feeling broken and starts feeling scored. Evaluated in constant time — only neighbouring
+slots can still be sounding — and overlapping events add, so a cluster hits harder than its parts.
 
-Each cycle **dwells at its own maximum** rather than touching it in passing (`heldPulse`). A plain
-sine bump is at full value for a single frame, so the worst moment of a fault is over before the
-eye has settled on it — you register that something happened, not what. The envelope now splices a
-plateau into the peak, with the rise and the fall keeping the shape they had: both cycles spend
-about **five times as long** at full value as the bare bump did, the small one included. The
-artefacts underneath go on churning while the envelope holds, so a held peak stays broken without
-freezing.
+Every peak still **dwells at its maximum** rather than touching it in passing (`heldPulse`): a
+plain sine bump is at full value for a single frame, so the worst moment of a fault is over before
+the eye has settled on it. The envelope splices a plateau into the peak, rise and fall keeping the
+shape they had. The artefacts underneath go on churning while it holds, so a held peak stays broken
+without freezing. The biggest events also multiply *passes* rather than displacement: past about
+half the frame width a shifted slice simply lands off screen, so more distance stops buying
+anything, while running the same zones again at offset times keeps multiplying how much of the
+picture is torn.
+
+**The frame breaks** (`shatter`). Cracks run out from an impact point at unevenly spaced angles,
+the pieces separate, spin and fall out of shot — inner shards flung hard, outer ones heavier and
+dropping further. Rare and on its own slotted schedule, so it stays an event you wait for rather
+than a rhythm you learn.
+
+**Three ways the picture bleeds through itself.** A glitch that removes picture is just a hole; a
+glitch that removes one layer to show another is the frame arguing with itself. The tape holds more
+than one layer now — snapshots taken at different points in the chain, made on demand so a scene
+that never asks for a second one never pays for it — and three artefacts read a *different* layer
+than the one they draw over:
+
+- the **shatter** paints the undamaged layer first and lays the shards back over it, so the reveal
+  opens exactly as fast as the pieces travel, and at the end of a break you briefly see the scene
+  with none of the damage on it at all;
+- **bleed windows** punch a hard-edged rectangle of the clean picture straight back through the
+  wreckage — the tracking momentarily locking, sampled slightly off from where it lands so the
+  clean image sits offset from the damaged one around it. Short duty cycles: hold it and it stops
+  being a fault and becomes a picture-in-picture;
+- some **stuck blocks** print from the clean layer instead of the damaged one, so a strip of
+  undistorted picture repeats across a frame that is otherwise in pieces.
 
 **Wet black paint** (`site/lib/paint.js`) thrown over everything: small goopy flecks that read as
 holes punched in the image, and brush strokes that drawl downward from a loaded head. Both are

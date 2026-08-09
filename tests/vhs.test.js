@@ -4,7 +4,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { heldPulse, hash, hexDither, blockRepeat, makeRepeatCells } from '../site/lib/vhs.js';
+import {
+  heldPulse,
+  hash,
+  cellDither,
+  blockRepeat,
+  makeRepeatCells,
+  damageAt,
+  shatterAt,
+} from '../site/lib/vhs.js';
 import { roundedRect, roundedRectPath } from '../site/lib/draw.js';
 import { createRng } from '../site/lib/rng.js';
 import { createRecordingContext } from './helpers/recording-context.mjs';
@@ -78,10 +86,64 @@ test('roundedRectPath appends to the open path instead of starting a new one', (
   assert.equal(standalone.ops.filter((op) => op.startsWith('beginPath')).length, 1);
 });
 
-test('the honeycomb is never a clean lattice', () => {
+test('damage arrives in bursts and silences, not on a beat', () => {
+  const step = 0.05;
+  const span = 600;
+  const level = [];
+  for (let t = 0; t < span; t += step) level.push(damageAt(t, 5.4));
+
+  const quiet = level.filter((d) => d < 0.15).length / level.length;
+  assert.ok(quiet > 0.2 && quiet < 0.75, `${(quiet * 100).toFixed(0)}% quiet — want real silences and real noise`);
+
+  // Silences long enough to notice, and hits an order of magnitude above the common case.
+  let run = 0;
+  let longest = 0;
+  for (const d of level) {
+    run = d < 0.15 ? run + step : 0;
+    longest = Math.max(longest, run);
+  }
+  assert.ok(longest > 6, `longest silence was only ${longest.toFixed(1)}s`);
+
+  const peaks = level.filter((d) => d > 8).length;
+  assert.ok(peaks > 0, 'nothing ever hit hard');
+  assert.ok(peaks / level.length < 0.1, 'the big hits are supposed to be rare');
+
+  // The thing this replaced: a metronome. If any period divides the schedule, it is back.
+  for (const period of [3.6, 7.2, 9.5, 12, 18, 71]) {
+    const shifted = level.map((_, i) => damageAt(i * step + period, 5.4));
+    const drift = level.reduce((sum, d, i) => sum + Math.abs(d - shifted[i]), 0) / level.length;
+    assert.ok(drift > 0.1, `damage repeats itself every ${period}s — that is a beat, not a schedule`);
+  }
+});
+
+test('shatterAt is rare, bounded and deterministic', () => {
+  let active = 0;
+  let events = 0;
+  let previous = null;
+
+  for (let t = 0; t < 600; t += 0.05) {
+    const event = shatterAt(t, 5.4);
+    if (!event) {
+      previous = null;
+      continue;
+    }
+    active += 1;
+    assert.ok(event.phase > 0 && event.phase < 1, `phase ${event.phase} out of range`);
+    assert.ok(event.x > 0 && event.x < 1 && event.y > 0 && event.y < 1, 'impact point off frame');
+    assert.deepEqual(shatterAt(t, 5.4), event, 'shatterAt must be a pure function of time');
+    if (previous !== event.seed) events += 1;
+    previous = event.seed;
+  }
+
+  assert.ok(events > 4, `only ${events} breaks in ten minutes`);
+  const duty = active * 0.05 / 600;
+  assert.ok(duty < 0.35, `the frame is broken ${(duty * 100).toFixed(0)}% of the time`);
+});
+
+test('the block field is never a clean lattice, and never one shape', () => {
   const render = (t, chaos) => {
     const rec = createRecordingContext({ width: 800, height: 600 });
-    hexDither(rec.ctx, 800, 100, 300, 24, 0.3, t, chaos);
+    cellDither(rec.ctx, 800, 100, 300, 24, 0.3, t, chaos);
     return rec;
   };
 
@@ -93,9 +155,23 @@ test('the honeycomb is never a clean lattice', () => {
   // And it must keep changing over time rather than sitting still.
   assert.notEqual(render(4, 1).ops.join('|'), render(9, 1).ops.join('|'));
 
-  // Same inputs, same comb — it still has to survive the determinism check.
+  // Same inputs, same field — it still has to survive the determinism check.
   assert.deepEqual(render(4, 1).ops, render(4, 1).ops);
   assert.deepEqual(render(4, 1).problems, []);
+
+  // Cells are polygons of mixed side counts, not a honeycomb. Each is moveTo + n-1 lineTo +
+  // closePath, so counting the lineTo runs between closePaths recovers the shapes drawn.
+  const sides = new Set();
+  let run = 0;
+  for (const op of render(4, 1.6).ops) {
+    if (op.startsWith('moveTo')) run = 1;
+    else if (op.startsWith('lineTo')) run += 1;
+    else if (op.startsWith('closePath') && run) {
+      sides.add(run);
+      run = 0;
+    }
+  }
+  assert.ok(sides.size >= 3, `only ${[...sides].join('/')}-sided cells — that is a pattern`);
 });
 
 test('blockRepeat stamps one source rect many times over', () => {
