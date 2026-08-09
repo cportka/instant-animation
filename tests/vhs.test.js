@@ -12,6 +12,7 @@ import {
   makeRepeatCells,
   damageAt,
   shatterAt,
+  ditherAt,
 } from '../site/lib/vhs.js';
 import { roundedRect, roundedRectPath } from '../site/lib/draw.js';
 import { createRng } from '../site/lib/rng.js';
@@ -114,6 +115,31 @@ test('damage arrives in bursts and silences, not on a beat', () => {
     const drift = level.reduce((sum, d, i) => sum + Math.abs(d - shifted[i]), 0) / level.length;
     assert.ok(drift > 0.1, `damage repeats itself every ${period}s — that is a beat, not a schedule`);
   }
+});
+
+test('the block field is up about one second in twenty', () => {
+  // The whole point of the field is scarcity. Up continuously it stops being an artefact and
+  // becomes the thing the frame is made of, so the duty cycle is a requirement, not a side effect.
+  const step = 0.02;
+  const span = 4000;
+  let on = 0;
+  let events = 0;
+  let previous = 0;
+
+  for (let t = 0; t < span; t += step) {
+    const level = ditherAt(t, 5.4);
+    assert.ok(level >= 0 && level <= 1, `level ${level} out of range`);
+    if (level > 0) on += step;
+    if (level > 0 && previous === 0) events += 1;
+    previous = level;
+  }
+
+  const duty = on / span;
+  assert.ok(duty > 0.03 && duty < 0.07, `field is up ${(duty * 100).toFixed(1)}% of the time, want ~5%`);
+  // Short appearances rather than one long one: a five-percent duty spent in a single stretch
+  // would be a minute of wallpaper followed by twenty of nothing.
+  assert.ok(on / events < 3, `each appearance averages ${(on / events).toFixed(1)}s — too long to be a fault`);
+  assert.equal(ditherAt(123.4, 5.4), ditherAt(123.4, 5.4), 'ditherAt must be pure');
 });
 
 test('shatterAt is rare, bounded and deterministic', () => {

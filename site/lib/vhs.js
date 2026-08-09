@@ -6,7 +6,7 @@
 //   1. per-scanline horizontal displacement — many thin lines, each offset differently
 //   2. extreme chroma — colour pushed to saturated neon while luma structure survives
 //   3. horizontal smear — long trails dragged out of high-contrast edges
-//   4. hexagonal honeycomb dither in the flat fields
+//   4. block-decode dither filling the flat fields — briefly, and rarely
 //   5. dropout bars — thick dark full-width bands with noise, offset sideways
 //   6. fine scanlines, plus hairline full-width tears
 //
@@ -162,6 +162,35 @@ export function damageAt(t, seed = 0) {
     total += heldPulse(t - start, rise, hold, 0.7) * (0.6 + bias ** 6 * 15);
   }
   return total;
+}
+
+// Slot length and hit rate for the block field. Tuned against the measured duty cycle below, not
+// guessed: see the test that pins it near five percent.
+const DITHER_SLOT = 9;
+const DITHER_MISS = 0.7;
+
+/**
+ * When the block field is up. Same slotted idea again, but the point here is *scarcity*.
+ *
+ * A field of shapes over the picture the whole time stops being an artefact and becomes wallpaper —
+ * worse, it becomes the thing the frame is made of, and everything else has to compete with it. Up
+ * about one twentieth of the time, it is a fault: the decoder losing its mind for a second and
+ * getting it back. Everything else in the chain runs continuously; this one is the exception.
+ *
+ * @returns {number} 0 when there is no field, rising to 1 across a short appearance.
+ */
+export function ditherAt(t, seed = 0) {
+  const slot = Math.floor(t / DITHER_SLOT);
+
+  for (let s = slot - 1; s <= slot; s += 1) {
+    if (hash(s * 19.13 + seed) < DITHER_MISS) continue;
+    const start = s * DITHER_SLOT + hash(s * 6.71 + seed) * DITHER_SLOT * 0.7;
+    const rise = 0.35 + hash(s * 12.9 + seed) * 0.9;
+    const hold = rise * hash(s * 4.37 + seed) * 1.6;
+    const level = heldPulse(t - start, rise, hold, 0.8);
+    if (level > 0) return level;
+  }
+  return 0;
 }
 
 /**
