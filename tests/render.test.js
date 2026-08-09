@@ -163,3 +163,47 @@ test('floating-bed keeps more than one tape layer, or its bleeds are dead', () =
     `only captured "${[...layers].join(', ')}" — there is nothing left for a bleed to reveal`,
   );
 });
+
+// The five ways a lamp can stop existing, exercised directly. Driving them through the scene means
+// waiting for a particular lamp to reach a particular point of its approach, which tests the clock
+// rather than the effect — and would let four of the five rot unnoticed.
+test('every lamp exit draws something, cheaply, and the same way twice', async () => {
+  const { EXIT_KINDS, drawLampExit } = await import('../site/scenes/grizzly-peak.js');
+  assert.equal(EXIT_KINDS.length, 5, 'all five exits must be reachable');
+
+  const run = (kind, u) => {
+    const rec = createRecordingContext({ width: 1440, height: 900 });
+    drawLampExit(rec.ctx, kind, 900, 500, 240, u, 137, 5);
+    return rec;
+  };
+
+  for (const kind of EXIT_KINDS) {
+    // Something is drawn across the whole arc, not just at one instant.
+    const painted = [0.05, 0.2, 0.4, 0.6, 0.8].map((u) => run(kind, u).ops.filter((op) => op.startsWith('rect(')).length);
+    assert.ok(painted.every((n) => n > 0), `${kind} drew nothing at some point in its arc: ${painted}`);
+
+    // Budgeted — and the budget is about *restraint*, not cost. The scene draws thousands of
+    // chunks a frame for the sky alone, so a few hundred more would not be felt; but a lamp
+    // reaching the near end is the most ordinary thing that happens here, and an exit big enough
+    // to need hundreds of chunks is an exit that has taken over the frame. The first version of
+    // the bolts peaked at 336 and did exactly that.
+    const worst = Math.max(...painted);
+    assert.ok(worst <= 90, `${kind} peaked at ${worst} chunks, budget is 90`);
+
+    // Two fills or three, never a fill per particle.
+    const fills = run(kind, 0.3).ops.filter((op) => op.startsWith('fill(')).length;
+    assert.ok(fills <= 4, `${kind} used ${fills} fills — batch by colour`);
+
+    // Deterministic, clean, and balanced, like everything else in the gallery.
+    assert.deepEqual(run(kind, 0.3).ops, run(kind, 0.3).ops, `${kind} is not deterministic`);
+    run(kind, 0.3).assertClean(`lamp exit ${kind}`);
+    assert.equal(run(kind, 0.3).depth, 0, `${kind}: unbalanced save/restore`);
+
+    // And it is over: nothing at all once the arc completes.
+    assert.equal(run(kind, 1).ops.filter((op) => op.startsWith('rect(')).length, 0, `${kind} still drawing at u=1`);
+  }
+
+  // The five have to differ. Same seed, same moment, same everything but the kind.
+  const shapes = new Set(EXIT_KINDS.map((kind) => run(kind, 0.3).ops.join('|')));
+  assert.equal(shapes.size, 5, 'two exits draw identically — they are meant to be five different things');
+});
