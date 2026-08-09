@@ -227,9 +227,17 @@ snuggled under the covers peacefully sleeping while the bed gently floats amongs
 **The front-end** (`site/index.html`, `app.js`, `styles.css`): **no text at all.** The animation is
 the page; the title and description survive only as the canvas label and a screen-reader live
 region. Navigation is two soft chevrons floating at the top and bottom edges, each present only
-when there is somewhere to go — so a single-animation gallery is nothing but the animation. The
-gallery runs **newest → oldest**: down goes further back in time, up returns toward the present, by
-chevron, scroll, space, arrow keys, or a vertical swipe. `#scene-id` deep links work.
+when there is somewhere to go — so a single-animation gallery is nothing but the animation.
+
+And they are **invisible almost all of the time**: every ten seconds they fade up, hold for a
+second, and fade away again. A control parked permanently on top of the picture is chrome however
+soft it is, and the page's one rule is that the animation *is* the page. Reaching for one — hover
+or keyboard focus — cancels the cycle and brings it back immediately, because a control that only
+answers on its own schedule is a puzzle rather than an interface. Under `prefers-reduced-motion`
+they simply stay visible and still.
+
+The gallery runs **newest → oldest**: down goes further back in time, up returns toward the present,
+by chevron, scroll, space, arrow keys, or a vertical swipe. `#scene-id` deep links work.
 
 **Headless render tests.** A recording 2D context (`tests/helpers/recording-context.mjs`) draws
 every scene at three viewports and eight timestamps, failing on NaN geometry, colours built from

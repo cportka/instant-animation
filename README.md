@@ -77,8 +77,9 @@ each scene reads best, the chevrons stop bobbing, and the channel change is skip
 
 SemVer, with two repo-specific rules:
 
-- A **MAJOR** bump marks an animation being *finished* and the next one starting. `1.0.0` is cut
-  when *Asleep Among the Stars* is done.
+- A **MAJOR** bump marks an animation being *finished* and the next one starting — that, and
+  nothing else. `1.0.0` finished *Asleep Among the Stars* and started *Westbound on Grizzly Peak*;
+  `2.0.0` will finish that one and start a third. If a bump can't name both, it isn't a MAJOR.
 - **Changes fold into the current unreleased version** rather than minting a new number each
   round. Nothing has been released yet, so `CHANGELOG.md` has one section describing what the
   project *is* — not a log of every intermediate state it passed through.

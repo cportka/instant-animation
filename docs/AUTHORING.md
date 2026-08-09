@@ -35,8 +35,10 @@ import * as myScene from './my-scene.js';
 export const scenes = [myScene, floatingBed];
 ```
 
-A new animation is also the moment to cut a **MAJOR** version: in this repo that bump means the
-previous animation is finished. See `.claude/CLAUDE.md`.
+A new animation is also the moment — the *only* moment — to cut a **MAJOR** version. In this repo
+that bump means one thing: the previous animation is finished and this one has begun. Nothing else
+earns it, however large the change. `.claude/CLAUDE.md` keeps the ledger of which version finished
+which animation; add a row when you cut one.
 
 You get the channel change between scenes for free — it lives in the stage and works on rendered
 pixels, so it never needs anything from the scene.
