@@ -1,13 +1,28 @@
 # Authoring an animation
 
-An animation is one file: a self-contained ES module in `site/scenes/` that draws itself into a 2D
-canvas context. No build step, no dependencies, no assets.
+An animation is a self-contained folder: `site/scenes/<id>/`, with `index.js` as its entry point,
+drawing into a 2D canvas context. No build step, no dependencies, no assets.
+
+The folder is the unit, not the file. A scene that grows past a few hundred lines should split —
+*Above the Fog* is `index.js` + `town.js` + `fog.js` — and the folder name **is** the scene id, which
+is what lets the tests scan the directory and fail on anything unregistered.
+
+Code two scenes would share does not live in either of them:
+
+- **`site/lib/`** — the engine. The stage, the seeded RNG, the small canvas helpers. It knows
+  nothing about any particular look.
+- **`site/effects/`** — shared animation code, and nothing but looks: the VHS tape artefacts
+  (`vhs.js`), wet-paint ribbons (`paint.js`), the 16-bit grid and its ordered dither (`pixel.js`),
+  noise and flow fields (`field.js`), soft volumetric lobes (`volume.js`).
+
+**No scene may import another scene**, and a test enforces it. If two scenes want the same thing,
+it belongs in `effects/`.
 
 ## The contract
 
 ```js
 export const meta = {
-  id: 'floating-bed',        // kebab-case; must equal the filename
+  id: 'floating-bed',        // kebab-case; must equal the folder name
   title: 'Asleep Among the Stars',
   prompt: '…the description this animation came from…',
   created: '2026-08-07',     // YYYY-MM-DD
@@ -31,8 +46,8 @@ Then register it in `site/scenes/index.js` — **at the front**, because the gal
 oldest and the front-end depends on that order:
 
 ```js
-import * as myScene from './my-scene.js';
-export const scenes = [myScene, floatingBed];
+import * as myScene from './my-scene/index.js';
+export const scenes = [myScene, aboveTheFog, grizzlyPeak, floatingBed];
 ```
 
 A new animation is also the moment — the *only* moment — to cut a **MAJOR** version. In this repo

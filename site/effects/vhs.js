@@ -20,7 +20,7 @@
 // Bands are processed top to bottom and may overlap slightly. That's not a bug worth fixing — a
 // tracking error smearing into the one below it is exactly the artefact being imitated.
 
-import { TAU, clamp, smoothstep, wrap01 } from './draw.js';
+import { TAU, clamp, smoothstep, wrap01 } from '../lib/draw.js';
 
 // Bounds the worst case: a tall zone on a tall screen must not quietly ask for hundreds of blits.
 const MAX_SHRED_LINES = 26;

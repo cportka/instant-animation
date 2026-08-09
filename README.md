@@ -2,7 +2,7 @@
 
 An instant animation generator. Animate anything you can describe.
 
-**Version:** 1.0.0 · **Live:** https://cportka.github.io/instant-animation/
+**Version:** 2.0.0 · **Live:** https://cportka.github.io/instant-animation/
 
 Describe something. It becomes a hand-drawn canvas animation and joins the gallery. There is no
 text on the site — the animation *is* the page. The only chrome is a soft chevron floating at each
@@ -17,26 +17,42 @@ picture tears itself apart, then settles.
 
 | Animation | From the description |
 | --- | --- |
+| **Above the Fog** | *an overhead view of tons of billowing flowing fog, some of it glitching in and out of existence in a data mosh, over a lazy winding river and a cute riverside town with a cafe, a restaurant and twelve jewellery shops surrounded by green* |
+| **Westbound on Grizzly Peak** | *2.5D 16-bit from the perspective of a car travelling diagonally up and to the left, a series of copper bronze street lamps, a cliff drop-off overlooking the bay, trees, and a fiery sunset in a night sky* |
 | **Asleep Among the Stars** | *a bed floating in space with someone snuggled under the covers peacefully sleeping while the bed gently floats amongst the stars* |
 
 ## How it works
 
-Every animation is one self-contained ES module in `site/scenes/` that draws itself into a 2D
+Every animation is a self-contained folder under `site/scenes/` whose contents draw into a 2D
 canvas context — no build step, no dependencies, no image assets, nothing fetched at runtime. The
 whole site is static files served straight from `site/`.
 
 ```
 site/
-  index.html         the shell: a full-bleed canvas and two chevrons
-  app.js             mounts scenes, handles chevrons/scroll/keys/swipe/#deep-links
-  lib/stage.js       DPR, resizing, the frame loop, hidden-tab pausing, reduced motion,
-                     and the channel change between scenes
-  lib/vhs.js         tracking bands, scanlines, chroma split, tape dropouts
-  lib/rng.js         seeded randomness — scenes never call Math.random()
-  lib/draw.js        shared geometry and colour helpers
-  scenes/index.js    the registry, newest first
-  scenes/*.js        one file per animation
+  index.html          the shell: a full-bleed canvas and two chevrons
+  app.js              mounts scenes, handles chevrons/scroll/keys/swipe/#deep-links
+
+  lib/                the engine — knows nothing about any particular look
+    stage.js          DPR, resizing, the frame loop, hidden-tab pausing, reduced motion,
+                      and the channel change between scenes
+    rng.js            seeded randomness — scenes never call Math.random()
+    draw.js           shared geometry and colour helpers
+
+  effects/            shared animation code — nothing but looks
+    vhs.js            tracking bands, shred, chroma split, stuck macroblocks, tape dropouts
+    paint.js          wet-paint ribbons: flecks, drips, brush strokes
+    pixel.js          the 16-bit grid: chunking, ordered Bayer dither, dithered glow
+    field.js          noise and divergence-free flow, all pure functions of position and time
+    volume.js         the soft volumetric lobe that fog, smoke and haze are built from
+
+  scenes/index.js     the registry, newest first
+  scenes/<id>/        one folder per animation; its name is the scene id, index.js is
+                      the entry point, and no scene may import another
 ```
+
+The split between `lib` and `effects` is the one that matters: `lib` is machinery every scene
+needs and `effects` is technique any scene may borrow. A scene reaching into another scene is a
+test failure — the moment one does, they stop being separable.
 
 The VHS distortion is real displacement, not an overlay: a 2D context can sample its own bitmap
 via `ctx.drawImage(ctx.canvas, …)`, so slices of the frame are genuinely pushed sideways with no
@@ -79,7 +95,8 @@ SemVer, with two repo-specific rules:
 
 - A **MAJOR** bump marks an animation being *finished* and the next one starting — that, and
   nothing else. `1.0.0` finished *Asleep Among the Stars* and started *Westbound on Grizzly Peak*;
-  `2.0.0` will finish that one and start a third. If a bump can't name both, it isn't a MAJOR.
+  `2.0.0` finished that one and started *Above the Fog*. If a bump can't name both, it isn't a
+  MAJOR.
 - **Changes fold into the current version** rather than minting a new number each round, so
   `CHANGELOG.md` describes what the project *is* rather than logging every intermediate state it
   passed through. A new section opens when an animation is finished, not on any other signal —

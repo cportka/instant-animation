@@ -8,6 +8,136 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
+## [2.0.0] - 2026-08-09
+
+**"Westbound on Grizzly Peak" is finished, and a third animation begins.** That is the only thing a
+MAJOR bump means here — see `.claude/CLAUDE.md`.
+
+### The third animation — "Above the Fog"
+
+From *"an overhead view of tons of billowing flowing fog, some of it glitching in and out of
+existence in a data mosh, over a lazy winding river and a cute riverside town with a cafe, a
+restaurant and twelve jewellery shops surrounded by green — de-saturated realism, the fog 95% of the
+scene and running from near-white to near-black"*.
+
+Straight down and orthographic, so there is no perspective anywhere in it and no horizon to hang
+depth on. Every cue that says *thick moving volume of air* rather than *scrolling texture* has to
+come out of the motion: shear between layers, light that moves independently of the shape it is on,
+and masses that grow and die rather than slide.
+
+Three things pull against each other in the brief — near-total coverage, a full near-black to
+near-white range, and clouds that fail like a decoder — and the structure of the scene is the
+arrangement that gets all three:
+
+- **Coverage is geometric, not lucky.** The base of the fog is a *lattice*: a jittered grid of dark
+  lobes, each a little larger than its cell, so every point in frame is inside two or three of them
+  by construction. Fog built by scattering clouds about and hoping cannot promise 95% — there is
+  always a hole somewhere, and a hole that appears because the random numbers came out that way is a
+  hole in the wrong place, which is worse than no hole at all. The lattice scrolls as one body and
+  each cell keeps its identity as it goes, so a cell leaving the right edge is the same cell arriving
+  on the left rather than a new one popping into being. Cell size comes off the frame **diagonal**,
+  not its short side: off `min(W, H)` a wide short window needs three times as many lobes and a
+  phone twice as many again, and this way the count stays near ninety at every shape of viewport.
+- **The peek-a-boos are subtraction, not holes.** Seven windows wander the frame, and a lobe near an
+  open one is drawn *thinner* rather than skipped — so a gap opens because the fog above it thinned,
+  closes when a billow drifts back over, and is ringed by a soft transition the whole time. None of
+  which a punched hole gives you, and a hard `clip()` would leave a crisp outline around every gap.
+  The window never clears completely either: the aerial wash stays, so the town arrives hazy, which
+  is what looking down through a few hundred feet of air actually looks like. All seven share one
+  period with their phases spread evenly around it — give them slightly different periods and they
+  drift into alignment eventually and hand you a frame with the fog half gone. Open area is capped
+  at **5% of the frame** and tested at every sample time.
+- **Range comes from one shared field, not from opacity.** A stack of transparent greys composites
+  toward its own mean, and cranking the alphas only gets you to mid-grey faster. So a single slow,
+  large-scale noise field decides where the fog is thick and where it is thin, and *everything*
+  reads it: the base takes its tone from it, the light only lands where it is already high, and the
+  near-black strands only where there is light to eat into. That is what turns six greys into banks
+  — a near-black mass here, a pale one drifting over there — instead of an even mottle, and it is
+  what gives a *single frame* the whole range rather than making the range something you only see
+  over a minute. Highlights are the same mass drawn again, shrunk and shifted toward one fixed key
+  light so they sit on the shoulder of something, and they are **additive**, which is the only way
+  to actually reach white — a near-white lobe composited normally over grey lands at grey plus a
+  bit, and the top of the ramp is never arrived at.
+- **Filaments are the layer that decides it.** Long, thin, aligned to the flow, bright, and barely
+  there. Without a second spatial frequency an order of magnitude finer than the billows carrying
+  it, the whole thing reads as smoke from a machine rather than as a fog bank. Near-black strands go
+  over the light afterwards, so the crests come apart into fibres instead of staying smooth blobs.
+- **Clouds glitch out of existence and back**, on the tape scene's own damage schedule — built to
+  arrive in bursts and silences rather than on a beat, and tested for exactly that. During a burst
+  individual lobes stutter on a juddering clock while their neighbours hold, whole bands of the
+  lattice shove sideways, and every outline quantises into facets — the same cloud rendered
+  coarsely, which is what a decoder does to a curve when it runs out of bits to describe it with.
+  A glitched cloud mostly **jumps rather than disappearing**, and that is the load-bearing detail:
+  simply dropping a fraction of the lattice opens the fog, and an opening in the fog is a view of
+  the town, so the glitch stops being a fault in the picture and becomes the one moment the picture
+  is on show. Displaced, the coverage survives and the failure is louder.
+  Then the finished frame is torn up as an image — **shredded**, not tiled. The stuck-macroblock
+  artefact the tape scene is built around needs a picture full of high-frequency detail: tiling one
+  block of *that* prints an obvious repeat, while tiling a block of fog prints a flat grey rectangle
+  and reads as a rectangle somebody drew. Shredding keeps the picture and breaks it, which on a soft
+  image is the only one of the two that survives. Exactly **one** stuck cell is kept, and it is the
+  only thing allowed to print from a layer captured *before* the fog went on, so a strip of bare
+  town repeats across a band — a peek-a-boo arriving as a decoding failure rather than as a gap in
+  the weather. One cell is deliberate: a handful of those tiles is a decode failure, a screenful is
+  the picture with the weather switched off.
+- **The town below** (`site/scenes/above-the-fog/town.js`) is built out of **value**, not detail,
+  because it is only ever glimpsed. The water is the darkest thing on the ground, the roads the
+  lightest, the roofs between them, the vegetation dark enough to frame all three — drop a gap
+  anywhere and the shapes read in the second before it closes. The river is generated first and
+  everything else is placed relative to it, which is what stops the result looking like three
+  unrelated layers stacked up: twelve jewellers in a parade along the front with awnings pulled most
+  of the way to grey, a cafe with a forecourt of parasols, a larger restaurant with its own terrace,
+  twenty-six houses on rows behind, and four hundred trees rejection-sampled against the water and
+  the roofs — a canopy sitting on a roof is the one mistake that makes an overhead view stop reading
+  as an overhead view.
+- **No blur.** `ctx.filter = 'blur(24px)'` would give softer lobes and is not worth it: it allocates
+  and composites an offscreen layer per drawing operation, so a couple of hundred of them is tens of
+  milliseconds a frame — and where it is unsupported it fails *silently*, landing every shape
+  hard-edged, so the scene does not look worse, it looks broken. A radial gradient is soft
+  everywhere, always, and costs one fill.
+- **Smaller and more numerous, not fewer and softer.** The first version drew masses a quarter of
+  the frame across, and a frame five masses wide reads as five blobs however gently they fade.
+  Halving every radius and doubling the count costs nothing, because what a gradient fill costs is
+  its *area* and the area is unchanged — and it is the change that made the fog stop looking like
+  overlapping discs. The two related findings: a lobe's flat centre is what gives it away, so the
+  falloff runs `(1 - q²)^2.5` from a very small core (leaves and reaches the rim at zero slope, and
+  stays fat through the middle so neighbours merge in their tails); and deforming a lobe's
+  *outline* barely shows, because the alpha out there is already near zero — the lumpy silhouette
+  has to come from clustering four lobes at four different sizes, not from wobbling one.
+- The nav arrows wear it: a **vapour** chevron, a wide blurred stroke with a thin sharp one inside,
+  drifting sideways as much as up. It carries a dark halo rather than a bright one, because the
+  scene beneath runs all the way to near-white and an arrow with only a glow disappears the moment a
+  lit crest passes under it.
+
+### Changed — every scene is its own self-contained thing
+
+The gallery had grown to the point where "a scene" meant one very long file and the shared code was
+wherever it was first written. Both are now structural:
+
+- **`site/scenes/<id>/`** — one directory per animation, its name *is* its id, `index.js` is its
+  entry point, and it may grow to as many files as it wants (*Above the Fog* is three). The unit on
+  disk being the folder is also what makes the registry checkable: `tests/scenes.test.js` now scans
+  the directory and fails on anything present but unregistered, or registered under a different name
+  than its folder.
+- **`site/effects/`** — shared *animation* code, the things a future scene would otherwise
+  reimplement: the VHS tape artefacts, the wet-paint ribbons, the 16-bit pixel grid and its ordered
+  dither (`pixel.js`, lifted out of *Grizzly Peak*), the noise and flow fields (`field.js`), and the
+  soft volumetric lobe (`volume.js`).
+- **`site/lib/`** — the *engine*: the stage, the seeded RNG, and the small canvas helpers. The
+  distinction that matters is that `lib` knows nothing about any particular look, and `effects` is
+  nothing but looks.
+- **No scene may import another scene**, and there is now a test that says so. The moment one does
+  they stop being separable and the gallery becomes one program with several entry points.
+
+`field.js` carries the constraint that governs all of this in its header: everything in it is a pure
+function of position and time, with no state and no `dt`, because the render tests draw each scene at
+eight timestamps **out of order** and compare two runs op-for-op. Anything integrating velocity into
+a stored position would drift apart between the live loop, the poster frame and a resize.
+
+### The second animation is done
+
+*Westbound on Grizzly Peak* is finished as of this release. Its record is the `1.0.0` section below.
+
 ## [1.0.0] - 2026-08-09
 
 **The first animation is finished, and a second one begins.** In this repo that is exactly what a

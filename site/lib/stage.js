@@ -6,7 +6,7 @@
 // testable in Node against a stub context.
 
 import { smoothstep } from './draw.js';
-import { chromaSplit, createTape, makeTearBands, seam, tearBands } from './vhs.js';
+import { chromaSplit, createTape, makeTearBands, seam, tearBands } from '../effects/vhs.js';
 import { createRng } from './rng.js';
 
 // Past 2x the extra pixels cost far more than they show. A scene can ask for less via

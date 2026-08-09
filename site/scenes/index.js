@@ -6,9 +6,10 @@
 //
 // Adding an animation is two edits: drop a scene module in this folder, then add it here.
 
-import * as grizzlyPeak from './grizzly-peak.js';
-import * as floatingBed from './floating-bed.js';
+import * as aboveTheFog from './above-the-fog/index.js';
+import * as grizzlyPeak from './grizzly-peak/index.js';
+import * as floatingBed from './floating-bed/index.js';
 
-export const scenes = [grizzlyPeak, floatingBed];
+export const scenes = [aboveTheFog, grizzlyPeak, floatingBed];
 
 export const findScene = (id) => scenes.find((scene) => scene.meta.id === id);
