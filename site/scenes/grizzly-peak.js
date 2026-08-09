@@ -52,7 +52,10 @@ const COPPER_LIT = '#c98a3f';
 const STAR_TINTS = ['#cdd8ff', '#ffeedd', '#ffd7e6', '#d4fbff'];
 // The arc a lamp goes out over, as a fraction of its approach. It has to finish before the lamp
 // reaches the corner, or the burst is cut off by the edge of frame instead of by the fade.
-const LAMP_EXIT = { from: 0.68, to: 0.96 };
+const LAMP_EXIT = { from: 0.7, to: 0.97 };
+// Five ways for a lamp to stop existing. Each lamp draws the same one every time it comes round,
+// picked when the scene is built, so the road has a mix rather than a sequence.
+export const EXIT_KINDS = ['glitch', 'confetti', 'mosh', 'ember', 'bolts'];
 
 /* ------------------------------------------------------------- horizons ---- */
 
@@ -130,6 +133,7 @@ export function create({ width, height, seed = meta.id }) {
   const lamps = Array.from({ length: LAMP_COUNT }, (_, i) => ({
     offset: i * LAMP_SPACING,
     flicker: rng.range(0.7, 1),
+    exit: EXIT_KINDS[rng.int(0, EXIT_KINDS.length - 1)],
     phase: rng.range(0, 10),
   }));
 
@@ -785,61 +789,199 @@ function drawLamps(ctx, W, H, t, lamps, travel, px) {
     ditherGlow(ctx, headX, lampY, height * 0.17, LAMP_MID, 0.9 * flick * fade, px, 1, 1.5);
     ditherGlow(ctx, headX, lampY, height * 0.075, LAMP_HOT, 1 * flick * fade, px, 1, 1.2);
 
-    // And the way out: the lamp fails, and the current it was carrying leaves in every direction.
-    if (exit > 0) drawBolts(ctx, headX, lampY, height * 0.7, exit, lamp.phase * 97, px);
+    // And the way out, whichever one this lamp was given.
+    if (exit > 0) drawLampExit(ctx, lamp.exit, headX, lampY, height * 0.42, exit, lamp.phase * 97, px);
   }
 }
 
 /**
- * A lamp letting go of its electricity. Jagged bolts strike outward in every direction, and as the
- * burst develops the inner end of each one lifts off the lamp and chases the outer end away — so
- * the bolts detach and fly rather than staying pinned to a fitting that is no longer there.
+ * A lamp's way out. Five of them, one per lamp, chosen when the scene is built so the road shows a
+ * mix rather than a sequence.
  *
- * The jag is the whole read. A straight ray is a sparkle; the direction has to keep changing its
- * mind along the length or the eye files it as light rather than as current.
+ * All five are deliberately small, brief and dim. A lamp reaching the near end is the most ordinary
+ * thing that happens in this scene — it does it every few seconds — and an effect that grabs the
+ * frame turns a passing detail into the subject. The rule each one is built to: under about sixty
+ * chunks, at most three fills, gone in half a second, and never brighter than the lamp it replaces.
+ *
+ * @param {number} progress 0 at the moment the lamp fails, 1 when there is nothing left.
  */
-function drawBolts(ctx, cx, cy, reach, progress, seed, px) {
-  const BOLTS = 10;
-  const STEPS = 6;
-  const alpha = Math.sin(Math.min(1, progress) * Math.PI) ** 0.5;
+export function drawLampExit(ctx, kind, cx, cy, size, progress, seed, px) {
+  const u = clamp(progress, 0, 1);
+  // Brightest at the failure and fading from there. A burst that ramps up reads as something
+  // arriving; this is something leaving.
+  const alpha = clamp((1 - u) * 1.2, 0, 1) * 0.72;
   if (alpha < 0.02) return;
 
-  // The span each bolt currently occupies, sliding outward and thinning as it goes.
-  const inner = progress * progress * reach;
-  const outer = Math.min(reach, inner + reach * 0.45 * (1 - progress * 0.5));
-
   ctx.save();
-  ctx.globalAlpha = clamp(alpha, 0, 1);
-  // Warm at the outside, tying it back to the lamp, then straight to arc-white through cyan. The
-  // widths are what keep it electric: three strokes, each barely wider than the last, so it reads
-  // as one bright line with a fringe. Fatter and it is a firework; there is not much room between.
-  for (const [colour, spread, width] of [[LAMP_MID, 1, 1.5], ['#8fdcff', 0.6, 0.9], ['#ffffff', 0.3, 0.5]]) {
+  ctx.globalAlpha = alpha;
+  if (kind === 'glitch') exitGlitch(ctx, cx, cy, size, u, seed, px);
+  else if (kind === 'confetti') exitConfetti(ctx, cx, cy, size, u, seed, px);
+  else if (kind === 'mosh') exitMosh(ctx, cx, cy, size, u, seed, px);
+  else if (kind === 'ember') exitEmber(ctx, cx, cy, size, u, seed, px);
+  else exitBolts(ctx, cx, cy, size, u, seed, px);
+  ctx.restore();
+}
+
+/** A stepped clock, so an effect judders between a few states instead of sliding through them. */
+const judder = (u, steps) => Math.floor(u * steps);
+
+/**
+ * **Glitch.** The lamp comes apart into horizontal slices that tear sideways and drop out one at a
+ * time. Slices leave on a hashed roll against the progress, so it thins unevenly rather than
+ * fading — which is the difference between a glitch and a dissolve.
+ */
+function exitGlitch(ctx, cx, cy, size, u, seed, px) {
+  const bars = 7;
+  const w = size * 0.19;
+  const h = size * 0.13;
+  const step = judder(u, 9);
+
+  for (const [colour, side] of [[COPPER, 0], [LAMP_HOT, 1]]) {
     ctx.fillStyle = colour;
     ctx.beginPath();
-    for (let b = 0; b < BOLTS; b += 1) {
-      let angle = (b / BOLTS) * TAU + hash01(seed + b * 3.7) * 0.5;
-      let r = inner;
-      let x = cx + Math.cos(angle) * r;
-      let y = cy + Math.sin(angle) * r;
-      for (let s = 0; s < STEPS; s += 1) {
-        // Each segment kinks off the last, harder near the tip where the charge is thinnest.
-        angle += (hash01(seed + b * 11.3 + s * 5.9) - 0.5) * 2.1 * spread * (0.4 + s / STEPS);
-        const step = (outer - inner) / STEPS;
-        const nx = x + Math.cos(angle) * step;
-        const ny = y + Math.sin(angle) * step;
-        const along = Math.max(2, Math.round(step / px));
-        for (let i = 0; i <= along; i += 1) {
-          const u = i / along;
-          chunk(ctx, x + (nx - x) * u, y + (ny - y) * u, px * width * 0.6, px * width * 0.6, px);
-        }
-        x = nx;
-        y = ny;
-        r += step;
-      }
+    for (let i = 0; i < bars; i += 1) {
+      if (i % 2 !== side) continue;
+      if (hash01(seed + i * 7.1) < u * 0.85) continue; // this slice has already gone
+      const shove = (hash01(seed + i * 3.3 + step * 1.7) - 0.5) * size * 0.55 * (0.3 + u);
+      const wide = w * (0.35 + hash01(seed + i * 5.9 + step) * 0.8);
+      chunk(ctx, cx - wide / 2 + shove, cy - h / 2 + (i * h) / bars, wide, h / bars, px);
     }
     ctx.fill();
   }
-  ctx.restore();
+}
+
+/**
+ * **Confetti.** The lamp bursts into small squares that fly out and fall. Squares, not sparks —
+ * one chunk each, no trails, so the whole thing is sixteen rectangles in three fills.
+ */
+function exitConfetti(ctx, cx, cy, size, u, seed, px) {
+  const N = 16;
+  const palette = [FIRE[1], FIRE[3], LAMP_HOT];
+
+  for (let c = 0; c < palette.length; c += 1) {
+    ctx.fillStyle = palette[c];
+    ctx.beginPath();
+    for (let i = c; i < N; i += palette.length) {
+      const angle = hash01(seed + i * 4.7) * TAU;
+      const speed = size * (0.25 + hash01(seed + i * 9.1) * 0.4);
+      const x = cx + Math.cos(angle) * speed * u;
+      // Thrown up and out, then gravity takes it — squared, so the arc turns over near the top.
+      const y = cy + Math.sin(angle) * speed * u + size * 0.7 * u * u;
+      chunk(ctx, x, y, px, px, px);
+    }
+    ctx.fill();
+  }
+}
+
+/**
+ * **Data mosh.** The lamp smears sideways into a few flat bands that stretch and re-seed, the way
+ * a decoder drags one row of blocks across the picture. Five rectangles — the cheapest of the five
+ * and, at this size, the one that reads most immediately as *wrong* rather than as an effect.
+ */
+function exitMosh(ctx, cx, cy, size, u, seed, px) {
+  const bands = 5;
+  const h = size * 0.15;
+  const step = judder(u, 7);
+
+  for (const [colour, side] of [[LAMP_MID, 0], [COPPER, 1]]) {
+    ctx.fillStyle = colour;
+    ctx.beginPath();
+    for (let i = 0; i < bands; i += 1) {
+      if (i % 2 !== side) continue;
+      const n = hash01(seed + i * 6.3 + step * 2.9);
+      // Each band stretches from its own start, further as the smear runs on.
+      const wide = size * (0.08 + u * 0.85 * (0.3 + n));
+      const drift = (hash01(seed + i * 2.1 + step) - 0.5) * size * 0.16;
+      chunk(ctx, cx - size * 0.09 + drift, cy - h / 2 + (i * h) / bands, wide, h / bands, px);
+    }
+    ctx.fill();
+  }
+}
+
+/**
+ * **Flame to ash.** A handful of chunks lift, brighten through the fire ramp, then go grey and
+ * fall. The colour is chosen by *age*, not by particle, so the whole cluster turns over together —
+ * which is what makes it read as one thing burning out rather than as separate embers.
+ */
+function exitEmber(ctx, cx, cy, size, u, seed, px) {
+  const N = 12;
+  // Yellow, orange, red, ash. The last is the point: fire that fades out is a light, fire that
+  // goes grey has burned something.
+  const ramp = u < 0.22 ? [FIRE[0], FIRE[1]] : u < 0.45 ? [FIRE[1], FIRE[2]] : u < 0.68 ? [FIRE[3], FIRE[4]] : ['#4a4358', '#2a2438'];
+
+  for (let c = 0; c < ramp.length; c += 1) {
+    ctx.fillStyle = ramp[c];
+    ctx.beginPath();
+    for (let i = c; i < N; i += ramp.length) {
+      const spread = (hash01(seed + i * 3.1) - 0.5) * size * 0.34;
+      const lift = size * (0.2 + hash01(seed + i * 8.7) * 0.5);
+      // Rises while it burns, then the ash settles back down.
+      const rise = u < 0.68 ? -lift * u : -lift * 0.68 + lift * (u - 0.68) * 1.4;
+      const wander = Math.sin(u * 6 + i) * size * 0.05;
+      chunk(ctx, cx + spread + wander, cy + rise, px, px, px);
+    }
+    ctx.fill();
+  }
+}
+
+/**
+ * **Bolts.** The current leaves in every direction — then, quickly, the bolts stop being lines and
+ * break into juddering fragments that scatter and go.
+ *
+ * The jag is what makes a line read as current rather than as a ray, and the break-up is what stops
+ * it outstaying its welcome: the lines only exist for the first third, and everything after that is
+ * loose chunks re-seeded on a stepped clock, so it comes apart in front of you instead of fading.
+ */
+function exitBolts(ctx, cx, cy, size, u, seed, px) {
+  const BOLTS = 6;
+  const STEPS = 3;
+  const ALONG = 3; // chunks laid down each segment — dashed, not solid
+  const reach = size * 0.42;
+  const drawn = smoothstep(0, 0.34, u);
+  const step = judder(u, 12);
+
+  // Walk every bolt once and collect the two things drawn: dashes down each segment, and a
+  // brighter node at each kink. Two arrays, two fills, and a *fixed* chunk count.
+  //
+  // Filling each segment in proportion to its pixel length is what made the first version of this
+  // three hundred chunks and easily the loudest thing in the frame. At this size a bolt drawn as a
+  // dotted line reads exactly the same and is a fifth of the ink.
+  const dashes = [];
+  const nodes = [];
+
+  for (let b = 0; b < BOLTS; b += 1) {
+    let angle = (b / BOLTS) * TAU + hash01(seed + b * 3.7) * 0.6;
+    let x = cx;
+    let y = cy;
+    for (let s = 0; s < STEPS; s += 1) {
+      angle += (hash01(seed + b * 11.3 + s * 5.9) - 0.5) * 2.2;
+      const run = (reach / STEPS) * (0.4 + drawn);
+      const nx = x + Math.cos(angle) * run;
+      const ny = y + Math.sin(angle) * run;
+
+      if (u < 0.34) {
+        for (let i = 1; i <= ALONG; i += 1) {
+          dashes.push([x + (nx - x) * (i / ALONG), y + (ny - y) * (i / ALONG)]);
+        }
+        nodes.push([nx, ny]);
+      } else if (hash01(seed + b * 2.3 + s * 4.1 + step) > (u - 0.34) * 1.9) {
+        // Come apart: one juddering fragment where the segment used to end, drifting outward.
+        const jx = (hash01(seed + b + s * 7.7 + step * 3.1) - 0.5) * size * 0.22;
+        const jy = (hash01(seed + b * 5.3 + s + step * 2.3) - 0.5) * size * 0.22;
+        dashes.push([nx + jx, ny + jy]);
+      }
+      x = nx;
+      y = ny;
+    }
+  }
+
+  for (const [colour, points] of [[LAMP_HOT, dashes], ['#bfeaff', nodes]]) {
+    if (!points.length) continue;
+    ctx.fillStyle = colour;
+    ctx.beginPath();
+    for (const [x, y] of points) chunk(ctx, x, y, px, px, px);
+    ctx.fill();
+  }
 }
 
 /** The same deterministic value noise the tape uses, kept local so the scene owns no imports. */

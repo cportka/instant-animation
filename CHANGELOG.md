@@ -54,11 +54,25 @@ and the light comes out as scattered specks with gaps between them.
   back out over the tarmac. Wide flat pools of light, because a street lamp lights a long ellipse
   down the road rather than a circle under itself — and those pools are the only reason the road is
   legible.
-- **Lamps do not simply stop being drawn.** As one reaches the near end its light collapses, the
-  metal comes apart from the top down, and the current it was carrying leaves in every direction as
-  a burst of jagged bolts — warm at the outside, arc-white at the core, detaching from the fitting
-  and flying outward as they go. There is no distance at which an object the size of a street lamp
-  can vanish between two frames and be taken for anything but a bug.
+- **Lamps do not simply stop being drawn** — there is no distance at which an object that size can
+  vanish between two frames and be taken for anything but a bug. As one reaches the near end its
+  light collapses and the metal comes apart from the top down, and then it goes one of **five**
+  ways, picked per lamp when the scene is built so the road shows a mix rather than a sequence:
+
+  | | |
+  | --- | --- |
+  | **glitch** | tears into horizontal slices that shove sideways and drop out one at a time |
+  | **confetti** | bursts into small squares that fly out and fall |
+  | **mosh** | smears into flat bands that stretch and re-seed, like a decoder dragging a row |
+  | **ember** | burns yellow → orange → red, goes grey, and the ash settles back down |
+  | **bolts** | throws jagged dashes outward, then breaks into juddering fragments |
+
+  All five are deliberately small, brief and dim. A lamp reaching the near end is the most ordinary
+  thing that happens in this scene — it does it every couple of seconds — and an effect that grabs
+  the frame turns a passing detail into the subject. Each is built to the same rule: under ninety
+  chunks, at most three fills, gone in half a second, never brighter than the lamp it replaces. The
+  budget is about restraint rather than cost; the sky alone draws thousands of chunks a frame, but
+  the first version of the bolts peaked at 336 and was easily the loudest thing in the picture.
 - **The stars sparkle** in four soft tints, each on its own slow swell — a field that pulses
   together is a strobe. At the top of a swell the brightest of them throw a four-point cross, which
   at this resolution is the same star with four chunks added, so it reads as light rather than as a
