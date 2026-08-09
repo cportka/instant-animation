@@ -9,7 +9,7 @@
 // Everything is drawn from paths — no images, no fonts beyond a stray "Z" — so the scene stays a
 // few kilobytes and renders identically in a browser and in the headless render tests.
 
-import { createRng } from '../lib/rng.js';
+import { createRng } from '../../lib/rng.js';
 import {
   TAU,
   clamp,
@@ -24,8 +24,8 @@ import {
   smoothstep,
   wave,
   wrap01,
-} from '../lib/draw.js';
-import { drawSplotches, makeSplotches } from '../lib/paint.js';
+} from '../../lib/draw.js';
+import { drawSplotches, makeSplotches } from '../../effects/paint.js';
 import {
   blockRepeat,
   bleedWindows,
@@ -50,7 +50,7 @@ import {
   shred,
   smearStreaks,
   tearBands,
-} from '../lib/vhs.js';
+} from '../../effects/vhs.js';
 
 export const meta = {
   id: 'floating-bed',

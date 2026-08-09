@@ -168,7 +168,7 @@ test('floating-bed keeps more than one tape layer, or its bleeds are dead', () =
 // waiting for a particular lamp to reach a particular point of its approach, which tests the clock
 // rather than the effect — and would let four of the five rot unnoticed.
 test('every lamp exit draws something, cheaply, and the same way twice', async () => {
-  const { EXIT_KINDS, drawLampExit } = await import('../site/scenes/grizzly-peak.js');
+  const { EXIT_KINDS, drawLampExit } = await import('../site/scenes/grizzly-peak/index.js');
   assert.equal(EXIT_KINDS.length, 5, 'all five exits must be reachable');
 
   const run = (kind, u) => {

@@ -13,7 +13,7 @@ import {
   damageAt,
   shatterAt,
   ditherAt,
-} from '../site/lib/vhs.js';
+} from '../site/effects/vhs.js';
 import { roundedRect, roundedRectPath } from '../site/lib/draw.js';
 import { createRng } from '../site/lib/rng.js';
 import { createRecordingContext } from './helpers/recording-context.mjs';

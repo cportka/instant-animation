@@ -13,7 +13,7 @@
 // Everything moves on periods of two to five *minutes*. At sixty frames a second a drip advances
 // by a fraction of a pixel per frame; you never see it move, only notice later that it has.
 
-import { TAU, clamp, wrap01 } from './draw.js';
+import { TAU, clamp, wrap01 } from '../lib/draw.js';
 
 // Near-black with a hint of blue, so it separates from a pure-black background without reading
 // as grey.
