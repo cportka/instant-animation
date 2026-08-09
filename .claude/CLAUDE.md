@@ -144,18 +144,33 @@ SessionStart hook only *reports* that the stock hook is present.
 
 # This repo's specifics (outside the managed block, so a bootstrap refresh keeps them)
 
-The block above is the generic Portka standard. Three things are concrete **in this repository**:
+The block above is the generic Portka standard, and **where this section disagrees with it, this
+section wins.** It disagrees in one place immediately, so read that first.
+
+## THERE ARE NO TAGS AND NO RELEASES IN THIS REPO
+
+**This overrides the managed block's "Releasing is the user's manual step" paragraph entirely, and
+its "two things stay with the user" line.** Only one thing stays with the owner here: the go/no-go
+on outward-facing production changes. Releasing is not a step in this project at all.
+
+- **Never create a tag or a GitHub Release.** (That much the managed block already says.)
+- **Never ask the owner to, never offer to, never suggest they might want to, and never close a
+  round by mentioning one.** The owner has said, more than once and with feeling, that they do not
+  care about tags. Bringing it up again is the failure this heading exists to prevent.
+- **Never make anything conditional on a tag existing** — not a version bump, not a `CHANGELOG`
+  section, not a decision about what to do next. Nothing in this repo waits on a tag, because no
+  tag is ever coming.
+
+`package.json` is the version, `CHANGELOG.md` is the record, and a merged PR is the release. If you
+catch yourself about to write the word "tag" in a message to the owner, don't.
+
+## The rest of the specifics
 
 - **Changes fold into the current version.** The managed block says every change bumps the version;
   here, a round of work on the animation in progress **rewrites the current section** instead —
   adding what's new and **removing what has been superseded**. Stacking a new MINOR for every round
-  just turns `CHANGELOG.md` into a work log.
-
-  **Tagging is not part of this repo's workflow, and nothing waits on it.** The owner does not cut
-  git tags or GitHub Releases, so don't ask about them, don't offer, and never make a version bump
-  conditional on one having happened. The version in `package.json` is the record; a tag would only
-  be a copy of it. What opens a new section is an animation being **finished** — the MAJOR rule
-  below — not a tag.
+  just turns `CHANGELOG.md` into a work log. What opens a new section is an animation being
+  **finished** — the MAJOR rule below.
 
 - **MAJOR means "an animation is finished."** Versioning still follows SemVer mechanically, but
   the MAJOR bump has one meaning here and only one: **it marks the animation being worked on as
