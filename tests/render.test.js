@@ -86,11 +86,13 @@ for (const scene of scenes) {
     // The browser hands scenes a scratch buffer to read displacement from; the plain render tests
     // don't. Without this, the path every real visitor exercises is the untested one.
     const viewport = { width: 1200, height: 800 };
-    let captures = 0;
+    const size = { width: viewport.width, height: viewport.height };
+    const captured = [];
     const tape = {
-      source: { width: viewport.width, height: viewport.height },
-      capture() {
-        captures += 1;
+      source: size,
+      of: () => size,
+      capture(_ctx, name = 'main') {
+        captured.push(name);
       },
     };
 
@@ -101,7 +103,14 @@ for (const scene of scenes) {
     recorder.assertClean(`${meta.id} with a tape`);
     assert.equal(recorder.depth, 0, `${meta.id}: unbalanced save/restore on the tape path`);
     assert.ok(recorder.paints > SAMPLE_TIMES.length * 20, `${meta.id}: drew almost nothing`);
-    assert.ok(captures > 0, `${meta.id} never snapshotted the tape — the fast path is dead code`);
+    assert.ok(captured.length > 0, `${meta.id} never snapshotted the tape — the fast path is dead code`);
+    // A scene that bleeds one layer of the picture through another has to keep more than one.
+    // If this ever collapses to a single layer, every bleed silently samples what it draws over
+    // and the effect disappears without anything failing.
+    assert.ok(
+      new Set(captured).size > 1,
+      `${meta.id}: only ever captured "${[...new Set(captured)].join(', ')}" — bleed layers are gone`,
+    );
   });
 
   test(`${meta.id}: renders its reduced-motion poster frame`, () => {

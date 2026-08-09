@@ -20,7 +20,7 @@
 // Bands are processed top to bottom and may overlap slightly. That's not a bug worth fixing — a
 // tracking error smearing into the one below it is exactly the artefact being imitated.
 
-import { TAU, clamp, wrap01 } from './draw.js';
+import { TAU, clamp, smoothstep, wrap01 } from './draw.js';
 
 // Bounds the worst case: a tall zone on a tall screen must not quietly ask for hundreds of blits.
 const MAX_SHRED_LINES = 26;
@@ -45,22 +45,44 @@ export function deviceScale(ctx, width, height) {
  * The stage owns one of these and hands it to the scene, so scenes still never touch the DOM.
  * Without one, every helper falls back to `ctx.canvas` — correct, just slow — which is what the
  * headless tests exercise.
+ *
+ * A tape holds more than one *layer*, snapshotted at different points in the chain. `main` is the
+ * working copy the displacement effects read from; a scene can also stash, say, the picture as it
+ * stood before any tape damage. Artefacts that sample a different layer than the one they are
+ * drawing over are how the frame bleeds — a stuck block printing the undamaged scene, a hole
+ * punched through the wreckage. Layers are made on demand, so a scene that never asks for a second
+ * one never pays for it.
  */
 export function createTape() {
-  let canvas = null;
-  if (typeof OffscreenCanvas === 'function') canvas = new OffscreenCanvas(1, 1);
-  else if (typeof document !== 'undefined' && document.createElement) canvas = document.createElement('canvas');
-  if (!canvas) return null;
+  const make = () => {
+    let canvas = null;
+    if (typeof OffscreenCanvas === 'function') canvas = new OffscreenCanvas(1, 1);
+    else if (typeof document !== 'undefined' && document.createElement) canvas = document.createElement('canvas');
+    if (!canvas) return null;
+    const buffer = canvas.getContext('2d', { alpha: false });
+    return buffer ? { canvas, buffer } : null;
+  };
 
-  const buffer = canvas.getContext('2d', { alpha: false });
-  if (!buffer) return null;
+  if (!make()) return null;
+  const layers = new Map();
+  const layer = (name) => {
+    if (!layers.has(name)) layers.set(name, make());
+    return layers.get(name);
+  };
 
   return {
-    source: canvas,
+    get source() {
+      return layer('main').canvas;
+    },
+    /** The named layer's canvas, or the main one if that layer was never captured. */
+    of(name) {
+      return layers.has(name) ? layers.get(name).canvas : layer('main').canvas;
+    },
     /** Snapshot the destination canvas as it stands. Call again to re-snapshot; it's ~free. */
-    capture(ctx) {
+    capture(ctx, name = 'main') {
       const from = ctx.canvas;
       if (!from?.width) return;
+      const { canvas, buffer } = layer(name);
       if (canvas.width !== from.width || canvas.height !== from.height) {
         canvas.width = from.width;
         canvas.height = from.height;
@@ -71,7 +93,10 @@ export function createTape() {
   };
 }
 
-const sourceOf = (ctx, tape) => tape?.source ?? ctx.canvas;
+const sourceOf = (ctx, tape, layer) => {
+  if (!tape) return ctx.canvas;
+  return layer ? tape.of(layer) : tape.source;
+};
 
 /** Fold a value back into [-span/2, span/2] by wrapping rather than clipping. */
 const fold = (value, span) => (((value % span) + span * 1.5) % span) - span / 2;
@@ -105,6 +130,66 @@ export const hash = (n) => {
   const x = Math.sin(n * 12.9898) * 43758.5453;
   return x - Math.floor(x);
 };
+
+// How long a slot of the damage schedule lasts. Every slot is a coin toss for one event.
+const SLOT = 3.6;
+
+/**
+ * Irregular damage: bursts and quiet, rather than a metronome.
+ *
+ * A fixed period is the one thing that gives an effect away — once you have heard the beat you
+ * stop being surprised by it, and the tape stops feeling broken and starts feeling scored. So time
+ * is cut into slots, and each slot **may or may not** contain an event, at a hashed offset inside
+ * it, with a hashed length and a hashed amplitude. Empty slots run together into real silences;
+ * two events landing either side of a slot boundary arrive almost on top of each other.
+ *
+ * Amplitude is biased hard toward small — `bias**6` — so most events are a flicker and, every
+ * minute or so, one of them is an order of magnitude worse than the rest with no warning.
+ *
+ * Evaluated in constant time: only the neighbouring slots can still be sounding, so only they are
+ * summed. Overlapping events add, which is what makes a cluster hit harder than its parts.
+ */
+export function damageAt(t, seed = 0) {
+  const slot = Math.floor(t / SLOT);
+  let total = 0;
+
+  for (let s = slot - 1; s <= slot + 1; s += 1) {
+    if (hash(s * 13.77 + seed) < 0.42) continue; // a quiet slot
+    const start = s * SLOT + hash(s * 5.31 + seed) * SLOT * 0.7;
+    const rise = 0.35 + hash(s * 9.13 + seed) * 1.5;
+    const hold = rise * (0.4 + hash(s * 3.71 + seed) * 2.6);
+    const bias = hash(s * 21.9 + seed);
+    total += heldPulse(t - start, rise, hold, 0.7) * (0.6 + bias ** 6 * 15);
+  }
+  return total;
+}
+
+/**
+ * The rarer schedule the frame actually breaks on. Same slotted idea, far longer slots and a much
+ * lower hit rate, so a shatter is an event you wait for rather than a rhythm you learn.
+ *
+ * @returns {{phase: number, seed: number, x: number, y: number} | null} `phase` runs 0 → 1 across
+ *   the break: cracks, then separation, then the pieces falling out of frame.
+ */
+export function shatterAt(t, seed = 0) {
+  const SHATTER_SLOT = 13;
+  const slot = Math.floor(t / SHATTER_SLOT);
+
+  for (let s = slot - 1; s <= slot; s += 1) {
+    if (hash(s * 7.77 + seed) < 0.55) continue;
+    const start = s * SHATTER_SLOT + hash(s * 2.13 + seed) * SHATTER_SLOT * 0.6;
+    const length = 2.6 + hash(s * 4.91 + seed) * 2.2;
+    const phase = (t - start) / length;
+    if (phase <= 0 || phase >= 1) continue;
+    return {
+      phase,
+      seed: s * 601 + seed,
+      x: 0.2 + hash(s * 11.3 + seed) * 0.6,
+      y: 0.18 + hash(s * 17.9 + seed) * 0.64,
+    };
+  }
+  return null;
+}
 
 /** Copy a horizontal slice of the frame back over it, offset and optionally stretched. */
 function blitSlice(ctx, source, W, H, scale, { top, height, dx = 0, dw = W }) {
@@ -291,6 +376,163 @@ export function dropoutBars(ctx, W, H, t, bars, intensity = 1, tape = null) {
   }
 }
 
+const SHARD_WEDGES = 11;
+
+/**
+ * The frame breaks. Cracks run out from an impact point, the pieces separate, and then they fall
+ * out of shot — and what is behind them is a *different layer of the picture*, so the wreckage of
+ * the tape slides away to reveal the scene as it stood before any of the damage was applied.
+ *
+ * That is the whole idea: a glitch that removes picture is just a hole, but a glitch that removes
+ * one layer to show another is the frame arguing with itself. The bleed layer is painted first and
+ * the shards are laid back over it, so at the moment of the break nothing has moved and nothing
+ * shows — the reveal opens exactly as fast as the pieces travel.
+ *
+ * @param {{phase: number, seed: number, x: number, y: number}} event from `shatterAt`
+ * @param {string} bleed the tape layer revealed underneath
+ */
+export function shatter(ctx, W, H, event, tape = null, bleed = 'clean') {
+  const { phase, seed } = event;
+  const scale = deviceScale(ctx, W, H);
+  const source = sourceOf(ctx, tape);
+  const under = sourceOf(ctx, tape, bleed);
+  const ox = event.x * W;
+  const oy = event.y * H;
+  const reach = Math.hypot(W, H) * 1.2;
+
+  // Cracks appear first, then the pieces come apart, then they drop. Overlapping on purpose:
+  // a break that finishes each stage before starting the next reads as three separate effects.
+  const crack = smoothstep(0, 0.14, phase);
+  const part = smoothstep(0.1, 0.55, phase);
+  const fall = smoothstep(0.32, 1, phase);
+
+  // Wedge boundaries, unevenly spaced — a break radiating at regular angles reads as a pie chart.
+  const edge = (i) => {
+    const n = i % SHARD_WEDGES;
+    const a = (n / SHARD_WEDGES) * TAU + (hash(seed + n * 3.31) - 0.5) * (TAU / SHARD_WEDGES) * 0.9;
+    const mid = reach * (0.16 + hash(seed + n * 8.17) * 0.3);
+    return { a, mid };
+  };
+  const at = (a, r) => [ox + Math.cos(a) * r, oy + Math.sin(a) * r];
+
+  const shards = [];
+  for (let i = 0; i < SHARD_WEDGES; i += 1) {
+    const from = edge(i);
+    const to = edge(i + 1);
+    // Inner piece: a triangle off the impact point. Outer piece: the quad beyond it.
+    shards.push({ i, ring: 0, points: [[ox, oy], at(from.a, from.mid), at(to.a, to.mid)] });
+    shards.push({
+      i,
+      ring: 1,
+      points: [at(from.a, from.mid), at(to.a, to.mid), at(to.a, reach), at(from.a, reach)],
+    });
+  }
+
+  ctx.save();
+
+  // What is underneath. Painted across the whole frame; the shards cover it until they move.
+  ctx.drawImage(under, 0, 0, under.width || W, under.height || H, 0, 0, W, H);
+
+  for (const shard of shards) {
+    const n = hash(seed + shard.i * 5.9 + shard.ring * 71);
+    const mid = shard.points.reduce((sum, p) => [sum[0] + p[0], sum[1] + p[1]], [0, 0]);
+    const cx = mid[0] / shard.points.length;
+    const cy = mid[1] / shard.points.length;
+    const away = Math.atan2(cy - oy, cx - ox);
+
+    // Outer pieces are heavier and drop further; inner ones are flung harder.
+    const kick = part * reach * (shard.ring ? 0.02 : 0.05) * (0.5 + n);
+    const drop = fall * fall * H * (0.7 + n * 0.9) * (shard.ring ? 1.2 : 0.8);
+    const spin = (n - 0.5) * part * 0.55;
+    const alpha = clamp(1 - fall * 1.1, 0, 1);
+    if (alpha <= 0.01) continue;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(cx + Math.cos(away) * kick, cy + Math.sin(away) * kick + drop);
+    ctx.rotate(spin);
+    ctx.translate(-cx, -cy);
+
+    ctx.beginPath();
+    ctx.moveTo(shard.points[0][0], shard.points[0][1]);
+    for (let p = 1; p < shard.points.length; p += 1) ctx.lineTo(shard.points[p][0], shard.points[p][1]);
+    ctx.closePath();
+    ctx.save();
+    ctx.clip();
+    ctx.drawImage(source, 0, 0, Math.round(W * scale.sx), Math.round(H * scale.sy), 0, 0, W, H);
+    ctx.restore();
+
+    // The lit edge of a piece of broken glass, brightest while it is still nearly in place.
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(190, 245, 255, ${0.5 * crack * (1 - fall)})`;
+    ctx.lineWidth = 1 + part * 1.6;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+export function makeBleedWindows(rng, count = 4) {
+  return Array.from({ length: count }, () => ({
+    offset: rng.next(),
+    drift: rng.range(0.012, 0.06),
+    widthFrac: rng.range(0.1, 0.4),
+    heightFrac: rng.range(0.04, 0.16),
+    x: rng.next(),
+    duty: rng.range(0.08, 0.26),
+    slip: rng.range(-0.02, 0.02),
+    phase: rng.range(0, 10),
+  }));
+}
+
+/**
+ * The tracking momentarily locks: a hard-edged rectangle where the picture is briefly *clean*,
+ * punched straight through everything the tape has done to it.
+ *
+ * The second way the frame bleeds, and the opposite of the shatter — instead of the damage sliding
+ * off, a window of the layer underneath is stamped back on top of it. Short duty cycles, because
+ * the effect is a glimpse: hold it and it stops being a fault and becomes a picture-in-picture.
+ */
+export function bleedWindows(ctx, W, H, t, windows, intensity = 1, tape = null, layer = 'clean') {
+  if (intensity <= 0) return;
+  const scale = deviceScale(ctx, W, H);
+  const source = sourceOf(ctx, tape, layer);
+
+  for (const win of windows) {
+    const cycle = wrap01(win.offset + t * win.drift);
+    if (cycle > win.duty) continue;
+
+    const width = Math.max(8, win.widthFrac * W);
+    const height = Math.max(6, win.heightFrac * H);
+    const left = clamp(win.x * (W - width), 0, Math.max(0, W - width));
+    const top = clamp((cycle / win.duty) * (H + height) - height, 0, Math.max(0, H - 1));
+    const visible = Math.min(height, H - top);
+    if (visible < 3) continue;
+
+    // Sampled a little off from where it lands, so the clean picture is offset from the damaged
+    // one around it — a lock that has found the signal but not quite the position.
+    const slip = win.slip * W;
+    ctx.save();
+    ctx.globalAlpha = clamp(intensity, 0, 1);
+    ctx.drawImage(
+      source,
+      Math.round(clamp(left + slip, 0, Math.max(0, W - width)) * scale.sx),
+      Math.round(top * scale.sy),
+      Math.max(1, Math.round(width * scale.sx)),
+      Math.max(1, Math.round(visible * scale.sy)),
+      left, top, width, visible,
+    );
+    // Hard bright top and bottom rules, so it reads as punched in rather than faded in.
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = `rgba(120, 235, 255, ${0.4 * intensity})`;
+    ctx.fillRect(left, top, width, 1.5);
+    ctx.fillStyle = `rgba(255, 90, 210, ${0.4 * intensity})`;
+    ctx.fillRect(left, top + visible - 1.5, width, 1.5);
+    ctx.restore();
+  }
+}
+
 /** Fine horizontal lines, rolling slowly. The one artefact that reads as "CRT" on its own. */
 export function scanlines(ctx, W, H, t, { spacing = 4, alpha = 0.16, rollSpeed = 6 } = {}) {
   const roll = (t * rollSpeed) % spacing;
@@ -323,17 +565,22 @@ export function chromaSplit(ctx, W, H, t, intensity = 1, tape = null) {
   ctx.restore();
 }
 
+// How many sides a cell can have. Not hexagons: a field of one shape at one size is a pattern, and
+// a pattern is something somebody drew. Mixed polygons tile badly on purpose.
+const CELL_SIDES = [3, 4, 5, 6, 6, 8];
+
 /**
- * The honeycomb that fills the reference's flat colour fields. Scoped to a band rather than the
- * whole frame — everywhere at once reads as wallpaper, not as a compression artefact.
+ * The block-decode garbage that fills the reference's flat colour fields. Scoped to a band rather
+ * than the whole frame — everywhere at once reads as wallpaper, not as an artefact.
  *
- * And it must not be a *lattice*. A mathematically perfect comb is the one thing in the frame that
- * looks authored: real block-decode garbage shears row against row, drops cells, floods some solid,
- * and changes its mind several times a second. So every row gets its own shear, its own line
- * weight and its own colour, cells drop out on a hashed roll, and a few fill instead of stroking.
- * All of it keyed to a slow seed so the comb holds a shape for a beat rather than boiling.
+ * It must not be a *lattice*, and it must not be one shape. A regular comb of identical hexagons
+ * is the one thing in frame that looks authored. So: every row takes its own shear, squash, line
+ * weight and colour; every cell picks its own number of sides, its own rotation, its own size, and
+ * a per-vertex wobble that stops even a single cell from being a regular polygon; cells drop out
+ * and a few flood solid. All keyed to a slow seed, so the field holds a shape for a beat rather
+ * than boiling.
  */
-export function hexDither(ctx, W, y, height, radius, alpha, t = 0, chaos = 1) {
+export function cellDither(ctx, W, y, height, radius, alpha, t = 0, chaos = 1) {
   if (alpha <= 0.005 || height <= 0) return;
   const stepX = radius * Math.sqrt(3);
   const stepY = radius * 1.5;
@@ -349,12 +596,14 @@ export function hexDither(ctx, W, y, height, radius, alpha, t = 0, chaos = 1) {
     // Whole rows drop, the way a decoder loses a strip of blocks.
     if (n < 0.1 * damage) continue;
 
-    // Each row slides independently, so the comb shears instead of tiling.
+    // Each row slides independently, so the field shears instead of tiling.
     const shear = (hash(seed + row * 3.17) - 0.5) * stepX * 3.4 * damage;
     const squash = 1 + (hash(seed + row * 11.9) - 0.5) * 0.5 * damage;
     const inset = (row % 2 ? stepX / 2 : 0) + shear;
     const rowAlpha = clamp(alpha * (0.55 + n * 0.9), 0, 1);
     const cyan = hash(seed + row * 5.11) > 0.34;
+    // Rows advance at their own pace too, so columns never line up down the frame.
+    const pitch = stepX * (0.7 + hash(seed + row * 13.7) * 0.75);
 
     ctx.lineWidth = 0.6 + hash(seed + row * 2.71) * 1.9;
     ctx.strokeStyle = cyan
@@ -366,7 +615,7 @@ export function hexDither(ctx, W, y, height, radius, alpha, t = 0, chaos = 1) {
 
     ctx.beginPath();
     const solid = [];
-    for (let cx = inset - stepX, column = 0; cx < W + stepX; cx += stepX, column += 1) {
+    for (let cx = inset - pitch, column = 0; cx < W + pitch; cx += pitch, column += 1) {
       const c = hash(seed + row * 17.3 + column * 1.93);
       // Scattered cells simply aren't there.
       if (c < 0.16 * damage) continue;
@@ -375,16 +624,23 @@ export function hexDither(ctx, W, y, height, radius, alpha, t = 0, chaos = 1) {
       const jx = (hash(seed + row * 23.1 + column * 4.41) - 0.5) * radius * 0.7 * damage;
       const jy = (hash(seed + row * 6.53 + column * 8.09) - 0.5) * radius * 0.5 * damage;
       const size = radius * (1 + (c - 0.5) * 0.45 * damage);
+      const pick = hash(seed + row * 2.09 + column * 29.7);
+      const sides = CELL_SIDES[Math.floor(pick * CELL_SIDES.length) % CELL_SIDES.length];
+      const spin = hash(seed + row * 31.1 + column * 3.53) * TAU;
+
       const cell = [];
-      for (let i = 0; i < 6; i += 1) {
-        const a = (i / 6) * TAU - Math.PI / 2;
-        cell.push([cx + jx + Math.cos(a) * size, cy + jy + Math.sin(a) * size * squash]);
+      for (let i = 0; i < sides; i += 1) {
+        // Every vertex pushed in or out on its own: a regular polygon still looks drawn, and at
+        // this size the difference between a hexagon and a dented one is the whole effect.
+        const a = spin + (i / sides) * TAU;
+        const r = size * (1 + (hash(seed + column * 7.7 + i * 5.13 + row) - 0.5) * 0.5 * damage);
+        cell.push([cx + jx + Math.cos(a) * r, cy + jy + Math.sin(a) * r * squash]);
       }
       // A handful flood solid — the block that decoded to one flat colour.
       if (c > 1 - 0.1 * damage) solid.push(cell);
       else {
         ctx.moveTo(cell[0][0], cell[0][1]);
-        for (let i = 1; i < 6; i += 1) ctx.lineTo(cell[i][0], cell[i][1]);
+        for (let i = 1; i < cell.length; i += 1) ctx.lineTo(cell[i][0], cell[i][1]);
         ctx.closePath();
       }
     }
@@ -394,7 +650,7 @@ export function hexDither(ctx, W, y, height, radius, alpha, t = 0, chaos = 1) {
       ctx.beginPath();
       for (const cell of solid) {
         ctx.moveTo(cell[0][0], cell[0][1]);
-        for (let i = 1; i < 6; i += 1) ctx.lineTo(cell[i][0], cell[i][1]);
+        for (let i = 1; i < cell.length; i += 1) ctx.lineTo(cell[i][0], cell[i][1]);
         ctx.closePath();
       }
       ctx.fill();
@@ -428,16 +684,21 @@ export function makeRepeatCells(rng, count = 5) {
  * Each cell holds its source for a beat before picking another, which is what makes it read as
  * stuck rather than as noise, and tiles jitter vertically so the strip doesn't become a neat row.
  */
-export function blockRepeat(ctx, W, H, t, cells, intensity = 1, tape = null) {
+export function blockRepeat(ctx, W, H, t, cells, intensity = 1, tape = null, bleed = null) {
   if (intensity <= 0) return;
   const scale = deviceScale(ctx, W, H);
-  const source = sourceOf(ctx, tape);
+  const damaged = sourceOf(ctx, tape);
+  const clean = sourceOf(ctx, tape, bleed);
 
   for (const cell of cells) {
     const cycle = wrap01(cell.offset + t * cell.drift);
     if (cycle > cell.duty) continue;
 
     const seed = Math.floor(t * cell.churn) * 197 + cell.phase * 43;
+    // The third way the frame bleeds: some stuck blocks print from the layer *before* the damage,
+    // so a strip of undistorted picture repeats across a frame that is otherwise in pieces. The
+    // choice re-rolls with the source, so a cell can flip between layers as it re-sticks.
+    const source = bleed && hash(seed + 31.7) < 0.3 ? clean : damaged;
     const height = Math.max(4, cell.heightFrac * H);
     const width = Math.max(6, cell.widthFrac * W * clamp(1.4 - intensity * 0.3, 0.45, 1.4));
     const top = clamp((cycle / cell.duty) * (H + height) - height, 0, Math.max(0, H - 1));

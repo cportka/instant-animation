@@ -28,13 +28,15 @@ import {
 import { drawSplotches, makeSplotches } from '../lib/paint.js';
 import {
   blockRepeat,
+  bleedWindows,
+  cellDither,
   chromaSplit,
   contrastPunch,
+  damageAt,
   dropoutBars,
   grain,
   hash,
-  heldPulse,
-  hexDither,
+  makeBleedWindows,
   makeDropoutBars,
   makeRepeatCells,
   makeShredZones,
@@ -42,6 +44,8 @@ import {
   diffuse,
   saturate,
   scanlines,
+  shatter,
+  shatterAt,
   shred,
   smearStreaks,
   tearBands,
@@ -78,18 +82,11 @@ const ROLL_PERIOD = 44; // one full turn about the pillow-to-foot axis
 const GLASSES_CYCLE = 21; // sunglasses drift on, sit a while, drift off, stay away
 // The sleeper is not reliably there. One long cycle: present, torn apart, absent, reassembled.
 const SLEEPER_CYCLE = 37;
-// Two cycles of tape damage, peaking an order of magnitude apart. Each rises, then *sits* at its
-// own maximum, then falls: a sine bump touches its peak for one frame, which is over before you
-// can read what broke. The holds below are sized so each cycle spends roughly five times as long
-// at full value as its bare bump did — the small one included, since a fault you can't read is
-// wasted whatever its amplitude.
-const BURST_PERIOD = 9.5; // how often the tape gives out completely
-const BURST_RISE = 0.95;
-const BURST_HOLD = 1;
-// And then, rarely, it gives out an order of magnitude harder before settling back.
-const SURGE_PERIOD = 71;
-const SURGE_LENGTH = 3;
-const SURGE_HOLD = 1.65;
+// Damage arrives on an irregular schedule rather than a period — see `damageAt`. This seed picks
+// which run of events this scene gets; every peak still *holds*, it just no longer keeps time.
+const DAMAGE_SEED = 5.4;
+// The tape layer holding the picture as it stood before any damage, for the artefacts that bleed.
+const CLEAN = 'clean';
 
 // Vaporwave: magenta and cyan doing all the work, violet holding them together.
 const MAGENTA = [255, 74, 200];
@@ -195,6 +192,7 @@ export function create({ width, height, seed = meta.id, tape = null }) {
   const shredZones = makeShredZones(rng, 3);
   const bars = makeDropoutBars(rng, 3);
   const repeatCells = makeRepeatCells(rng, 5);
+  const windows = makeBleedWindows(rng, 4);
   // Kept off the sleeper: the bed drifts around (0.34, 0.37), and a splotch centred there would
   // erase the only thing in the frame worth looking at. Drips still run across it.
   const splotches = makeSplotches(rng, 30, { avoid: { x: 0.34, y: 0.37, r: 0.1 } });
@@ -280,21 +278,19 @@ export function create({ width, height, seed = meta.id, tape = null }) {
       // along with everything else instead of sitting on the picture like a decal.
       drawSplotches(ctx, W, H, t, splotches);
 
-      // Tape last, over everything — including the sleeper. Ambient damage all the time, with the
-      // heads giving out completely for about a second at a time.
-      const burstAt = t - Math.floor(t / BURST_PERIOD) * BURST_PERIOD;
-      const burst = heldPulse(burstAt, BURST_RISE, BURST_HOLD, 0.6);
+      // The picture as it stands before the tape gets to it. Kept aside as its own layer so the
+      // artefacts below can bleed it back through: this is the thing that shows in the cracks.
+      tape?.capture(ctx, CLEAN);
 
-      // The surge: a second, far rarer cycle that climbs to ten times the burst and comes all the
-      // way back to baseline. Steep shoulders, so the climb and the recovery are both violent —
-      // and then it stays at the top, because the point of the cycle is the state, not the jolt.
-      const surgeAt = t - Math.floor(t / SURGE_PERIOD) * SURGE_PERIOD;
-      const surge = heldPulse(surgeAt, SURGE_LENGTH, SURGE_HOLD, 2.2);
-      const chaos = burst + surge * 10;
+      // Tape last, over everything — including the sleeper. Ambient damage runs the whole time;
+      // on top of it, an irregular schedule of events, most of them small and one every minute or
+      // so an order of magnitude worse, with real silences in between.
+      const chaos = damageAt(t, DAMAGE_SEED);
+      const wrecked = chaos > 4; // the events that used to be the surge
 
-      // Ambient damage stays readable; the burst is where it goes to pieces, and the surge is
-      // where there is nothing left to read. Colour grading is capped — pushed past about 1.4 it
-      // just flattens to white, which is less destroyed-looking, not more.
+      // Ambient damage stays readable; an event is where it goes to pieces, and a big one is where
+      // there is nothing left to read. Colour grading is capped — pushed past about 1.4 it just
+      // flattens to white, which is less destroyed-looking, not more.
       contrastPunch(ctx, W, H, 0.34 + Math.min(chaos, 1.4) * 0.26, tape);
       saturate(ctx, W, H, 0.42 + Math.min(chaos, 1.3) * 0.45);
       // Snapshot *after* the colour grade so displaced slices carry the same colour as the frame
@@ -305,35 +301,48 @@ export function create({ width, height, seed = meta.id, tape = null }) {
       smearStreaks(ctx, W, H, t, 9 + Math.round(Math.min(chaos, 2) * 13), 0.8 + chaos * 1.9, tape);
       dropoutBars(ctx, W, H, t, bars, 0.6 + chaos * 1.45, tape);
       // The stuck block, re-read off the tape so it repeats what the artefacts above have already
-      // done to the picture rather than the clean frame underneath them.
+      // done to the picture — except for the cells that print from the clean layer instead.
       tape?.capture(ctx);
-      blockRepeat(ctx, W, H, t, repeatCells, 0.7 + chaos * 1.1, tape);
+      blockRepeat(ctx, W, H, t, repeatCells, 0.7 + chaos * 1.1, tape, CLEAN);
 
       // Magnitude alone stops buying anything past about half the frame width — a slice shifted
-      // further just lands off screen. So the surge adds *passes* rather than distance: the same
+      // further just lands off screen. So a big event adds *passes* rather than distance: the same
       // zones and bands run again at offset times, which multiplies how much of the picture is
-      // torn rather than how far each piece moves. Two seconds in seventy, and reading from the
-      // tape makes each extra pass cost a few milliseconds.
-      if (surge > 0.12) {
+      // torn rather than how far each piece moves. Rare, and reading from the tape makes each
+      // extra pass cost a few milliseconds.
+      if (wrecked) {
         shred(ctx, W, H, t + 3.1, shredZones, 0.5 + chaos * 3.6, tape);
         shred(ctx, W, H, t + 7.7, shredZones, 0.5 + chaos * 3.6, tape);
         tearBands(ctx, W, H, t + 5.3, bands, 1.5 + chaos * 2.8, tape);
         dropoutBars(ctx, W, H, t + 2.9, bars, 0.6 + chaos * 1.45, tape);
         smearStreaks(ctx, W, H, t + 1.7, 16, 2.4, tape);
-        blockRepeat(ctx, W, H, t + 4.6, repeatCells, 1.6, tape);
+        blockRepeat(ctx, W, H, t + 4.6, repeatCells, 1.6, tape, CLEAN);
       }
 
       tape?.capture(ctx);
       chromaSplit(ctx, W, H, t, 2.2 + chaos * 4.2, tape);
-      // Two combs, always. One is a slow band wandering down the picture, the other rides the
-      // repeat cells' clock and covers whatever the damage is currently worst over — between them
-      // there is comb somewhere in frame at all times, which is what "half of it is garbage" means.
+      // Two fields of block garbage, always. One is a slow band wandering down the picture, the
+      // other climbs the other way on its own clock — between them there is garbage somewhere in
+      // frame at all times, which is what "half of it is in pieces" means.
       const comb = Math.max(9, H * 0.024);
-      const slowBand = H * (0.28 + surge * 0.8);
-      hexDither(ctx, W, wrap01(t * 0.07) * H - slowBand * 0.5, slowBand, comb,
-        (0.2 + Math.min(chaos, 1.6) * 0.22), t, 1 + chaos * 0.6);
-      hexDither(ctx, W, wrap01(0.43 - t * 0.041) * H - H * 0.1, H * (0.2 + burst * 0.5),
-        comb * 1.6, 0.16 + Math.min(chaos, 2) * 0.13, t * 1.7, 1.4 + chaos * 0.5);
+      const slowBand = H * (0.28 + Math.min(chaos, 8) * 0.08);
+      cellDither(ctx, W, wrap01(t * 0.07) * H - slowBand * 0.5, slowBand, comb,
+        (0.2 + Math.min(chaos, 1.6) * 0.22), t, 1 + chaos * 0.3);
+      cellDither(ctx, W, wrap01(0.43 - t * 0.041) * H - H * 0.1, H * (0.2 + Math.min(chaos, 2) * 0.14),
+        comb * 1.6, 0.16 + Math.min(chaos, 2) * 0.13, t * 1.7, 1.4 + chaos * 0.25);
+
+      // Second bleed: hard-edged windows where the tracking briefly locks and the clean picture is
+      // punched straight back through the damage.
+      bleedWindows(ctx, W, H, t, windows, 0.75 + Math.min(chaos, 2) * 0.12, tape, CLEAN);
+
+      // Third, and the loudest: the frame cracks, comes apart and falls out of shot, with the
+      // clean layer widening behind it as the pieces go.
+      const break_ = shatterAt(t, DAMAGE_SEED);
+      if (break_) {
+        tape?.capture(ctx);
+        shatter(ctx, W, H, break_, tape, CLEAN);
+      }
+
       scanlines(ctx, W, H, t, { spacing: 4, alpha: 0.16, rollSpeed: 5 });
       grain(ctx, W, H, t, { count: 34 + Math.round(Math.min(chaos, 6) * 90), alpha: 0.14, rate: 10 });
     },
