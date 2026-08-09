@@ -123,10 +123,10 @@ export function create({ width, height, seed = meta.id }) {
       spread,
     }));
 
-  const farTrees = makeTrees(56, 0.03);
+  const farTrees = makeTrees(96, 0.075);
   // The roadside. Few and moderate, and rooted up the slope rather than at the bottom edge —
   // down there the road is nearly the full width of frame and a tree of any size is a wipe.
-  const nearTrees = makeTrees(13, 0.12);
+  const nearTrees = makeTrees(23, 0.21);
 
   // The lamps live on one track along the left edge of the road, evenly spaced in *world* distance
   // — which is what makes them bunch up toward the vanishing point on their own.
@@ -496,7 +496,9 @@ function drawTrees(ctx, W, H, t, trees, baseY, slide, rise, scale, px, lit) {
 
     // Canopies are built row by row. Drawn as whole rectangles they are boxes on sticks — the
     // silhouette is the entire tree at this distance, and a box has no silhouette.
-    if (tree.kind < 0.55) {
+    // Four silhouettes, because a hillside of two shapes repeated is a wallpaper. At this distance
+    // the outline is the entire tree, so the only thing that distinguishes them is that outline.
+    if (tree.kind < 0.3) {
       // Eucalyptus: a lumpy round crown, wider than it is tall, ragged on both sides.
       const r = size * 0.36 * tree.width;
       for (let dy = -r; dy <= r * 0.85; dy += px) {
@@ -506,7 +508,7 @@ function drawTrees(ctx, W, H, t, trees, baseY, slide, rise, scale, px, lit) {
         if (half < px) continue;
         chunk(ctx, topX - half, topY + dy, half * 2, px, px);
       }
-    } else {
+    } else if (tree.kind < 0.58) {
       // Pine: five tiers, each a stepped triangle, each wider than the one above it.
       const tiers = 5;
       const tierH = size * 0.24;
@@ -518,6 +520,32 @@ function drawTrees(ctx, W, H, t, trees, baseY, slide, rise, scale, px, lit) {
           const half = (dy / tierH) * wide;
           if (half < px) continue;
           chunk(ctx, topX - half, top + dy, half * 2, px, px);
+        }
+      }
+    } else if (tree.kind < 0.82) {
+      // Cypress: a tall narrow spindle, widest a third of the way down. The vertical note in the
+      // line — a ridge of nothing but round crowns has no rhythm to it.
+      const tall = size * 0.62;
+      const wide = size * 0.14 * tree.width;
+      for (let dy = 0; dy < tall; dy += px) {
+        const u = dy / tall;
+        const half = wide * Math.sin(Math.min(1, u * 1.15) * Math.PI) ** 0.55;
+        if (half < px) continue;
+        chunk(ctx, topX - half, topY + dy, half * 2, px, px);
+      }
+    } else {
+      // Dead: bare angular limbs off a bare trunk. One in six or so, and they are what stop the
+      // treeline reading as decoration — something on this hillside did not make it.
+      const limbs = 5;
+      for (let i = 0; i < limbs; i += 1) {
+        const up = 0.15 + (i / limbs) * 0.6;
+        const from = [topX + tree.lean * size * up, topY + size * 0.55 * up];
+        const angle = (hash01(tree.phase * 31 + i * 7.3) - 0.5) * 1.7 - (i % 2 ? 1 : 2) * 0.55;
+        const reach = size * (0.2 + hash01(tree.phase * 17 + i) * 0.24) * tree.width;
+        const steps = Math.max(2, Math.round(reach / px));
+        for (let s = 0; s <= steps; s += 1) {
+          const at = (s / steps) * reach;
+          chunk(ctx, from[0] + Math.cos(angle) * at, from[1] + Math.sin(angle) * at, px, px, px);
         }
       }
     }
@@ -559,8 +587,16 @@ function edgeAt(p, side) {
   return VP.x + (edgeX - VP.x) * p + bendAt(p);
 }
 
-/** How far down the road one world distance sits, as a fraction of the way to the bottom edge. */
-const ROAD_RANGE = 82;
+/**
+ * How far out the lamp track runs, and how fast it comes at you.
+ *
+ * These two have to move together. A lamp's world distance is `wrap01(offset - travel * rate) *
+ * ROAD_RANGE`, so stretching the range alone spaces the lamps further apart *and* speeds them up by
+ * exactly the same factor — they arrive just as often and nothing changes. Quartering the rate
+ * alongside is what actually makes them rarer: four times the gap, at the same closing speed.
+ */
+const ROAD_RANGE = 328;
+const LAMP_RATE = 0.0004;
 
 function drawRoad(ctx, W, H, t, travel, px) {
   // The road starts at the vanishing point now, which is up at the waterline — so it is drawn
@@ -724,7 +760,7 @@ function drawLamps(ctx, W, H, t, lamps, travel, px) {
     .map((lamp) => {
       // Evenly spaced in world distance, coming toward us; one wraps back to the far end as it
       // passes. The bunching near the vanishing point falls out of the projection for free.
-      const z = wrap01(lamp.offset - travel * 0.0016) * ROAD_RANGE;
+      const z = wrap01(lamp.offset - travel * LAMP_RATE) * ROAD_RANGE;
       return { lamp, at: onRoad(z, W, H, 1) };
     })
     .filter((p) => p.at.scale > 0.035 && p.at.scale < 1.02)
@@ -790,7 +826,7 @@ function drawLamps(ctx, W, H, t, lamps, travel, px) {
     ditherGlow(ctx, headX, lampY, height * 0.075, LAMP_HOT, 1 * flick * fade, px, 1, 1.2);
 
     // And the way out, whichever one this lamp was given.
-    if (exit > 0) drawLampExit(ctx, lamp.exit, headX, lampY, height * 0.42, exit, lamp.phase * 97, px);
+    if (exit > 0) drawLampExit(ctx, lamp.exit, headX, lampY, height * 0.78, exit, lamp.phase * 97, px);
   }
 }
 
@@ -809,7 +845,7 @@ export function drawLampExit(ctx, kind, cx, cy, size, progress, seed, px) {
   const u = clamp(progress, 0, 1);
   // Brightest at the failure and fading from there. A burst that ramps up reads as something
   // arriving; this is something leaving.
-  const alpha = clamp((1 - u) * 1.2, 0, 1) * 0.72;
+  const alpha = clamp((1 - u) * 1.25, 0, 1) * 0.95;
   if (alpha < 0.02) return;
 
   ctx.save();
@@ -831,10 +867,13 @@ const judder = (u, steps) => Math.floor(u * steps);
  * fading — which is the difference between a glitch and a dissolve.
  */
 function exitGlitch(ctx, cx, cy, size, u, seed, px) {
-  const bars = 7;
-  const w = size * 0.19;
-  const h = size * 0.13;
+  const bars = 9;
+  const w = size * 0.42;
+  const h = size * 0.3;
   const step = judder(u, 9);
+  // A shear across the whole stack: every slice is offset a little further than the one above it,
+  // so the lamp does not just come apart, it *leans* apart along a hard diagonal.
+  const shear = (hash01(seed + step * 4.3) - 0.5) * size * 0.5;
 
   for (const [colour, side] of [[COPPER, 0], [LAMP_HOT, 1]]) {
     ctx.fillStyle = colour;
@@ -842,9 +881,10 @@ function exitGlitch(ctx, cx, cy, size, u, seed, px) {
     for (let i = 0; i < bars; i += 1) {
       if (i % 2 !== side) continue;
       if (hash01(seed + i * 7.1) < u * 0.85) continue; // this slice has already gone
-      const shove = (hash01(seed + i * 3.3 + step * 1.7) - 0.5) * size * 0.55 * (0.3 + u);
-      const wide = w * (0.35 + hash01(seed + i * 5.9 + step) * 0.8);
-      chunk(ctx, cx - wide / 2 + shove, cy - h / 2 + (i * h) / bars, wide, h / bars, px);
+      const lean = shear * (i / bars) * (0.4 + u);
+      const shove = (hash01(seed + i * 3.3 + step * 1.7) - 0.5) * size * 0.7 * (0.3 + u);
+      const wide = w * (0.35 + hash01(seed + i * 5.9 + step) * 0.9);
+      chunk(ctx, cx - wide / 2 + shove + lean, cy - h / 2 + (i * h) / bars, wide, h / bars, px);
     }
     ctx.fill();
   }
@@ -855,19 +895,23 @@ function exitGlitch(ctx, cx, cy, size, u, seed, px) {
  * one chunk each, no trails, so the whole thing is sixteen rectangles in three fills.
  */
 function exitConfetti(ctx, cx, cy, size, u, seed, px) {
-  const N = 16;
+  const N = 18;
   const palette = [FIRE[1], FIRE[3], LAMP_HOT];
 
   for (let c = 0; c < palette.length; c += 1) {
     ctx.fillStyle = palette[c];
     ctx.beginPath();
     for (let i = c; i < N; i += palette.length) {
-      const angle = hash01(seed + i * 4.7) * TAU;
-      const speed = size * (0.25 + hash01(seed + i * 9.1) * 0.4);
+      // Eight directions, not a free angle. Confetti cut on the grid throws on the grid, and the
+      // eight-way fan is what keeps the burst reading as angular rather than as a puff.
+      const angle = (Math.floor(hash01(seed + i * 4.7) * 8) / 8) * TAU;
+      const speed = size * (0.35 + hash01(seed + i * 9.1) * 0.55);
       const x = cx + Math.cos(angle) * speed * u;
-      // Thrown up and out, then gravity takes it — squared, so the arc turns over near the top.
-      const y = cy + Math.sin(angle) * speed * u + size * 0.7 * u * u;
-      chunk(ctx, x, y, px, px, px);
+      // Thrown out, then gravity takes it — squared, so the arc turns over near the top.
+      const y = cy + Math.sin(angle) * speed * u + size * 0.8 * u * u;
+      // Shards rather than dots: each is a two-chunk bar lying along one axis or the other.
+      const flat = hash01(seed + i * 2.9) < 0.5;
+      chunk(ctx, x, y, flat ? px * 2 : px, flat ? px : px * 2, px);
     }
     ctx.fill();
   }
@@ -879,8 +923,8 @@ function exitConfetti(ctx, cx, cy, size, u, seed, px) {
  * and, at this size, the one that reads most immediately as *wrong* rather than as an effect.
  */
 function exitMosh(ctx, cx, cy, size, u, seed, px) {
-  const bands = 5;
-  const h = size * 0.15;
+  const bands = 7;
+  const h = size * 0.34;
   const step = judder(u, 7);
 
   for (const [colour, side] of [[LAMP_MID, 0], [COPPER, 1]]) {
@@ -889,10 +933,12 @@ function exitMosh(ctx, cx, cy, size, u, seed, px) {
     for (let i = 0; i < bands; i += 1) {
       if (i % 2 !== side) continue;
       const n = hash01(seed + i * 6.3 + step * 2.9);
-      // Each band stretches from its own start, further as the smear runs on.
-      const wide = size * (0.08 + u * 0.85 * (0.3 + n));
-      const drift = (hash01(seed + i * 2.1 + step) - 0.5) * size * 0.16;
-      chunk(ctx, cx - size * 0.09 + drift, cy - h / 2 + (i * h) / bands, wide, h / bands, px);
+      // Each band stretches from its own start, further as the smear runs on. Alternating bands
+      // run the other way, so the shape stays a hard-edged comb instead of a single arrow.
+      const wide = size * (0.12 + u * 1.5 * (0.3 + n));
+      const drift = (hash01(seed + i * 2.1 + step) - 0.5) * size * 0.24;
+      const back = i % 3 === 0 ? -wide : 0;
+      chunk(ctx, cx - size * 0.12 + drift + back, cy - h / 2 + (i * h) / bands, wide, h / bands, px);
     }
     ctx.fill();
   }
@@ -904,7 +950,7 @@ function exitMosh(ctx, cx, cy, size, u, seed, px) {
  * which is what makes it read as one thing burning out rather than as separate embers.
  */
 function exitEmber(ctx, cx, cy, size, u, seed, px) {
-  const N = 12;
+  const N = 16;
   // Yellow, orange, red, ash. The last is the point: fire that fades out is a light, fire that
   // goes grey has burned something.
   const ramp = u < 0.22 ? [FIRE[0], FIRE[1]] : u < 0.45 ? [FIRE[1], FIRE[2]] : u < 0.68 ? [FIRE[3], FIRE[4]] : ['#4a4358', '#2a2438'];
@@ -913,12 +959,14 @@ function exitEmber(ctx, cx, cy, size, u, seed, px) {
     ctx.fillStyle = ramp[c];
     ctx.beginPath();
     for (let i = c; i < N; i += ramp.length) {
-      const spread = (hash01(seed + i * 3.1) - 0.5) * size * 0.34;
-      const lift = size * (0.2 + hash01(seed + i * 8.7) * 0.5);
+      const spread = (hash01(seed + i * 3.1) - 0.5) * size * 0.6;
+      const lift = size * (0.35 + hash01(seed + i * 8.7) * 0.8);
       // Rises while it burns, then the ash settles back down.
       const rise = u < 0.68 ? -lift * u : -lift * 0.68 + lift * (u - 0.68) * 1.4;
-      const wander = Math.sin(u * 6 + i) * size * 0.05;
-      chunk(ctx, cx + spread + wander, cy + rise, px, px, px);
+      // Straight lean rather than a wander: a flame that snakes reads as smoke.
+      const lean = (hash01(seed + i * 5.7) - 0.5) * size * 0.3 * u;
+      const tall = hash01(seed + i * 1.9) < 0.6;
+      chunk(ctx, cx + spread + lean, cy + rise, tall ? px : px * 2, tall ? px * 2 : px, px);
     }
     ctx.fill();
   }
@@ -933,10 +981,10 @@ function exitEmber(ctx, cx, cy, size, u, seed, px) {
  * loose chunks re-seeded on a stepped clock, so it comes apart in front of you instead of fading.
  */
 function exitBolts(ctx, cx, cy, size, u, seed, px) {
-  const BOLTS = 6;
+  const BOLTS = 7;
   const STEPS = 3;
   const ALONG = 3; // chunks laid down each segment — dashed, not solid
-  const reach = size * 0.42;
+  const reach = size * 0.72;
   const drawn = smoothstep(0, 0.34, u);
   const step = judder(u, 12);
 
@@ -954,7 +1002,9 @@ function exitBolts(ctx, cx, cy, size, u, seed, px) {
     let x = cx;
     let y = cy;
     for (let s = 0; s < STEPS; s += 1) {
-      angle += (hash01(seed + b * 11.3 + s * 5.9) - 0.5) * 2.2;
+      // Snapped to sixteenths of a turn. A free angle wanders; a quantised one breaks, and a
+      // break is what reads as current arcing rather than as a drawn curve.
+      angle += Math.round((hash01(seed + b * 11.3 + s * 5.9) - 0.5) * 5) * (TAU / 16);
       const run = (reach / STEPS) * (0.4 + drawn);
       const nx = x + Math.cos(angle) * run;
       const ny = y + Math.sin(angle) * run;
@@ -979,7 +1029,7 @@ function exitBolts(ctx, cx, cy, size, u, seed, px) {
     if (!points.length) continue;
     ctx.fillStyle = colour;
     ctx.beginPath();
-    for (const [x, y] of points) chunk(ctx, x, y, px, px, px);
+    for (const [x, y] of points) chunk(ctx, x, y, px * 1.6, px * 1.6, px);
     ctx.fill();
   }
 }
