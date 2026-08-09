@@ -154,12 +154,22 @@ The block above is the generic Portka standard. Three things are concrete **in t
   version is tagged and published does the next change open a new section and bump the number.
 
 - **MAJOR means "an animation is finished."** Versioning still follows SemVer mechanically, but
-  the MAJOR bump has a specific meaning here: it marks the point where the current animation is
-  **done** and work starts on the next one. So `1.0.0` is cut when *Asleep Among the Stars* is
-  finished and a second animation begins; `2.0.0` when that one is finished; and so on. While an
-  animation is still being worked on, changes to it are MINOR (a new capability, a recomposition)
-  or PATCH (a fix). The version source of truth is `package.json`, mirrored in `CHANGELOG.md` and
-  the README `**Version:**` line — `tests/run-tests.sh` fails if they drift.
+  the MAJOR bump has one meaning here and only one: **it marks the animation being worked on as
+  done, and the next one beginning.** Nothing else earns a MAJOR — not a rewrite, not a breaking
+  change to the scene contract, not a recomposition however drastic. While an animation is still
+  being worked on, changes to it are MINOR (a new capability) or PATCH (a fix). The version source
+  of truth is `package.json`, mirrored in `CHANGELOG.md` and the README `**Version:**` line —
+  `tests/run-tests.sh` fails if they drift.
+
+  The ledger, so the rule stays concrete:
+
+  | version | the animation it finished | the one it started |
+  | --- | --- | --- |
+  | `1.0.0` | Asleep Among the Stars | Westbound on Grizzly Peak |
+  | `2.0.0` | Westbound on Grizzly Peak | *(the third)* |
+
+  Add a row when you cut one. If you are about to bump MAJOR and cannot fill in both columns, it
+  is not a MAJOR.
 - **The gallery is ordered newest → oldest.** `site/scenes/index.js` lists scenes newest-first,
   a new animation goes at the **front** of that array, and `tests/scenes.test.js` fails if the
   order stops matching `meta.created` descending. The front-end depends on it: down means older,

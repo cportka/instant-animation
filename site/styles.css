@@ -45,7 +45,9 @@ body {
   border: 0;
   background: none;
   color: #d8c6ff;
-  opacity: var(--nav-idle);
+  /* Out of sight by default. The animation is the page; a control parked permanently on top of it
+     is chrome, however soft. `peek` below brings them back for a second at a time. */
+  opacity: 0;
   cursor: pointer;
   transition: opacity 300ms ease, transform 300ms ease;
 }
@@ -70,18 +72,24 @@ body {
   filter: drop-shadow(0 0 6px rgba(255, 74, 200, 0.55)) drop-shadow(0 0 14px rgba(80, 240, 255, 0.35));
 }
 
+/* Two animations on each: the float they always had, and the ten-second peek. Both chevrons share
+   one `peek` timeline so they surface together rather than taking turns. */
 .nav--down {
   bottom: calc(1.75rem + env(safe-area-inset-bottom, 0px));
-  animation: float-down 3.4s ease-in-out infinite;
+  animation: float-down 3.4s ease-in-out infinite, peek 10s ease-in-out infinite;
 }
 
 .nav--up {
   top: calc(1.75rem + env(safe-area-inset-top, 0px));
-  animation: float-up 3.4s ease-in-out infinite;
+  animation: float-up 3.4s ease-in-out infinite, peek 10s ease-in-out infinite;
 }
 
+/* Reaching for one always brings it back, whatever the cycle is doing — an invisible control that
+   only answers on its own schedule is a puzzle. `animation: none` drops the opacity keyframes so
+   the rule below them wins; without it the keyframed opacity would keep overriding this. */
 .nav:hover,
 .nav:focus-visible {
+  animation: none;
   opacity: 0.95;
 }
 
@@ -112,6 +120,24 @@ body {
   }
   50% {
     transform: translateY(-0.4rem);
+  }
+}
+
+/* Hidden for most of ten seconds, then up for one. The fades either side are a third of a second
+   each — long enough not to blink, short enough that the second at full strength is the part you
+   notice. Percentages are of the 10s cycle: 8.0s dark, in by 8.35s, held to 9.35s, gone by 9.7s. */
+@keyframes peek {
+  0%,
+  80% {
+    opacity: 0;
+  }
+  83.5%,
+  93.5% {
+    opacity: var(--nav-idle);
+  }
+  97%,
+  100% {
+    opacity: 0;
   }
 }
 
