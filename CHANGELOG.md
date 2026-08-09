@@ -50,8 +50,8 @@ and the light comes out as scattered specks with gaps between them.
   copper it disappeared into the pools the lamps were throwing over it. A guard rail runs the
   length, posts spaced in world distance with a cable sagging between them, which does more for the
   drop than the shading does: a rail is a thing people put where you would otherwise fall.
-- **Bronze lamps** on the hill side of the road, sodium heads on copper poles with the arm reaching
-  back out over the tarmac. Wide flat pools of light, because a street lamp lights a long ellipse
+- **Bronze lamps** on the hill side of the road, one every four and a half seconds, sodium heads on
+  copper poles with the arm reaching back out over the tarmac. Wide flat pools of light, because a street lamp lights a long ellipse
   down the road rather than a circle under itself — and those pools are the only reason the road is
   legible.
 - **Lamps do not simply stop being drawn** — there is no distance at which an object that size can
@@ -65,24 +65,27 @@ and the light comes out as scattered specks with gaps between them.
   | **confetti** | bursts into small squares that fly out and fall |
   | **mosh** | smears into flat bands that stretch and re-seed, like a decoder dragging a row |
   | **ember** | burns yellow → orange → red, goes grey, and the ash settles back down |
-  | **bolts** | throws jagged dashes outward, then breaks into juddering fragments |
+  | **bolts** | throws jagged dashes outward on angles snapped to sixteenths of a turn, then breaks into juddering fragments |
 
-  All five are deliberately small, brief and dim. A lamp reaching the near end is the most ordinary
-  thing that happens in this scene — it does it every couple of seconds — and an effect that grabs
-  the frame turns a passing detail into the subject. Each is built to the same rule: under ninety
-  chunks, at most three fills, gone in half a second, never brighter than the lamp it replaces. The
-  budget is about restraint rather than cost; the sky alone draws thousands of chunks a frame, but
-  the first version of the bolts peaked at 336 and was easily the loudest thing in the picture.
+  All five are **angular** — hard slices, shards, bands and kinks snapped to a fixed set of angles,
+  nothing that curves — and all five are over in about half a second. They are drawn at real size,
+  because a lamp only reaches the near end every four and a half seconds now and each exit has the
+  frame to itself when it does. Each is still built to one rule: under ninety chunks, at most three
+  fills, and never brighter than the lamp it replaces. That budget is about restraint rather than
+  cost — the sky alone draws thousands of chunks a frame — but the first version of the bolts
+  peaked at 336 and was easily the loudest thing in the picture.
 - **The stars sparkle** in four soft tints, each on its own slow swell — a field that pulses
   together is a strobe. At the top of a swell the brightest of them throw a four-point cross, which
   at this resolution is the same star with four chunks added, so it reads as light rather than as a
   bigger dot. Batched one path per tint: four fills a frame instead of two hundred and sixty.
 - **The bay**, with the sun half into it and its glitter path broken into chunks that widen and
   quicken as they come toward you. A city across the water as blocks with a few lit windows.
-- **Trees** on the slope, eucalyptus and pine, canopies built row by row — drawn as whole
-  rectangles they are boxes on sticks, and at this distance the silhouette is the entire tree. They
-  go down *before* the tarmac: a canopy anywhere near the middle of frame is wide enough to erase
-  the road, the lamps and the light on both.
+- **Trees** on the slope in four silhouettes — eucalyptus, pine, a tall narrow cypress, and the bare
+  angular limbs of a dead one — roughly twice as many as before, across a band twice as deep. At
+  this distance the outline *is* the tree, so the outline is the only thing that distinguishes them,
+  and a hillside of two shapes repeated is wallpaper. Canopies are built row by row; drawn as whole
+  rectangles they are boxes on sticks. They go down *before* the tarmac: a canopy anywhere near the
+  middle of frame is wide enough to erase the road, the lamps and the light on both.
 - **A car spins across the night sky** every twenty-three seconds, end over end, half transparent
   and never explained — the one thing in frame that does not obey the road.
 
