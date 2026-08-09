@@ -33,6 +33,7 @@ import {
   chromaSplit,
   contrastPunch,
   damageAt,
+  ditherAt,
   dropoutBars,
   grain,
   hash,
@@ -329,15 +330,21 @@ export function create({ width, height, seed = meta.id, tape = null }) {
 
       tape?.capture(ctx);
       chromaSplit(ctx, W, H, t, 2.2 + chaos * 4.2, tape);
-      // Two fields of block garbage, always. One is a slow band wandering down the picture, the
-      // other climbs the other way on its own clock — between them there is garbage somewhere in
-      // frame at all times, which is what "half of it is in pieces" means.
-      const comb = Math.max(9, H * 0.024);
-      const slowBand = H * (0.28 + Math.min(chaos, 8) * 0.08);
-      cellDither(ctx, W, wrap01(t * 0.07) * H - slowBand * 0.5, slowBand, comb,
-        (0.2 + Math.min(chaos, 1.6) * 0.22), t, 1 + chaos * 0.3);
-      cellDither(ctx, W, wrap01(0.43 - t * 0.041) * H - H * 0.1, H * (0.2 + Math.min(chaos, 2) * 0.14),
-        comb * 1.6, 0.16 + Math.min(chaos, 2) * 0.13, t * 1.7, 1.4 + chaos * 0.25);
+
+      // The block field, and only about one second in twenty. Up continuously it stopped being an
+      // artefact and became the thing the frame was made of — everything else had to compete with
+      // it. Scarce, it goes back to being a fault: the decoder losing its mind and getting it
+      // back. Both bands come and go on the same envelope so it arrives as one event, and they can
+      // run stronger than before precisely because they are hardly ever there.
+      const shapes = ditherAt(t, DAMAGE_SEED);
+      if (shapes > 0) {
+        const comb = Math.max(9, H * 0.024);
+        const slowBand = H * (0.28 + Math.min(chaos, 8) * 0.08);
+        cellDither(ctx, W, wrap01(t * 0.07) * H - slowBand * 0.5, slowBand, comb,
+          (0.24 + Math.min(chaos, 1.6) * 0.24) * shapes, t, 1 + chaos * 0.3);
+        cellDither(ctx, W, wrap01(0.43 - t * 0.041) * H - H * 0.1, H * (0.2 + Math.min(chaos, 2) * 0.14),
+          comb * 1.6, (0.2 + Math.min(chaos, 2) * 0.14) * shapes, t * 1.7, 1.4 + chaos * 0.25);
+      }
 
       // Second bleed: hard-edged windows where the tracking briefly locks and the clean picture is
       // punched straight back through the damage.

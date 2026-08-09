@@ -48,6 +48,13 @@ rotation, its own size, and a per-vertex wobble that stops even a single cell fr
 polygon. Cells drop out, a few flood solid, and all of it runs on a slow seed so the field holds a
 shape for a beat instead of boiling.
 
+And it is up **about one second in twenty** (`ditherAt`), on its own sparse schedule — roughly one
+appearance every thirty seconds, lasting a second and a half. This is the one artefact in the chain
+that does not run continuously, and the reason is that shapes over the picture *all the time* stop
+being an artefact: they become the thing the frame is made of, and everything else has to compete
+with them. Scarce, the field goes back to being a fault — the decoder losing its mind for a moment
+and getting it back — which also lets it hit harder while it is there.
+
 **Damage arrives on a schedule, not a beat** (`damageAt`). Ambient damage runs the whole time; on
 top of it, time is cut into slots and each slot *may or may not* contain an event, at a hashed
 offset inside it with a hashed length and amplitude. Empty slots run together into real silences —
