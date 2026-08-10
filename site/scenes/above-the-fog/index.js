@@ -13,7 +13,7 @@
 // it a body and a top, filaments draw out along the wind and thin away to nothing, and seven small
 // wandering windows let the ground through for a second at a time.
 //
-// `apparition.js` is The Cloud. About once a minute one mass stops being weather: it pixelates into
+// `apparition.js` is The Cloud. Every few minutes one mass stops being weather: it pixelates into
 // an angel, decodes into a grim reaper, decodes again into a cloud wearing an enormous happy face,
 // and comes apart. It is the only thing in this scene that glitches, and it is deliberate that
 // nothing else does — the *fog* going to pieces in chunks reads as a rendering fault, while one
@@ -32,7 +32,7 @@ export const meta = {
   id: 'above-the-fog',
   title: 'Above the Fog',
   prompt:
-    'an overhead view of tons of billowing flowing fog, wisps dissolving and changing into each other, over a lazy winding river and a cute riverside town with a cafe, a restaurant and twelve jewellery shops — the ground in reversed colour and barely ever visible, and about once a minute one cloud pixelates into an angel, then a grim reaper, then a giant happy face before dissolving back into fog',
+    'an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and changing into each other, over a lazy winding river and a cute riverside town with a cafe, a restaurant and twelve jewellery shops — the ground in reversed colour and barely ever visible, and every few minutes one cloud pixelates into an angel, then a grim reaper, then a giant happy face before dissolving back into fog',
   created: '2026-08-09',
   background: '#0e1113',
   // Mid-apparition, on the beat where the reaper has fully resolved. Of everything this scene does

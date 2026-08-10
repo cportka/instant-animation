@@ -72,6 +72,7 @@ test('the fog is 95% of the scene, at every viewport, at every moment sampled', 
     const { width, height } = viewport;
     const recorder = createRecordingContext(viewport);
     const instance = scene.create({ ...viewport, seed: 'above-the-fog' });
+    let clearest = 1;
 
     for (const t of [0, 3.7, 19.2, 41, 64.5, 121.3, 301.5]) {
       const before = recorder.ops.length;
@@ -98,19 +99,28 @@ test('the fog is 95% of the scene, at every viewport, at every moment sampled', 
       // by a uniform veil at 0.55, which passes both and is not fog.
       hidden.sort((a, b) => a - b);
       const median = hidden[hidden.length >> 1];
-      assert.ok(median > 0.8, `${where}: the middle of the frame is only ${(median * 100).toFixed(0)}% fogged`);
+      assert.ok(median > 0.9, `${where}: the middle of the frame is only ${(median * 100).toFixed(0)}% fogged`);
+      clearest = Math.min(clearest, hidden[0]);
     }
+
+    // ...and the other side of it: somewhere, sometimes, you can actually see the ground. Every
+    // assertion above is satisfied by fog that never opens at all, and thickening the cloud until
+    // the windows stop punching through it is a change that looks like an improvement right up
+    // until you notice the scene has nothing underneath it any more. It has happened once already.
+    assert.ok(
+      clearest < 0.55,
+      `${width}x${height}: the clearest point in any frame is still ${(clearest * 100).toFixed(0)}% fogged — the peek-a-boos have closed`,
+    );
   }
 });
 
-test('The Cloud comes about once a minute, and is gone the rest of the time', () => {
-  // "Randomly every minute or so" is a claim about *rarity* as much as about frequency. An
-  // apparition that showed up every twenty seconds would stop being an event, and one that only
-  // ever fired at the top of the minute would be a clock.
+test('The Cloud is rare, and is gone almost all of the time', () => {
+  // Rarity is the whole point: it stops being an event the moment you can rely on it. So one per
+  // cycle, a long cycle, and a start that slides right around inside it — never a clock.
   const starts = [];
   let live = 0;
   let previous = null;
-  for (let t = 0; t < 1800; t += 0.05) {
+  for (let t = 0; t < 3600; t += 0.05) {
     const event = apparitionAt(t);
     assert.deepEqual(event, apparitionAt(t), 'apparitionAt must be a pure function of time');
     if (!event) {
@@ -124,13 +134,15 @@ test('The Cloud comes about once a minute, and is gone the rest of the time', ()
     previous = event.n;
   }
 
-  assert.equal(starts.length, Math.floor(1800 / PERIOD), 'one apparition per cycle, no more and no fewer');
-  assert.ok(live * 0.05 / 1800 < 0.3, 'The Cloud is up too much of the time to be an event');
+  assert.equal(starts.length, Math.floor(3600 / PERIOD), 'one apparition per cycle, no more and no fewer');
+  const duty = (live * 0.05) / 3600;
+  assert.ok(duty < 0.1, `The Cloud is up ${(duty * 100).toFixed(0)}% of the time — too much to be an event`);
+  assert.ok(PERIOD > 120, 'a cycle short enough to anticipate is a feature, not an apparition');
 
   // Not on a beat: the gaps between them must actually vary.
   const gaps = starts.slice(1).map((s, i) => s - starts[i]);
   const spread = Math.max(...gaps) - Math.min(...gaps);
-  assert.ok(spread > 4, `every apparition arrives ${gaps[0]}s after the last — that is a metronome`);
+  assert.ok(spread > 30, `every apparition arrives ${gaps[0]}s after the last — that is a metronome`);
 });
 
 test('one apparition shows all four figures, in order, one at a time', () => {
@@ -139,10 +151,10 @@ test('one apparition shows all four figures, in order, one at a time', () => {
   // the suite would notice.
   const seen = [];
   let start = null;
-  for (let t = 0; t < PERIOD; t += 0.05) {
+  for (let t = 0; t < PERIOD * 2; t += 0.05) {
     if (apparitionAt(t)) { start = t; break; }
   }
-  assert.ok(start !== null, 'no apparition in the first cycle');
+  assert.ok(start !== null, 'no apparition in the first two cycles');
 
   for (let t = start; t < start + DURATION; t += 0.02) {
     const event = apparitionAt(t);
@@ -239,7 +251,7 @@ function occlusion(lobes, x, y) {
 }
 
 /** The lowest the aerial wash ever falls to. Measured off `wash()` in the scene. */
-const WASH = 0.4;
+const WASH = 0.29;
 
 /** The gradient's alpha at a fraction of the radius, interpolated between the recorded stops. */
 function alphaAt(stops, r) {

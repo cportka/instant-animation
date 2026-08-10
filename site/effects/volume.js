@@ -90,7 +90,12 @@ export function lobe(ctx, x, y, major, minor, angle, colour, alpha, core = 0.38,
   ctx.fillStyle = g;
 
   ctx.beginPath();
-  if (wobble > 0) outline(ctx, wobble, phase, facet);
+  // The wobble is dropped on very elongated lobes, and that is not a nicety. The outline is
+  // parameterised by *angle*, so on a ten-to-one ellipse almost all fourteen points bunch at the
+  // two ends and the long sides are described by two or three of them — which draws visible
+  // straight segments and corners, and a hard-edged chevron in a picture of fog is the loudest
+  // thing on screen. A plain arc under the same scale is a perfect ellipse at any aspect.
+  if (wobble > 0 && minor > major * 0.26) outline(ctx, wobble, phase, facet);
   else ctx.arc(0, 0, 1, 0, TAU);
   ctx.fill();
   ctx.restore();

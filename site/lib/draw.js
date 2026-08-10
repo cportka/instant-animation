@@ -21,6 +21,32 @@ export const wrap01 = (v) => v - Math.floor(v);
 export const rgba = ([r, g, b], alpha) => `rgba(${r}, ${g}, ${b}, ${alpha})`;
 
 /**
+ * A colour from a ramp at a *continuous* position along it.
+ *
+ * The reason this exists rather than `ramp[Math.floor(at)]`: indexing a palette with a value that
+ * drifts means every shape steps from one entry to the next in a single frame. On a small mark
+ * nobody notices. On a soft mass a couple of hundred pixels across, a forty-level jump between two
+ * neighbouring greys is a clump of it visibly snapping — and with a field drifting under a few
+ * hundred masses it happens dozens of times a second, all over the frame, which reads as a broken
+ * renderer rather than as weather.
+ *
+ * @param {number[][]} ramp   `[r, g, b]` triples, darkest first
+ * @param {number} at         0..ramp.length - 1
+ */
+export function rampAt(ramp, at) {
+  const p = clamp(at, 0, ramp.length - 1);
+  const i = Math.min(ramp.length - 2, Math.floor(p));
+  const f = p - i;
+  const a = ramp[i];
+  const b = ramp[i + 1];
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * f),
+    Math.round(a[1] + (b[1] - a[1]) * f),
+    Math.round(a[2] + (b[2] - a[2]) * f),
+  ];
+}
+
+/**
  * Rounded rectangle as an explicit path. Hand-rolled rather than `ctx.roundRect` so scenes only
  * ever touch the small, universally supported slice of the 2D API the test harness models.
  */
