@@ -10,9 +10,14 @@
 // anywhere and the shapes have to read in the second or so before the fog closes again.
 //
 // `fog.js` is the picture. A lattice of lobes guarantees the coverage, billows and lit crests give
-// it a body and a top, filaments give it the fine structure that separates fog from smoke, seven
-// wandering windows thin it enough to see through, and a damage schedule borrowed from the tape
-// scene tears the whole thing up every few seconds.
+// it a body and a top, filaments draw out along the wind and thin away to nothing, and seven small
+// wandering windows let the ground through for a second at a time.
+//
+// `apparition.js` is The Cloud. About once a minute one mass stops being weather: it pixelates into
+// an angel, decodes into a grim reaper, decodes again into a cloud wearing an enormous happy face,
+// and comes apart. It is the only thing in this scene that glitches, and it is deliberate that
+// nothing else does — the *fog* going to pieces in chunks reads as a rendering fault, while one
+// mass doing it reads as something happening.
 //
 // The scene draws top-down and orthographic, so there is no perspective anywhere in it. That is a
 // constraint, not a saving: with no horizon and no parallax, every cue that says "this is a thick
@@ -27,13 +32,13 @@ export const meta = {
   id: 'above-the-fog',
   title: 'Above the Fog',
   prompt:
-    'an overhead view of tons of billowing flowing fog, some of it glitching in and out of existence in a data mosh, over a lazy winding river and a cute riverside town with a cafe, a restaurant and twelve jewellery shops surrounded by green — de-saturated realism, the fog 95% of the scene and running from near-white to near-black',
+    'an overhead view of tons of billowing flowing fog, wisps dissolving and changing into each other, over a lazy winding river and a cute riverside town with a cafe, a restaurant and twelve jewellery shops — the ground in reversed colour and barely ever visible, and about once a minute one cloud pixelates into an angel, then a grim reaper, then a giant happy face before dissolving back into fog',
   created: '2026-08-09',
   background: '#0e1113',
-  // Late enough that every element is on its second or third life, on a beat where a window is
-  // open over the town, and during a mild fault so the shred shows. A still frame of unbroken fog
-  // would be honest and would also be a grey rectangle.
-  posterTime: 34,
+  // Mid-apparition, on the beat where the reaper has fully resolved. Of everything this scene does
+  // that is the frame worth freezing, and a still of undisturbed fog would be honest and would also
+  // be a grey rectangle.
+  posterTime: 13.4,
   // The nav arrows wear the scene: a chevron of soft grey vapour with no colour in it at all.
   chrome: 'vapour',
   // The fog is a couple of hundred large gradient fills a frame, which is fill-rate work and
@@ -42,7 +47,7 @@ export const meta = {
   maxDpr: 1,
 };
 
-export function create({ width, height, seed = meta.id, tape = null }) {
+export function create({ width, height, seed = meta.id }) {
   const rng = createRng(seed);
   // Ground first, so the town's plan is the same for a given seed whatever the fog does with the
   // generator afterwards.
@@ -64,7 +69,7 @@ export function create({ width, height, seed = meta.id, tape = null }) {
     draw(ctx, t) {
       ctx.save();
       drawGround(ctx, W, H, t, ground);
-      drawFog(ctx, W, H, t, fog, tape);
+      drawFog(ctx, W, H, t, fog);
       ctx.restore();
     },
   };

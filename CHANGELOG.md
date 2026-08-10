@@ -15,22 +15,19 @@ MAJOR bump means here — see `.claude/CLAUDE.md`.
 
 ### The third animation — "Above the Fog"
 
-From *"an overhead view of tons of billowing flowing fog, some of it glitching in and out of
-existence in a data mosh, over a lazy winding river and a cute riverside town with a cafe, a
-restaurant and twelve jewellery shops surrounded by green — de-saturated realism, the fog 95% of the
-scene and running from near-white to near-black"*.
+From *"an overhead view of tons of billowing flowing fog, wisps dissolving and changing into each
+other, over a lazy winding river and a cute riverside town with a cafe, a restaurant and twelve
+jewellery shops — the ground in reversed colour and barely ever visible, and about once a minute one
+cloud pixelates into an angel, then a grim reaper, then a giant happy face before dissolving back
+into fog"*.
 
 Straight down and orthographic, so there is no perspective anywhere in it and no horizon to hang
 depth on. Every cue that says *thick moving volume of air* rather than *scrolling texture* has to
 come out of the motion: shear between layers, light that moves independently of the shape it is on,
-and masses that grow and die rather than slide.
+and masses that grow, draw out, thin away and are replaced by masses welling up through them.
 
-Three things pull against each other in the brief — near-total coverage, a full near-black to
-near-white range, and clouds that fail like a decoder — and the structure of the scene is the
-arrangement that gets all three:
-
-- **Coverage is geometric, not lucky.** The base of the fog is a *lattice*: a jittered grid of dark
-  lobes, each a little larger than its cell, so every point in frame is inside two or three of them
+- **Coverage is geometric, not lucky.** The base of the fog is a *lattice*: a jittered grid of
+  lobes, each a good half wider than its cell, so every point in frame is inside two or three of them
   by construction. Fog built by scattering clouds about and hoping cannot promise 95% — there is
   always a hole somewhere, and a hole that appears because the random numbers came out that way is a
   hole in the wrong place, which is worse than no hole at all. The lattice scrolls as one body and
@@ -43,10 +40,13 @@ arrangement that gets all three:
   closes when a billow drifts back over, and is ringed by a soft transition the whole time. None of
   which a punched hole gives you, and a hard `clip()` would leave a crisp outline around every gap.
   The window never clears completely either: the aerial wash stays, so the town arrives hazy, which
-  is what looking down through a few hundred feet of air actually looks like. All seven share one
-  period with their phases spread evenly around it — give them slightly different periods and they
-  drift into alignment eventually and hand you a frame with the fog half gone. Open area is capped
-  at **5% of the frame** and tested at every sample time.
+  is what looking down through a few hundred feet of air actually looks like — and it means the
+  *wash* is a hard ceiling on how clear a window can ever get, so most of the hiding has to be done
+  by cloud, which windows can thin, rather than by haze, which they cannot. All seven windows share
+  one period with their phases spread evenly around it — give them slightly different periods and
+  they drift into alignment eventually and hand you a frame with the fog half gone. The typical
+  point in frame is now about **95% obscured** and the clearest point in any frame around 40%, both
+  measured off the recorded op stream at every sample time.
 - **Range comes from one shared field, not from opacity.** A stack of transparent greys composites
   toward its own mean, and cranking the alphas only gets you to mid-grey faster. So a single slow,
   large-scale noise field decides where the fog is thick and where it is thin, and *everything*
@@ -62,28 +62,36 @@ arrangement that gets all three:
   there. Without a second spatial frequency an order of magnitude finer than the billows carrying
   it, the whole thing reads as smoke from a machine rather than as a fog bank. Near-black strands go
   over the light afterwards, so the crests come apart into fibres instead of staying smooth blobs.
-- **Clouds glitch out of existence and back**, on the tape scene's own damage schedule — built to
-  arrive in bursts and silences rather than on a beat, and tested for exactly that. During a burst
-  individual lobes stutter on a juddering clock while their neighbours hold, whole bands of the
-  lattice shove sideways, and every outline quantises into facets — the same cloud rendered
-  coarsely, which is what a decoder does to a curve when it runs out of bits to describe it with.
-  A glitched cloud mostly **jumps rather than disappearing**, and that is the load-bearing detail:
-  simply dropping a fraction of the lattice opens the fog, and an opening in the fog is a view of
-  the town, so the glitch stops being a fault in the picture and becomes the one moment the picture
-  is on show. Displaced, the coverage survives and the failure is louder.
-  Then the finished frame is torn up as an image — **shredded**, not tiled. The stuck-macroblock
-  artefact the tape scene is built around needs a picture full of high-frequency detail: tiling one
-  block of *that* prints an obvious repeat, while tiling a block of fog prints a flat grey rectangle
-  and reads as a rectangle somebody drew. Shredding keeps the picture and breaks it, which on a soft
-  image is the only one of the two that survives. Exactly **one** stuck cell is kept, and it is the
-  only thing allowed to print from a layer captured *before* the fog went on, so a strip of bare
-  town repeats across a band — a peek-a-boo arriving as a decoding failure rather than as a gap in
-  the weather. One cell is deliberate: a handful of those tiles is a decode failure, a screenful is
-  the picture with the weather switched off.
-- **The town below** (`site/scenes/above-the-fog/town.js`) is built out of **value**, not detail,
-  because it is only ever glimpsed. The water is the darkest thing on the ground, the roads the
-  lightest, the roofs between them, the vegetation dark enough to frame all three — drop a gap
-  anywhere and the shapes read in the second before it closes. The river is generated first and
+- **The fog dissolves; it does not disappear.** Every mass now *expands* monotonically through its
+  life while its opacity rises and falls, so it arrives small and dense and leaves wide and thin —
+  which is what vapour does. Scaling size and opacity together, the obvious way, gives a shape that
+  shrinks back to the point it grew from: a thing being removed rather than a thing spreading out
+  until it is indistinguishable from the air around it. Filaments go further and change *aspect*,
+  the major axis running away from the minor as they age, so a soft puff draws out into a thread and
+  thins to nothing. Bounded, though — letting the major axis run while the minor one stands still
+  reaches fifty to one by the end of a life, and a fifty-to-one ellipse is a scratch on the lens.
+- **And each life begins where the last one ended.** A mass's home is its own previous home plus a
+  short hop, evaluated from the incarnation number so it stays closed-form, so a mass that has just
+  thinned away is replaced by one welling up *through* it rather than by one somewhere else
+  entirely. That is most of what makes the field read as changing into itself rather than as a set
+  of independent puffs taking turns.
+- **Nothing in the fog glitches any more, and that is the fix.** There was a whole pass of it —
+  lobes strobing out, bands of the lattice shoved sideways, the finished frame shredded and printed
+  back over itself. The trouble with every version of it is the same: fog has no detail to corrupt,
+  so damaging it can only *remove* it, and fog vanishing in chunks does not read as a fault in the
+  picture, it reads as a fault in the renderer. The glitching moved wholesale into The Cloud, below,
+  where it belongs to one object with an outline and a face and is unmistakably something happening.
+  Losing the full-frame tape effects also took the frame cost from ~95ms to ~6ms software-rasterised
+  — they were the entire budget.
+- **The town below** (`site/scenes/above-the-fog/town.js`) is now its own **photo negative** —
+  every colour `255 - c`, channel by channel — so the water is the lightest thing on the ground, the
+  roads the darkest, and the vegetation a pale lilac. Inverting is not the same as picking pale
+  colours: it takes the hues to their complements too, which is what makes a glimpse read as a
+  negative — somewhere that is not quite a place — rather than as a place lit differently. The value
+  *structure* survives intact, which is why it works at all: everything that was distinguishable by
+  brightness still is, just the other way up. It is built out of **value**, not detail, because it is
+  only ever glimpsed — drop a gap anywhere and the shapes read in the second before it closes. The
+  river is generated first and
   everything else is placed relative to it, which is what stops the result looking like three
   unrelated layers stacked up: twelve jewellers in a parade along the front with awnings pulled most
   of the way to grey, a cafe with a forecourt of parasols, a larger restaurant with its own terrace,
@@ -108,6 +116,36 @@ arrangement that gets all three:
   drifting sideways as much as up. It carries a dark halo rather than a bright one, because the
   scene beneath runs all the way to near-white and an arrow with only a glow disappears the moment a
   lit crest passes under it.
+
+#### The Cloud
+
+About once a minute one mass of fog stops being weather. It gathers, pixelates into a coarse grid of
+chunks, and resolves into an **angel**; the angel decodes into a **grim reaper**; the reaper decodes
+back into The Cloud, now wearing an enormous happy face; and then it comes apart and is fog again.
+Nobody comments on it. It is the only thing in the scene that glitches, and that is the point — the
+fog going to pieces reads as a rendering fault, one object doing it reads as something happening.
+
+Two decisions carry it:
+
+- **The figures are hand-drawn bitmaps, not procedural shapes.** Twenty-two cells across is not
+  enough resolution for anything generated to be recognisable: an angel and a reaper are both "a
+  vertical mass with a lump on top", and the difference between them is a dozen deliberately placed
+  cells. They are ASCII art in the source, four levels deep, where they can be read and edited *as*
+  art. Each carries its own two-colour ramp **and its own opacity**, because the two trade against
+  each other — the reaper's near-black void inside a dark-grey cowl comes out eight levels apart
+  once it is composited at 84% over mid-grey, and brightening the cowl to fix that makes him a
+  ghost. Keeping the ramp dark and taking his opacity nearly to solid gets a black hollow inside a
+  dark cloak, which is the thing itself.
+- **The morph is a per-cell coin toss, not a cross-fade.** Each cell picks the old figure or the new
+  one depending on whether its own hash has been passed by a sweeping threshold, so the angel is not
+  dissolved into the reaper, it is *replaced* by it, cell by cell, in a scatter — and the cells
+  nearest the threshold shove sideways while they change. That is what a decoder does when handed a
+  keyframe it cannot fully apply.
+
+At most six fills for the whole thing, mid-morph, with two figures on screen and every cell
+displaced by its own amount. `tests/fog.test.js` asserts one apparition per cycle with genuinely
+varying gaps, and that all four figures resolve, in order, one at a time — if a morph window ever
+swallowed a figure whole, nothing else in the suite would notice.
 
 ### Changed — every scene is its own self-contained thing
 
