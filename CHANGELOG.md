@@ -17,7 +17,7 @@ MAJOR bump means here — see `.claude/CLAUDE.md`.
 
 From *"an overhead view of tons of billowing flowing fog, wisps dissolving and changing into each
 other, over a lazy winding river and a cute riverside town with a cafe, a restaurant and twelve
-jewellery shops — the ground in reversed colour and barely ever visible, and about once a minute one
+jewellery shops — the ground in reversed colour and barely ever visible, and every few minutes one
 cloud pixelates into an angel, then a grim reaper, then a giant happy face before dissolving back
 into fog"*.
 
@@ -45,8 +45,10 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   by cloud, which windows can thin, rather than by haze, which they cannot. All seven windows share
   one period with their phases spread evenly around it — give them slightly different periods and
   they drift into alignment eventually and hand you a frame with the fog half gone. The typical
-  point in frame is now about **95% obscured** and the clearest point in any frame around 40%, both
-  measured off the recorded op stream at every sample time.
+  typical point in frame is about **97% obscured** and the clearest point in any frame around 40%,
+  both measured off the recorded op stream at every sample time — and *both* are asserted, because
+  fog thick enough to satisfy the coverage bound and never open at all is a change that looks like
+  an improvement right up until the scene has nothing underneath it.
 - **Range comes from one shared field, not from opacity.** A stack of transparent greys composites
   toward its own mean, and cranking the alphas only gets you to mid-grey faster. So a single slow,
   large-scale noise field decides where the fog is thick and where it is thin, and *everything*
@@ -62,6 +64,27 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   there. Without a second spatial frequency an order of magnitude finer than the billows carrying
   it, the whole thing reads as smoke from a machine rather than as a fog bank. Near-black strands go
   over the light afterwards, so the crests come apart into fibres instead of staying smooth blobs.
+- **Nothing in the fog snaps.** The one that mattered most, and it was not any of the places I
+  looked: each lattice lobe took its grey by **indexing** a six-entry ramp with a drifting field —
+  `CURTAIN[Math.floor(bank * …)]` — so every lobe stepped from one grey to the next in a single
+  frame, forty levels at a time, dozens of times a second all over the frame. Reading the ramp at a
+  *continuous* position instead removed it outright. Measured on the rendered pixels rather than on
+  the code: worst single-frame change in a 40s run went from **80 levels to 14**, and the 95th
+  percentile from 20 to 6, with the median frame-to-frame change unchanged — so it is the outliers
+  that went, not the motion. The other one it found: four two-hundred-pixel masses appearing and
+  vanishing in a single frame at both ends of every apparition, because The Cloud's halo was never
+  multiplied by the envelope the rest of it fades on. The lattice also carries three cells of margin
+  now instead of one, so the outermost column — whose identity changes every time the field scrolls
+  a whole cell — does that off screen where it belongs.
+- **Wind, and a bit of physics.** The wind gusts: two slow non-harmonic sine terms on a steady base,
+  and — the part that matters — position integrates the *speed* rather than multiplying by it.
+  `x = speed(t) * t` is not motion under a changing wind, it is teleportation, because raising the
+  speed instantly relocates everything that has already travelled. Integrating means a gust only
+  affects where things go from now on. Every free mass is advected over exactly the stretch of time
+  it has existed for, so the whole field surges together. And everything is **stretched along the
+  way it is actually going**, more so the faster it goes: the total velocity is the gusting wind
+  plus the local curl, so a mass in a slack eddy stays round while one in the stream draws out,
+  which is what makes a gust read as a gust rather than as everything sliding faster at once.
 - **The fog dissolves; it does not disappear.** Every mass now *expands* monotonically through its
   life while its opacity rises and falls, so it arrives small and dense and leaves wide and thin —
   which is what vapour does. Scaling size and opacity together, the obvious way, gives a shape that
@@ -119,7 +142,9 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
 
 #### The Cloud
 
-About once a minute one mass of fog stops being weather. It gathers, pixelates into a coarse grid of
+About every three and a half minutes one mass of fog stops being weather. (It was once a minute,
+which turned out to be often enough that it stopped being an event and became a feature of the
+scene — you should have half forgotten it can happen.) It gathers, pixelates into a coarse grid of
 chunks, and resolves into an **angel**; the angel decodes into a **grim reaper**; the reaper decodes
 back into The Cloud, now wearing an enormous happy face; and then it comes apart and is fog again.
 Nobody comments on it. It is the only thing in the scene that glitches, and that is the point — the
@@ -127,10 +152,12 @@ fog going to pieces reads as a rendering fault, one object doing it reads as som
 
 Two decisions carry it:
 
-- **The figures are hand-drawn bitmaps, not procedural shapes.** Twenty-two cells across is not
-  enough resolution for anything generated to be recognisable: an angel and a reaper are both "a
-  vertical mass with a lump on top", and the difference between them is a dozen deliberately placed
-  cells. They are ASCII art in the source, four levels deep, where they can be read and edited *as*
+- **The figures are hand-drawn bitmaps, not procedural shapes,** on a 28×34 grid. Twenty-two across
+  was not enough and no amount of care with a dozen cells fixed it — an angel and a reaper are both
+  "a vertical mass with a lump on top" until there is room for a wing to be a wing. Six more columns
+  bought the angel a halo, a head clear of its shoulders and two wings sweeping up behind it, and
+  the reaper a pointed cowl, a hollow with eyes in it, and a crescent blade on a snath that stays
+  outside the robe for its whole length instead of vanishing into it. They are ASCII art in the source, four levels deep, where they can be read and edited *as*
   art. Each carries its own two-colour ramp **and its own opacity**, because the two trade against
   each other — the reaper's near-black void inside a dark-grey cowl comes out eight levels apart
   once it is composited at 84% over mid-grey, and brightening the cowl to fix that makes him a

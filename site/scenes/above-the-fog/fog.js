@@ -41,7 +41,7 @@
 // Everything here is a pure function of `t`. See the note at the top of `site/effects/field.js` for
 // why that is a hard requirement and not a preference.
 
-import { TAU, clamp, smoothstep, wrap01 } from '../../lib/draw.js';
+import { TAU, clamp, rampAt, smoothstep, wrap01 } from '../../lib/draw.js';
 import { curl, fbm, flowAngle, hash2 } from '../../effects/field.js';
 import { lobe, vignette } from '../../effects/volume.js';
 import { drawApparition } from './apparition.js';
@@ -128,8 +128,8 @@ export function planFog(rng) {
     life: rng.range(6, 13),
     phase: rng.next(),
     tone: Math.floor(rng.range(0, 3)),
-    alpha: rng.range(0.09, 0.2),
-    size: rng.range(0.05, 0.13),
+    alpha: rng.range(0.07, 0.15),
+    size: rng.range(0.06, 0.17),
     squash: rng.range(0.16, 0.36),
   }));
 
@@ -138,7 +138,7 @@ export function planFog(rng) {
   const windows = Array.from({ length: 7 }, (_, i) => ({
     id: i * 17.33 + salt * 3.1,
     phase: i / 7 + rng.range(-0.018, 0.018),
-    duty: rng.range(0.2, 0.28),
+    duty: rng.range(0.26, 0.36),
   }));
 
   return { salt, billows, wisps, streaks, windows };
@@ -160,6 +160,36 @@ const cellRand = (col, row, salt, k) =>
  * near-black — objects lying on the fog rather than light falling on it.
  */
 const bankAt = (x, y, S, t) => fbm((x / S) * 0.85 + t * 0.008, (y / S) * 0.85 - t * 0.004, 3);
+
+/* ------------------------------------------------------------------ wind ---- */
+
+// The wind gusts. Two slow sine terms on top of a steady base, at deliberately non-harmonic
+// periods (~57s and ~146s), so the air surges and slackens without ever settling into a rhythm.
+// Never negative: 1 - 0.35 - 0.22 leaves a third of the base speed at the calmest moment.
+const GUST_A = 0.35;
+const GUST_W = 0.11;
+const GUST_B = 0.22;
+const GUST_V = 0.043;
+
+/** The wind's speed at time `t`, as a multiple of the base. */
+const gustAt = (t) => 1 + GUST_A * Math.sin(t * GUST_W) + GUST_B * Math.sin(t * GUST_V + 1.7);
+
+/**
+ * How far the wind has carried something by time `t`, as a multiple of the base speed — the
+ * *integral* of `gustAt`, in closed form.
+ *
+ * This is the whole reason gusting works at all. Multiplying position by a time-varying speed
+ * (`x = speed(t) * t`) is not motion under a changing wind, it is teleportation: raise the speed
+ * and everything that has already travelled instantly jumps further out. Integrating instead means
+ * a gust only affects where things go *from now on*, which is what wind does.
+ */
+const windAt = (t) =>
+  t
+  - (GUST_A / GUST_W) * (Math.cos(t * GUST_W) - 1)
+  - (GUST_B / GUST_V) * (Math.cos(t * GUST_V + 1.7) - Math.cos(1.7));
+
+/** Base wind speed, in fractions of the short edge per second. */
+const WIND = 0.045;
 
 /**
  * One incarnation of a recycled element: which life it is on, how far through, and where that life
@@ -195,6 +225,10 @@ function incarnate(element, t, W, H) {
     n,
     x,
     y,
+    // When this life began, so the wind it has been carried by can be integrated over exactly the
+    // stretch of time it has existed for rather than approximated by a constant rate.
+    born: n * element.life - element.phase * element.life,
+    life: element.life,
     // Zero at both ends: nothing pops into or out of existence.
     swell: Math.sin(u * Math.PI) ** 0.62,
     // Always growing. Never zero, so a mass is never a point.
@@ -203,6 +237,17 @@ function incarnate(element, t, W, H) {
     unrest: 0.6 + 2.4 * u * u,
   };
 }
+
+/**
+ * Where the wind has carried a live element, relative to its home.
+ *
+ * Centred on the middle of its life — half a life's travel upwind at birth, half downwind at death
+ * — so a mass is not always born to the left of where it belongs and the left of the frame does not
+ * run short. And it is the *integral* over the element's own lifetime, so a gust that arrives
+ * halfway through moves it from there rather than retroactively.
+ */
+const carried = (live, t, S) =>
+  (windAt(t) - windAt(live.born) - (windAt(live.born + live.life) - windAt(live.born)) * 0.5) * S * WIND;
 
 /* -------------------------------------------------------------- windows ---- */
 
@@ -216,7 +261,7 @@ function openWindows(fog, t, W, H) {
     const u = cycles - n;
     if (u >= w.duty) continue;
     const open = Math.sin((u / w.duty) * Math.PI) ** 0.7;
-    const r = S * (0.034 + 0.026 * hash2(w.id + 7.3, n)) * open;
+    const r = S * (0.046 + 0.038 * hash2(w.id + 7.3, n)) * open;
     if (r < 2) continue;
     // Held off the very edge of the frame: a peek-a-boo half out of shot is a torn corner.
     const hx = 0.13 + 0.74 * hash2(w.id, n);
@@ -273,9 +318,9 @@ function wash(ctx, W, H, t) {
   const g = ctx.createLinearGradient(0, 0, W * 0.22, H);
   const swing = 0.5 + 0.5 * Math.sin(t * 0.043);
   // The wash breathes, but only a little: it is the one layer that moves the *whole* frame at once.
-  g.addColorStop(0, `rgba(116, 122, 126, ${(0.44 + swing * 0.05).toFixed(4)})`);
-  g.addColorStop(0.55, `rgba(96, 102, 107, ${(0.40 + swing * 0.04).toFixed(4)})`);
-  g.addColorStop(1, `rgba(74, 80, 85, ${(0.46 - swing * 0.04).toFixed(4)})`);
+  g.addColorStop(0, `rgba(116, 122, 126, ${(0.33 + swing * 0.05).toFixed(4)})`);
+  g.addColorStop(0.55, `rgba(96, 102, 107, ${(0.29 + swing * 0.04).toFixed(4)})`);
+  g.addColorStop(1, `rgba(74, 80, 85, ${(0.35 - swing * 0.04).toFixed(4)})`);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 }
@@ -293,17 +338,22 @@ function wash(ctx, W, H, t) {
  */
 function curtain(ctx, W, H, S, t, fog, wins) {
   const cell = Math.hypot(W, H) * 0.058;
-  const shift = (t * S * 0.021) / cell;
+  const shift = (windAt(t) * S * WIND) / cell;
   const base = Math.floor(shift);
   const frac = shift - base;
-  const cols = Math.ceil(W / cell) + 3;
-  const rows = Math.ceil(H / cell) + 3;
+  // Three cells of margin on every side. A lobe reaches almost two cells past its own centre and
+  // can be displaced by another one, so anything closer in and the *outermost* column — whose
+  // identity changes every time the lattice scrolls a whole cell — is still poking into frame when
+  // it does, and pops. It is off screen and costs nothing, and the guarantee is worth the columns.
+  const margin = 3;
+  const cols = Math.ceil(W / cell) + margin * 2;
+  const rows = Math.ceil(H / cell) + margin * 2;
 
-  for (let row = -1; row < rows; row += 1) {
+  for (let row = -margin; row < rows; row += 1) {
     // Rows slide at their own rate. Overhead there is no parallax to sell depth, so this shear is
     // the only cue that says "a thick volume turning over" rather than "a texture scrolling".
     const shear = Math.sin(row * 1.71 + t * 0.11) * cell * 0.36;
-    for (let col = -1; col < cols; col += 1) {
+    for (let col = -margin; col < cols; col += 1) {
       const id = col - base;
       const r1 = cellRand(id, row, fog.salt, 1);
       const r2 = cellRand(id, row, fog.salt, 2);
@@ -314,23 +364,37 @@ function curtain(ctx, W, H, S, t, fog, wins) {
       let x = (col - 1 + frac) * cell + (r1 - 0.5) * cell * 0.52 + shear;
       let y = (row - 1) * cell + (r2 - 0.5) * cell * 0.52;
 
-      // A coherent wander on top, from the divergence-free flow. Bounded to a third of a cell, so
+      // A coherent wander on top, from the divergence-free flow. Bounded to under half a cell, so
       // neighbours breathe and shear against each other without the lattice ever tearing open.
       const v = curl(x / S, y / S, t * 0.55, 2.4);
-      x += v.x * cell * 0.34;
-      y += v.y * cell * 0.34;
+      x += v.x * cell * 0.44;
+      y += v.y * cell * 0.44;
 
       // Tone comes from a slow, large-scale field, not from this cell's own hash. Per-cell tone is
       // salt and pepper: every value appears everywhere, they average out, and the fog has no
       // weather in it. Sampled at a wavelength of several cells, the same six tones become banks —
       // a near-black mass here, a pale one drifting over there.
+      // Continuously, not by index. Picking `CURTAIN[floor(...)]` off a field that drifts is what
+      // made clumps of fog snap: every lobe steps from one grey to the next in a single frame, forty
+      // levels at a time, dozens of times a second across the frame.
       const bank = bankAt(x, y, S, t);
-      const tone = clamp(Math.floor((bank * 1.9 - 0.42 + r1 * 0.2) * CURTAIN.length), 0, CURTAIN.length - 1);
+      const tone = rampAt(CURTAIN, (bank * 1.9 - 0.42 + r1 * 0.2) * (CURTAIN.length - 1));
 
       // Never to zero. This deck is the coverage; it breathes, it does not blink.
       const breath = 0.86 + 0.14 * Math.cos(wrap01((t + r3 * 19) / 19) * TAU);
-      const major = cell * (1.54 + r4 * 0.42) * (0.94 + 0.16 * Math.sin(t * 0.19 + r5 * 9));
-      const minor = major * (0.58 + r5 * 0.28);
+
+      // Stretched along the way it is actually going, and more so the faster it goes. This is the
+      // cheapest honest fluid cue there is: air being dragged past air elongates along the flow,
+      // and because the total velocity is the gusting wind *plus* the local curl, a lobe sitting in
+      // a slack eddy stays round while one in the stream draws out — which is what makes a gust
+      // read as a gust rather than as everything sliding faster.
+      const vx = gustAt(t) * WIND * S + v.x * S * 0.05;
+      const vy = v.y * S * 0.05;
+      const speed = Math.hypot(vx, vy) / (S * WIND);
+      const drag = clamp(speed * 0.42, 0, 1.1);
+
+      const major = cell * (1.56 + r4 * 0.42) * (0.94 + 0.16 * Math.sin(t * 0.19 + r5 * 9)) * (1 + drag * 0.45);
+      const minor = major * (0.58 + r5 * 0.28) / (1 + drag * 0.5);
 
       const alpha = (0.82 + r3 * 0.18) * breath * clearance(wins, x, y, major);
       if (alpha < 0.01) continue;
@@ -341,8 +405,8 @@ function curtain(ctx, W, H, S, t, fog, wins) {
         y,
         major,
         minor,
-        flowAngle(x / S, y / S, t * 0.4, 2.4),
-        CURTAIN[tone],
+        Math.atan2(vy, vx),
+        tone,
         clamp(alpha, 0, 1),
         0.18,
         0.38,
@@ -370,17 +434,17 @@ function billows(ctx, W, H, S, t, fog, wins) {
     if (live.swell < 0.02) continue;
 
     const drift = curl(live.x / S, live.y / S, t * 0.4, 1.6);
-    // Carried by the same wind the lattice runs in, but centred on its home: a life begins half a
-    // travel upwind and ends half a travel downwind, rather than always setting off to the right of
-    // where it was born and leaving the left of the frame short.
-    const travel = S * 0.021 * b.life;
-    const x = live.x + drift.x * S * 0.13 * live.u + travel * (live.u - 0.5);
+    const x = live.x + drift.x * S * 0.13 * live.u + carried(live, t, S);
     const y = live.y + drift.y * S * 0.13 * live.u;
-    // Always expanding, whatever the opacity is doing. This is what makes a mass *dissolve* into
-    // the fog around it rather than shrink back to the point it grew from.
-    const major = S * b.size * live.spread;
-    const minor = major * b.squash;
-    const angle = flowAngle(x / S, y / S, t * 0.3, 1.6);
+    const vx = gustAt(t) * WIND * S + drift.x * S * 0.06;
+    const vy = drift.y * S * 0.06;
+    const drag = clamp((Math.hypot(vx, vy) / (S * WIND)) * 0.4, 0, 1.1);
+    // Always expanding, whatever the opacity is doing — that is what makes a mass *dissolve* into
+    // the fog around it rather than shrink back to the point it grew from — and stretched along the
+    // way it is actually going, more so the faster it goes.
+    const major = S * b.size * live.spread * (1 + drag * 0.4);
+    const minor = (major * b.squash) / (1 + drag * 0.45);
+    const angle = Math.atan2(vy, vx);
     const alpha = b.alpha * live.swell * clearance(wins, x, y, major);
     if (alpha < 0.008) continue;
 
@@ -459,8 +523,7 @@ function wisps(ctx, W, H, S, t, fog, wins) {
     if (live.swell < 0.04) continue;
 
     const drift = curl(live.x / S, live.y / S, t * 0.6, 2.9);
-    const travel = S * 0.028 * w.life;
-    const x = live.x + drift.x * S * 0.2 * live.u + travel * (live.u - 0.5);
+    const x = live.x + drift.x * S * 0.2 * live.u + carried(live, t, S) * 1.25;
     const y = live.y + drift.y * S * 0.2 * live.u;
     // A filament does not just grow, it *draws out*: the major axis runs away with the life while
     // the minor one barely moves, so a soft puff becomes a long thread and then nothing. Watching
@@ -468,8 +531,11 @@ function wisps(ctx, W, H, S, t, fog, wins) {
     // Drawing out is a change in *aspect*, and it has to be bounded. Letting the major axis run
     // while the minor one stands still gives ratios past fifty to one by the end of a life, and a
     // fifty-to-one ellipse is not a filament, it is a scratch on the lens.
-    const major = S * w.size * live.spread * (0.75 + 0.55 * live.u);
-    const minor = major * w.squash * (1.15 - 0.45 * live.u);
+    const vx = gustAt(t) * WIND * S * 1.25 + drift.x * S * 0.1;
+    const vy = drift.y * S * 0.1;
+    const drag = clamp((Math.hypot(vx, vy) / (S * WIND)) * 0.34, 0, 1.2);
+    const major = S * w.size * live.spread * (0.75 + 0.55 * live.u) * (1 + drag * 0.38);
+    const minor = (major * w.squash * (1.15 - 0.45 * live.u)) / (1 + drag * 0.38);
     const alpha =
       w.alpha * live.swell * smoothstep(0.3, 0.66, bankAt(x, y, S, t)) * clearance(wins, x, y, major);
     if (alpha < 0.006) continue;
@@ -480,9 +546,9 @@ function wisps(ctx, W, H, S, t, fog, wins) {
       y,
       major,
       minor,
-      // Aligned to the flow, so the filaments lie along the wind rather than across it — a wisp at
-      // right angles to the direction everything else is travelling reads instantly as a mistake.
-      flowAngle(x / S, y / S, t * 0.5, 2.9),
+      // Along the direction it is actually travelling — a filament at right angles to the way the
+      // air is going reads instantly as a mistake.
+      Math.atan2(vy, vx),
       CREST[w.tone],
       alpha,
       0.06,
@@ -500,8 +566,7 @@ function erosion(ctx, W, H, S, t, fog, wins) {
     if (live.swell < 0.04) continue;
 
     const drift = curl(live.x / S, live.y / S, t * 0.5, 2.3);
-    const travel = S * 0.021 * s.life;
-    const x = live.x + drift.x * S * 0.17 * live.u + travel * (live.u - 0.5);
+    const x = live.x + drift.x * S * 0.17 * live.u + carried(live, t, S) * 1.1;
     const y = live.y + drift.y * S * 0.17 * live.u;
     const major = S * s.size * live.spread * (0.8 + 0.5 * live.u);
     // The mirror of the crest gate. Between them, a pale bank gets both the brightest and the
@@ -518,7 +583,7 @@ function erosion(ctx, W, H, S, t, fog, wins) {
       y,
       major,
       major * s.squash * (1.15 - 0.4 * live.u),
-      flowAngle(x / S, y / S, t * 0.44, 2.3),
+      Math.atan2(drift.y * S * 0.08, gustAt(t) * WIND * S * 1.1 + drift.x * S * 0.08),
       [VOID, COAL, PITCH][s.tone],
       alpha,
       0.16,
