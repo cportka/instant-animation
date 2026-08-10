@@ -196,9 +196,13 @@ function readLobes(ops) {
   let pending = null;
 
   for (const op of ops) {
-    if (op === 'save') {
+    // `save()` and `restore()`, with the parentheses — the recorder formats every op as a call, and
+    // matching the bare words silently left the composite-mode stack un-pushed. Nothing failed while
+    // the first `lighter` in a frame came *after* everything that had to be counted; the moment the
+    // ground started lighting fires before the fog, every lobe in the scene was misread as additive.
+    if (op === 'save()') {
       modes.push(modes[modes.length - 1]);
-    } else if (op === 'restore') {
+    } else if (op === 'restore()') {
       if (modes.length > 1) modes.pop();
       pending = null;
     } else if (op.startsWith('set:globalCompositeOperation(')) {

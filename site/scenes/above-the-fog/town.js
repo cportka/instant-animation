@@ -18,7 +18,7 @@
 // nothing here is more than about 20% saturated — because inverting a near-neutral leaves a
 // near-neutral.
 
-import { TAU, clamp, lerp } from '../../lib/draw.js';
+import { TAU, clamp, glow, lerp, rgba, wrap01 } from '../../lib/draw.js';
 import { fbm, hash2, noise2 } from '../../effects/field.js';
 
 /* ------------------------------------------------------------- palette ---- */
@@ -48,6 +48,15 @@ const JEWEL = ['#a39087', '#929fa8', '#8897a5', '#a08a99', '#8a9f95', '#998f83']
 
 const TREE = ['#d0c5d3', '#c8bccf', '#c0b4c9'];
 const TREE_LIT = '#b5a8bf';
+
+// The only saturated thing anywhere in this gallery's third animation, and deliberately so. Every
+// other colour in the scene has been pulled to within twenty percent of neutral and then inverted;
+// against that, a cyan and a green at full chroma do not read as "some coloured pixels", they read
+// as the one thing in frame that is *lit* rather than merely visible. Which is what fire is.
+const FIRE = {
+  blue: { body: [64, 200, 255], core: [214, 246, 255] },
+  green: { body: [72, 255, 158], core: [222, 255, 236] },
+};
 
 /* ---------------------------------------------------------------- plan ---- */
 
@@ -147,7 +156,30 @@ export function planGround(rng) {
     len: rng.range(0.12, 0.36),
   }));
 
-  return { river, buildings, trees, fields, townFrom, townTo, side };
+  // Fires. Placed off the water and thinned out near the houses, because the interesting thing is
+  // one burning in a field with nothing around it rather than a town on fire.
+  const fires = [];
+  for (let i = 0; i < 120 && fires.length < 7; i += 1) {
+    const fx = rng.next();
+    const fy = rng.next();
+    const near = nearestRiver(river, fx, fy);
+    if (near.distance < near.width * 1.1) continue;
+    if (fires.some((f) => Math.hypot(f.x - fx, f.y - fy) < 0.16)) continue;
+    fires.push({
+      x: fx,
+      y: fy,
+      hue: i % 2 ? 'blue' : 'green',
+      r: rng.range(0.012, 0.028),
+      rate: rng.range(0.7, 1.7),
+      phase: rng.range(0, 20),
+      // Seconds between neon bursts, and where in that cycle this one is. Prime-ish and unequal, so
+      // seven fires never come to agree.
+      burst: rng.range(11, 27),
+      burstPhase: rng.next(),
+    });
+  }
+
+  return { river, buildings, trees, fields, fires, townFrom, townTo, side };
 }
 
 /** A point on the river at parameter `u` in 0..1, with the tangent angle and half-width there. */
@@ -195,6 +227,116 @@ export function drawGround(ctx, W, H, t, ground) {
   drawRoads(ctx, W, H, ground);
   drawTrees(ctx, W, H, S, ground.trees);
   drawBuildings(ctx, W, H, S, ground.buildings);
+  drawFires(ctx, W, H, S, t, ground.fires);
+}
+
+/**
+ * How hard a fire is flaring right now, 0..1 — zero almost all of the time.
+ *
+ * Exported because the fog draws the *scatter* of these, and the two have to agree exactly: light
+ * from below and the glow it throws into the cloud above it are one event, and computing the
+ * envelope twice is how they end up a frame apart.
+ */
+export function burstAt(fire, t) {
+  const u = wrap01(t / fire.burst + fire.burstPhase);
+  const width = 0.1;
+  return u < width ? Math.sin((u / width) * Math.PI) ** 0.7 : 0;
+}
+
+/**
+ * The fires seen *through* the fog: a coloured bloom on the near side of the whole cloud.
+ *
+ * Fog does not simply hide a light, it carries it — a lamp inside a bank of it turns the bank into
+ * the lamp, over a radius many times the source. So this is drawn after all the weather rather than
+ * with the flame, is an order of magnitude wider and far fainter than what makes it, and is the
+ * only reason a fire under a hundred feet of cloud registers at all. It is also the one place any
+ * colour survives to the top of the frame, so the scene reads as grey weather with something
+ * burning underneath it rather than as grey weather.
+ */
+export function fireBloom(ctx, W, H, S, t, fires) {
+  if (!fires) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const fire of fires) {
+    const burst = burstAt(fire, t);
+    const flicker = flickerAt(fire, t);
+    const { body } = FIRE[fire.hue];
+    const spread = S * fire.r * (3.4 + burst * 7) * (0.85 + flicker * 0.3);
+    // Between bursts this is a faint coloured stain in the cloud and nothing more. A burst is meant
+    // to be the one moment the scene has a colour in it, so it climbs by an order of magnitude.
+    const centre = clamp(0.045 + burst * 0.3, 0, 1);
+    // `glow`'s last argument is the alpha at 45% of the radius, not a falloff rate. Handing it a
+    // number larger than the centre alpha turns the glow inside out and draws a *ring* — which is
+    // what a light in fog is emphatically not, and looked like seven flying saucers.
+    glow(ctx, fire.x * W, fire.y * H, spread, body, centre, centre * 0.5);
+  }
+  ctx.restore();
+}
+
+/** The flame's own unsteadiness, separate from the bursts. */
+export const flickerAt = (fire, t) =>
+  0.62 + 0.38 * (noise2(fire.phase, t * fire.rate * 2.6) * 0.65 + noise2(fire.phase + 7.3, t * fire.rate * 6.1) * 0.35);
+
+/**
+ * Fires, in blue and green, with the occasional neon burst.
+ *
+ * Drawn additively — they are light, not paint, and a flame composited normally over grass is a
+ * coloured shape lying on it. `lighter` is also what lets the core go white without a white in the
+ * palette: enough saturated blue on top of itself simply arrives there.
+ */
+function drawFires(ctx, W, H, S, t, fires) {
+  if (!fires) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+
+  for (const fire of fires) {
+    const x = fire.x * W;
+    const y = fire.y * H;
+    const flicker = flickerAt(fire, t);
+    const burst = burstAt(fire, t);
+    const { body, core } = FIRE[fire.hue];
+    const r = S * fire.r;
+
+    // A fire is a small bright thing. Most of what you ever see of one is the light it throws into
+    // the cloud above it — see `fireBloom` — so the flame itself stays modest and the burst does the
+    // shouting.
+    glow(ctx, x, y, r * (1.9 + burst * 2.6) * flicker, body, clamp(0.22 * flicker + burst * 0.5, 0, 1), 0.1);
+    glow(ctx, x, y, r * (0.7 + burst * 0.45) * flicker, core, clamp(0.34 + burst * 0.5, 0, 1), 0.28);
+
+    if (burst > 0.03) {
+      // The burst: a ring going out, and a few spikes with it. Both thin and both brief — a neon
+      // tube's whole character is that it is a *line* of light, so anything soft here would read as
+      // a second glow rather than as a discharge.
+      //
+      // The ring is **broken**, and the spikes are at hashed angles rather than even ones. An
+      // unbroken circle with nine evenly spaced rays is a compass rose: the one shape in the frame
+      // that could only have been produced by arithmetic.
+      const reach = r * (1.2 + burst * 4);
+      ctx.strokeStyle = rgba(core, clamp(burst * 0.6, 0, 1));
+      ctx.lineWidth = Math.max(1, S * 0.0013);
+      ctx.beginPath();
+      for (let i = 0; i < 5; i += 1) {
+        const from = (i / 5) * TAU + fire.phase * 0.7;
+        const arc = TAU * (0.06 + 0.11 * hash2(fire.phase + i, i * 3.1));
+        ctx.arc(x, y, reach * (0.92 + 0.16 * hash2(i * 5.3, fire.phase)), from, from + arc);
+      }
+      ctx.stroke();
+
+      ctx.strokeStyle = rgba(body, clamp(burst * 0.7, 0, 1));
+      ctx.lineWidth = Math.max(1, S * 0.0018);
+      ctx.beginPath();
+      for (let i = 0; i < 6; i += 1) {
+        const a = hash2(fire.phase + i * 2.7, i) * TAU;
+        const from = reach * (0.4 + 0.3 * hash2(i, fire.phase));
+        const to = reach * (0.9 + 0.6 * noise2(i * 2.3 + fire.phase, t * 2.4));
+        ctx.moveTo(x + Math.cos(a) * from, y + Math.sin(a) * from);
+        ctx.lineTo(x + Math.cos(a) * to, y + Math.sin(a) * to);
+      }
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
 }
 
 /** Grass, in patches. One flat green over the whole frame reads as felt. */

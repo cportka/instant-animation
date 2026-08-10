@@ -227,10 +227,10 @@ function compile(art, dark, light, opacity) {
 // pale figure, which is a ghost, not a reaper. Keeping the ramp dark and taking his opacity almost
 // to solid gets a black hollow inside a dark cloak, which is the thing itself.
 export const FIGURES = [
-  compile(CLOUD, ASH, LINEN, 0.8),
-  compile(ANGEL, ASH, SNOW, 0.86),
-  compile(REAPER, VOID, SLATE, 0.96),
-  compile(FACE, PITCH, SNOW, 0.88),
+  compile(CLOUD, ASH, LINEN, 0.6),
+  compile(ANGEL, ASH, SNOW, 0.68),
+  compile(REAPER, VOID, SLATE, 0.82),
+  compile(FACE, PITCH, SNOW, 0.7),
 ];
 
 /** Where in its life each figure is fully itself. Between them, the cells change over. */
@@ -296,12 +296,16 @@ export function apparitionAt(t) {
  * Cells are batched into one path per (figure, level) — at most six fills for the whole thing, even
  * mid-morph with two figures on screen at once and every cell displaced by its own amount.
  */
-export function drawApparition(ctx, W, H, t, tone = 1) {
+export function drawApparition(ctx, W, H, t, densityAt = null) {
   const event = apparitionAt(t);
   if (!event) return;
 
   const S = Math.min(W, H);
   const size = S * 0.6;
+  // How much of it survives the cloud directly above it. The caller owns the fog's own density
+  // field, so it hands one in rather than this file growing a second opinion about where the banks
+  // are — two fields disagreeing would put the figure brightest exactly where the fog is thickest.
+  const tone = densityAt ? clamp(densityAt(event.x * W, event.y * H), 0.15, 1) : 1;
   const cell = size / ROWS;
   const originX = event.x * W - (COLS * cell) / 2;
   const originY = event.y * H - size / 2;
@@ -390,22 +394,24 @@ export function drawApparition(ctx, W, H, t, tone = 1) {
     }
   }
 
-  // Two masses drifting across the front of it. Without these the grid has nothing between it and
-  // the viewer, and a hard-edged thing with clear air in front of it is the one arrangement that
-  // cannot be happening inside a fog bank.
-  for (let i = 0; i < 2; i += 1) {
-    const drift = t * 0.06 + i * 2.1;
+  // Five masses drifting across the front of it, at both ends of the ramp. Without these the grid
+  // has nothing between it and the viewer, and a hard-edged thing with clear air in front of it is
+  // the one arrangement that cannot be happening inside a bank of fog. Dark ones as well as pale:
+  // a figure only ever veiled by white haze reads as lit from in front, which is a spotlight, not
+  // weather.
+  for (let i = 0; i < 5; i += 1) {
+    const drift = t * 0.07 + i * 1.27;
     lobe(
       ctx,
-      event.x * W + Math.cos(drift) * size * 0.42,
-      event.y * H + Math.sin(drift * 0.7 + i) * size * 0.3,
-      size * (0.42 + i * 0.16),
-      size * (0.24 + i * 0.1),
-      Math.sin(drift * 0.3) * 0.5,
-      i ? STONE : LINEN,
-      clamp(0.26 * event.presence * tone, 0, 1),
+      event.x * W + Math.cos(drift) * size * (0.2 + i * 0.12),
+      event.y * H + Math.sin(drift * 0.7 + i * 1.9) * size * (0.16 + i * 0.09),
+      size * (0.34 + i * 0.11),
+      size * (0.2 + i * 0.07),
+      Math.sin(drift * 0.3 + i) * 0.7,
+      [LINEN, STONE, ASH, PITCH, LINEN][i],
+      clamp((i === 3 ? 0.3 : 0.34) * event.presence * tone, 0, 1),
       0.1,
-      0.44,
+      0.46,
       event.n + i * 5.1 + t * 0.9,
     );
   }

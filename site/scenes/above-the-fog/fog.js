@@ -45,6 +45,7 @@ import { TAU, clamp, rampAt, smoothstep, wrap01 } from '../../lib/draw.js';
 import { curl, fbm, flowAngle, hash2 } from '../../effects/field.js';
 import { lobe, vignette } from '../../effects/volume.js';
 import { drawApparition } from './apparition.js';
+import { burstAt, fireBloom, flickerAt } from './town.js';
 
 /* ------------------------------------------------------------- palette ---- */
 
@@ -293,19 +294,23 @@ function clearance(wins, x, y, R) {
 
 /* ----------------------------------------------------------------- draw ---- */
 
-export function drawFog(ctx, W, H, t, fog) {
+export function drawFog(ctx, W, H, t, fog, fires) {
   const S = Math.min(W, H);
   const wins = openWindows(fog, t, W, H);
 
   wash(ctx, W, H, t);
   curtain(ctx, W, H, S, t, fog, wins);
+  // The apparition goes in *early* — under the billows, the crests, the filaments and the dark
+  // strands, all of which then pass in front of it. Drawn late it was a sprite on the weather;
+  // drawn here it is a thing happening some way down inside a bank of it. It is also dimmed by
+  // however thick the fog is directly above it, which is the other half of the same idea.
+  drawApparition(ctx, W, H, t, (x, y) => 1 - 0.5 * bankAt(x, y, S, t));
   billows(ctx, W, H, S, t, fog, wins);
-  // The apparition sits *inside* the weather, not on top of it: the filaments and the dark strands
-  // below still pass in front of it, so it is a thing the fog is doing rather than a thing drawn
-  // over the fog.
-  drawApparition(ctx, W, H, t);
   wisps(ctx, W, H, S, t, fog, wins);
   erosion(ctx, W, H, S, t, fog, wins);
+  // Light from the fires below, scattered by everything above it. Last, because that light has come
+  // through the whole depth of the cloud and lands on the near side of all of it.
+  fireBloom(ctx, W, H, S, t, fires);
   vignette(ctx, W, H, VOID, 0.34);
 }
 

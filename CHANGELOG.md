@@ -15,11 +15,11 @@ MAJOR bump means here — see `.claude/CLAUDE.md`.
 
 ### The third animation — "Above the Fog"
 
-From *"an overhead view of tons of billowing flowing fog, wisps dissolving and changing into each
-other, over a lazy winding river and a cute riverside town with a cafe, a restaurant and twelve
-jewellery shops — the ground in reversed colour and barely ever visible, and every few minutes one
-cloud pixelates into an angel, then a grim reaper, then a giant happy face before dissolving back
-into fog"*.
+From *"an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and
+changing into each other, over a lazy winding river and a cute riverside town with a cafe, a
+restaurant and twelve jewellery shops — the ground in reversed colour and barely ever visible with
+blue and green fires burning on it, and every few minutes one cloud pixelates into an angel, then a
+grim reaper, then a giant happy face before dissolving back into fog"*.
 
 Straight down and orthographic, so there is no perspective anywhere in it and no horizon to hang
 depth on. Every cue that says *thick moving volume of air* rather than *scrolling texture* has to
@@ -45,7 +45,7 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   by cloud, which windows can thin, rather than by haze, which they cannot. All seven windows share
   one period with their phases spread evenly around it — give them slightly different periods and
   they drift into alignment eventually and hand you a frame with the fog half gone. The typical
-  typical point in frame is about **97% obscured** and the clearest point in any frame around 40%,
+  point in frame is about **97% obscured** and the clearest point in any frame around 40%,
   both measured off the recorded op stream at every sample time — and *both* are asserted, because
   fog thick enough to satisfy the coverage bound and never open at all is a change that looks like
   an improvement right up until the scene has nothing underneath it.
@@ -140,6 +140,28 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   scene beneath runs all the way to near-white and an arrow with only a glow disappears the moment a
   lit crest passes under it.
 
+- **Something is burning down there, in blue and green.** Seven fires in the fields, off the water
+  and away from the houses — one burning alone in a field is more interesting than a town on fire —
+  each throwing the occasional **neon burst**: a broken ring going out with a few spikes, thin and
+  brief, because a neon tube's whole character is that it is a *line* of light and anything soft
+  would read as a second glow. They are the only saturated thing in the gallery's third animation,
+  and that is the point: against a scene pulled to within twenty percent of neutral and then
+  inverted, a cyan and a green at full chroma do not read as coloured pixels, they read as the one
+  thing in frame that is *lit* rather than merely visible.
+
+  The half that makes it work is that the fires are drawn twice. The flame itself is small, under
+  the whole depth of the cloud, and mostly invisible. What you actually see is its light **scattered
+  by the fog above it** — an order of magnitude wider, far fainter, drawn last of everything,
+  because fog does not hide a light so much as carry it: a lamp inside a bank turns the bank into
+  the lamp. It is the only colour that survives to the top of the frame, so the scene reads as grey
+  weather with something burning underneath rather than as grey weather.
+
+  Two mistakes worth keeping, both from the same misreading. `glow`'s last argument is the alpha at
+  45% of the radius, not a falloff rate — handing it a number larger than the centre alpha turns the
+  gradient inside out and draws a **ring**, which is emphatically not what a light in fog looks like
+  and rendered as seven flying saucers. And the first burst was a full circle with nine evenly
+  spaced rays: a compass rose, the one shape in frame that could only have come from arithmetic.
+
 #### The Cloud
 
 About every three and a half minutes one mass of fog stops being weather. (It was once a minute,
@@ -168,6 +190,13 @@ Two decisions carry it:
   dissolved into the reaper, it is *replaced* by it, cell by cell, in a scatter — and the cells
   nearest the threshold shove sideways while they change. That is what a decoder does when handed a
   keyframe it cannot fully apply.
+
+It is drawn **early** — under the billows, the crests, the filaments and the dark strands, all of
+which pass in front of it — and dimmed by however thick the fog is directly above it, sampling the
+scene's own density field rather than growing a second opinion about where the banks are. Drawn
+late it was a sprite on the weather; drawn here it is a thing happening some way down inside a bank
+of it. Five masses drift across its face, dark ones as well as pale: a figure only ever veiled by
+white haze reads as lit from in front, which is a spotlight, not weather.
 
 At most six fills for the whole thing, mid-morph, with two figures on screen and every cell
 displaced by its own amount. `tests/fog.test.js` asserts one apparition per cycle with genuinely

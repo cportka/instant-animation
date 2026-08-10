@@ -5,7 +5,8 @@
 //
 // Two layers, and almost all of the interest is in the one you can barely see through.
 //
-// `town.js` draws the ground straight down: river, roads, roofs, four hundred trees. It is built
+// `town.js` draws the ground straight down: river, roads, roofs, four hundred trees, and seven
+// fires burning blue and green in the fields. It is built
 // entirely out of *value* rather than detail, because it is only ever glimpsed — drop a gap
 // anywhere and the shapes have to read in the second or so before the fog closes again.
 //
@@ -32,7 +33,7 @@ export const meta = {
   id: 'above-the-fog',
   title: 'Above the Fog',
   prompt:
-    'an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and changing into each other, over a lazy winding river and a cute riverside town with a cafe, a restaurant and twelve jewellery shops — the ground in reversed colour and barely ever visible, and every few minutes one cloud pixelates into an angel, then a grim reaper, then a giant happy face before dissolving back into fog',
+    'an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and changing into each other, over a lazy winding river and a cute riverside town with a cafe, a restaurant and twelve jewellery shops — the ground in reversed colour and barely ever visible with blue and green fires burning on it, and every few minutes one cloud pixelates into an angel, then a grim reaper, then a giant happy face before dissolving back into fog',
   created: '2026-08-09',
   background: '#0e1113',
   // Mid-apparition, on the beat where the reaper has fully resolved. Of everything this scene does
@@ -72,7 +73,7 @@ export function create({ width, height, seed = meta.id }) {
     draw(ctx, t) {
       ctx.save();
       drawGround(ctx, W, H, t, ground);
-      drawFog(ctx, W, H, t, fog);
+      drawFog(ctx, W, H, t, fog, ground.fires);
       ctx.restore();
     },
   };
