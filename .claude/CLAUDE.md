@@ -189,6 +189,23 @@ catch yourself about to write the word "tag" in a message to the owner, don't.
 
   Add a row when you cut one. If you are about to bump MAJOR and cannot fill in both columns, it
   is not a MAJOR.
+
+- **A new animation brings its own chrome and its own way of being arrived at.** Every MAJOR — which
+  here means exactly "a new animation begins" — must also land these two, and they are not optional
+  polish:
+
+  | in `meta` | what it styles | where it lives |
+  | --- | --- | --- |
+  | `chrome` | the nav chevrons while the scene is mounted | a glyph in `site/index.html` + a rule in `site/styles.css` |
+  | `transition` | the channel change **into** the scene | a case in `site/effects/transitions.js` |
+
+  The channel change wears the scene it is **arriving at**, not the one it is leaving: the transition
+  introduces the next animation, and that animation is what you are left looking at when it settles.
+  Build each one out of that scene's own primitives — the pixel change uses `effects/pixel.js`, the
+  vapour change uses `effects/volume.js` — so a change cannot drift away from the scene it belongs
+  to. `tests/scenes.test.js` fails on a scene that declares neither, or that names one nobody
+  implements; the default would silently be the VHS tape change, which belongs to one animation and
+  is wrong for every other.
 - **The gallery is ordered newest → oldest.** `site/scenes/index.js` lists scenes newest-first,
   a new animation goes at the **front** of that array, and `tests/scenes.test.js` fails if the
   order stops matching `meta.created` descending. The front-end depends on it: down means older,
