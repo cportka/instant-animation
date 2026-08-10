@@ -61,6 +61,9 @@ export const meta = {
   background: '#02010a',
   // Where the still frame is taken when the visitor prefers reduced motion.
   posterTime: 34,
+  // ...and so does the way you arrive. The channel change into it is the tape failing: displaced slices, chroma
+  // pulled apart, a bright seam riding the join.
+  transition: 'tape',
   // The nav arrows wear the scene: the soft neon chevron this animation was designed around.
   chrome: 'neon',
   // Render at CSS resolution, not retina. The tape artefacts are full-screen fill-rate work, and

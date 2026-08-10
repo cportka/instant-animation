@@ -1,12 +1,17 @@
 // The stage: one canvas, one scene at a time — and the channel change between them.
 //
+// The change itself lives in `site/effects/transitions.js` and is chosen by the *incoming* scene's
+// `meta.transition`. The stage's part is only the mechanics: draw the two scenes exactly adjacent,
+// push them past each other, and hand the composite to whichever change the next animation wants.
+//
 // It owns everything a scene shouldn't have to think about: device pixel ratio, resizing, the
 // animation loop, pausing in a hidden tab, honouring `prefers-reduced-motion`, and the transition.
 // A scene only ever receives a 2D context, a clock, and its size, which is also what makes scenes
 // testable in Node against a stub context.
 
 import { smoothstep } from './draw.js';
-import { chromaSplit, createTape, makeTearBands, seam, tearBands } from '../effects/vhs.js';
+import { createTape } from '../effects/vhs.js';
+import { channelChange, makeChannelChange } from '../effects/transitions.js';
 import { createRng } from './rng.js';
 
 // Past 2x the extra pixels cost far more than they show. A scene can ask for less via
@@ -23,7 +28,7 @@ const MIN_QUALITY = 0.4;
  */
 export function createStage(canvas, options = {}) {
   const ctx = canvas.getContext('2d', { alpha: false });
-  const glitchBands = makeTearBands(createRng('channel-change'), 7);
+  const change = makeChannelChange(createRng('channel-change'));
   // One scratch buffer for the whole stage: the channel change uses it, and every scene is handed
   // the same one so the tape artefacts stay fast. See `createTape`.
   const tape = createTape();
@@ -98,13 +103,23 @@ export function createStage(canvas, options = {}) {
     paint(outgoing, -p * height * direction, dt);
     paint(current, (1 - p) * height * direction, dt);
 
-    // Then wreck the composite. Peaks in the middle of the move and settles at both ends.
+    // Then wreck the composite, in the language of the scene being arrived at. Peaks in the middle
+    // of the move and settles at both ends.
     const violence = Math.sin(p * Math.PI);
+    const seamY = (1 - p) * height * direction + (direction > 0 ? 0 : height);
     tape?.capture(ctx);
     ctx.save();
-    tearBands(ctx, width, height, current.elapsed, glitchBands, 0.6 + violence * 5, tape);
-    chromaSplit(ctx, width, height, current.elapsed, violence * 6, tape);
-    seam(ctx, width, (1 - p) * height * direction + (direction > 0 ? 0 : height), violence);
+    channelChange(
+      current.module.meta.transition,
+      ctx,
+      width,
+      height,
+      current.elapsed,
+      violence,
+      seamY,
+      change,
+      tape,
+    );
     ctx.restore();
   }
 

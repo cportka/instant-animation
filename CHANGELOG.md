@@ -147,6 +147,35 @@ displaced by its own amount. `tests/fog.test.js` asserts one apparition per cycl
 varying gaps, and that all four figures resolve, in order, one at a time — if a morph window ever
 swallowed a figure whole, nothing else in the suite would notice.
 
+### Changed — the channel change wears the scene it arrives at
+
+Moving between animations used to run one hard-coded effect: displaced slices, chroma pulled apart,
+a bright seam. That is the language of *Asleep Among the Stars* and of nothing else, so arriving at
+a 16-bit sunset through analogue smear announced the wrong thing about where you were going.
+
+It is now `meta.transition`, dispatched in `site/effects/transitions.js`, and each one is built out
+of the primitives of the scene it belongs to so the two cannot drift apart:
+
+| | |
+| --- | --- |
+| **tape** | the tape failing — displaced slices, chroma apart, a bright seam riding the join |
+| **pixel** | a screen of tiles being rewritten out of order, every displacement a whole number of chunks, the join lit like a sodium lamp with a Bayer falloff instead of a gradient |
+| **vapour** | weather closing over the join and opening on the other side — nothing displaced and nothing sampled, because fog does not damage a picture, it hides it |
+
+A change wears the scene it is **arriving at**, not the one it is leaving: the transition's job is to
+introduce the next animation, and that animation is what you are left looking at when it settles.
+
+Two things fell out of building them. The pixel change has to snap *every* displacement to whole
+chunks — a band sliding by half a chunk next to hard-edged art reads as neither, and it is the one
+tell that would give the style away. And the vapour bank needed spreading in depth as well as width:
+puffs of similar size on a single line merge into one smooth white lozenge, which is a bar drawn
+across the picture rather than weather closing over it.
+
+`.claude/CLAUDE.md` and `docs/AUTHORING.md` now say so as a standing rule — a new animation, which
+is the only thing that earns a MAJOR here, brings its own nav chrome *and* its own channel change.
+`tests/scenes.test.js` fails on a scene that declares neither or names one nobody implements, since
+the silent default is the tape change and that belongs to exactly one animation.
+
 ### Changed — every scene is its own self-contained thing
 
 The gallery had grown to the point where "a scene" meant one very long file and the shared code was

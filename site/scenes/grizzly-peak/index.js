@@ -24,6 +24,9 @@ export const meta = {
   created: '2026-08-09',
   background: '#050b2e',
   posterTime: 12,
+  // ...and so does the way you arrive. The channel change into it is a screen of tiles being rewritten out of
+  // order — every displacement a whole number of chunks, and the seam lit like a sodium lamp.
+  transition: 'pixel',
   // The nav arrows wear the scene: a stepped sprite in sodium amber, hard shadow, no glow.
   chrome: 'pixel',
   // Pixel art wants one device pixel per drawn pixel. At 2x the chunks are drawn twice as fine and

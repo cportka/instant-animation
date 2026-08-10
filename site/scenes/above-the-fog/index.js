@@ -39,6 +39,9 @@ export const meta = {
   // that is the frame worth freezing, and a still of undisturbed fog would be honest and would also
   // be a grey rectangle.
   posterTime: 13.4,
+  // ...and so does the way you arrive. The channel change into it is weather: the bank closes over the join and
+  // opens again on the other side, hiding rather than damaging.
+  transition: 'vapour',
   // The nav arrows wear the scene: a chevron of soft grey vapour with no colour in it at all.
   chrome: 'vapour',
   // The fog is a couple of hundred large gradient fills a frame, which is fill-rate work and

@@ -28,6 +28,9 @@ export const meta = {
   created: '2026-08-07',     // YYYY-MM-DD
   background: '#04050d',     // page colour behind the canvas (optional)
   posterTime: 7.4,           // the moment to freeze on for reduced motion (optional)
+  chrome: 'neon',            // which nav chevron the scene wears
+  transition: 'tape',        // the channel change *into* this scene
+  maxDpr: 2,                 // cap the render scale; lo-fi scenes want 1 (optional)
 };
 
 export function create({ width, height, seed }) {
@@ -49,6 +52,14 @@ oldest and the front-end depends on that order:
 import * as myScene from './my-scene/index.js';
 export const scenes = [myScene, aboveTheFog, grizzlyPeak, floatingBed];
 ```
+
+**A new animation brings its own chrome and its own channel change.** `meta.chrome` picks which nav
+chevron is shown (a glyph in `index.html`, a rule in `styles.css`); `meta.transition` picks how the
+gallery *arrives* at the scene (a case in `site/effects/transitions.js`). Build the change out of
+your scene's own primitives, and note that it wears the scene being **arrived at** rather than the
+one being left — the transition's job is to introduce the next animation. Both are checked:
+`tests/scenes.test.js` fails on a scene that declares neither or names one nobody implements, and
+the silent default is the VHS tape change, which belongs to one animation and is wrong for the rest.
 
 A new animation is also the moment — the *only* moment — to cut a **MAJOR** version. In this repo
 that bump means one thing: the previous animation is finished and this one has begun. Nothing else

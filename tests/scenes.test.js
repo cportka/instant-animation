@@ -6,6 +6,9 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { scenes, findScene } from '../site/scenes/index.js';
+import { TRANSITIONS, channelChange, makeChannelChange } from '../site/effects/transitions.js';
+import { createRng } from '../site/lib/rng.js';
+import { createRecordingContext } from './helpers/recording-context.mjs';
 
 const sceneDir = fileURLToPath(new URL('../site/scenes/', import.meta.url));
 
@@ -92,3 +95,43 @@ test('no scene reaches into another scene', () => {
 
 const folders_ = (dir) =>
   readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+
+test('every scene brings its own way of being arrived at', () => {
+  // A scene naming a change nobody implements falls back silently to the tape one — which is the
+  // VHS scene's language, and is exactly the mismatch this whole mechanism exists to stop.
+  for (const { meta } of scenes) {
+    assert.ok(meta.transition, `${meta.id}: no meta.transition — pick one of ${TRANSITIONS.join(', ')}`);
+    assert.ok(
+      TRANSITIONS.includes(meta.transition),
+      `${meta.id}: meta.transition "${meta.transition}" is not implemented`,
+    );
+  }
+  // And they have to actually differ, or this is one effect wearing three names.
+  assert.ok(new Set(scenes.map((s) => s.meta.transition)).size > 1);
+});
+
+test('every channel change draws, cleanly and the same way twice', () => {
+  const change = makeChannelChange(createRng('channel-change'));
+  const run = (kind, violence) => {
+    const rec = createRecordingContext({ width: 1280, height: 720 });
+    channelChange(kind, rec.ctx, 1280, 720, 4.5, violence, 360, change, null);
+    return rec;
+  };
+
+  const shapes = new Map();
+  for (const kind of TRANSITIONS) {
+    const rec = run(kind, 0.8);
+    // Ops rather than paints: the pixel change does most of its work through `drawImage` and a
+    // couple of batched paths, so counting fills would call a change that redraws the whole frame
+    // "four paints" and let an empty one through.
+    assert.ok(rec.ops.length > 60, `${kind} barely drew anything (${rec.ops.length} ops)`);
+    assert.ok(rec.paints > 0, `${kind} painted nothing at all`);
+    rec.assertClean(`channel change ${kind}`);
+    assert.equal(rec.depth, 0, `${kind}: unbalanced save/restore`);
+    assert.deepEqual(run(kind, 0.8).ops, rec.ops, `${kind} is not deterministic`);
+    // Settled at both ends of the move: a change still drawing at rest is an overlay.
+    assert.equal(run(kind, 0).paints, 0, `${kind} still draws at zero violence`);
+    shapes.set(kind, rec.ops.join('|'));
+  }
+  assert.equal(new Set(shapes.values()).size, TRANSITIONS.length, 'two changes draw identically');
+});
