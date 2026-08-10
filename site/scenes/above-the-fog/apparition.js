@@ -5,13 +5,19 @@
 // decodes back into The Cloud, now wearing an enormous happy face; and then it comes apart and is
 // fog again. Nobody comments on it.
 //
-// Two decisions carry the whole effect.
+// Three decisions carry the whole effect.
 //
-// **The figures are hand-drawn bitmaps, not procedural shapes.** Twenty-two cells across is not
+// **The figures are hand-drawn bitmaps, not procedural shapes.** Twenty-eight cells across is not
 // enough resolution for anything generated to be recognisable — an angel and a reaper are both "a
-// vertical mass with a lump on top", and the difference between them is entirely in a dozen
+// vertical mass with a lump on top", and the difference between them is entirely in a few dozen
 // deliberately placed cells. So they are drawn as ASCII art, four levels deep, and the art is in
 // the source where it can be read and edited as art.
+//
+// What separates a figure from a lump, at this size, is a **silhouette that changes width in a
+// recognisable order** — halo, head, shoulders, wings, robe — and *one direction of light*, so every
+// figure is lit down its left edge and shadowed down its right. A shape that widens smoothly from
+// top to bottom is a bowling pin, and a shape drawn in a single tone is a sticker. Both of those
+// were shipped here before this note existed, twice.
 //
 // **The morph is a per-cell coin toss, not a cross-fade.** Each cell picks the *old* figure or the
 // *new* one depending on whether its own hash has been passed by a sweeping threshold, so the angel
@@ -19,6 +25,11 @@
 // a decoder does when it is handed a keyframe it cannot fully apply, and it is the reason this
 // reads as a picture failing rather than as an animation playing. Cells near the threshold also
 // shove sideways, which is the same artefact carried into position.
+//
+// **It is veiled cell by cell, not as a whole.** The fog's own density field decides how much of
+// each cell comes through, so the figure surfaces out of the bank unevenly and the pattern crawls
+// across it as the weather drifts. One opacity for the entire apparition is a decal turned down —
+// uniformly faint, and still unmistakably lying *on* the picture rather than inside it.
 //
 // Everything is a pure function of `t`. See `site/effects/field.js`.
 
@@ -32,78 +43,93 @@ import { lobe } from '../../effects/volume.js';
 // steps through its own two-colour ramp, so the same three characters are a luminous robe in one
 // and a hollow cowl in the next.
 
+// The angel. Read down the left column and the shape is: halo, head, shoulders, wings, robe — five
+// separate things, in that order, each one narrower or wider than the one above it. That sequence is
+// the entire difference between an angel and a bowling pin, and the previous drawing had none of it:
+// a rectangle floating over a column that widened smoothly all the way to the floor, with two
+// detached slabs beside it where the wings should have been.
+//
+// The wings meet the shoulders and are drawn almost entirely in `#` while the robe is almost
+// entirely `+`, so brightness separates them rather than outline alone — at this size a wing that is
+// the same tone as the robe it grows out of is a bulge. The robe is lit down its left edge, shadowed
+// down its right, and carries two fold lines, because a flat silhouette has no front.
 const ANGEL = [
+  '...........++##++...........',
+  '.........+#......#+.........',
+  '.........+#......#+.........',
+  '...........++##++...........',
   '............................',
-  '..........########..........',
-  '.........##......##.........',
-  '.........##......##.........',
-  '..........########..........',
-  '..++........###.........++..',
-  '.+##+......#####.......+##+.',
-  '.####+.....#####......+####.',
-  '+#####+....#####.....+#####+',
-  '#######+...#####....+#######',
-  '+#######+...####...+#######+',
-  '.+#######...####...#######+.',
-  '..+######...####...######+..',
-  '...######..######..######...',
-  '...+#####..#+####..#####+...',
-  '....#####..#+####..#####....',
-  '....+####..#+####..####+....',
-  '.....+###..#+####..###+.....',
-  '......+##..#+####..##+......',
-  '.......+#.##+#####.#+.......',
-  '........+.##+#####.+........',
-  '..........##+#####..........',
-  '..........##+#####..........',
-  '.........###+######.........',
-  '.........###+######.........',
-  '.........###+######.........',
-  '.........###+######.........',
-  '........####+#######........',
-  '........####+#######........',
-  '........####+#######........',
-  '.......#####+########.......',
-  '.......#####+########.......',
-  '.......++++++++++++++.......',
-  '............................',
+  '............###-............',
+  '...........#####-...........',
+  '.+##+......#####-......+##+.',
+  '.+####+....#####-....+####+.',
+  '..+####+...#####-...+####+..',
+  '...+#+##+...###-...+##+#+...',
+  '....+#+##+..###-..+##+#+....',
+  '.....+#+#####++--###+#+.....',
+  '......+#+####++--##+#+......',
+  '.......+#+##+++---+#+.......',
+  '........++##+++---++........',
+  '..........##+++---..........',
+  '..........##+++---..........',
+  '..........##+++---..........',
+  '..........##+++---..........',
+  '.........##+++++---.........',
+  '.........##+++++---.........',
+  '.........##+++++---.........',
+  '.........##+++++---.........',
+  '........##+++++++---........',
+  '........##+++++++---........',
+  '........##+++++++---........',
+  '........##+++++++---........',
+  '.......##+++++++++---.......',
+  '.......##+++++++++---.......',
+  '.......##+++++++++---.......',
+  '......##+++++++++++---......',
+  '......##+++++++++++---......',
+  '......++++++++++++++++......',
 ];
 
+// The reaper. Same principle, opposite figure: a pointed cowl with a genuine hollow in it, shoulders
+// wider than the hood, a robe that hangs rather than flares, and a scythe held *clear of the body*
+// so it is always silhouetted against fog instead of against cloak. The arm reaches out to the shaft
+// at rows sixteen and seventeen, which is what stops the scythe reading as a stray line beside him —
+// and a stray line beside him is exactly what it was.
 const REAPER = [
-  '..........#######...........',
-  '........###....###..........',
-  '.......##.........##........',
-  '.......##...####..##........',
-  '........##.######.##........',
-  '..........##----####........',
-  '..........#------#.##.......',
-  '.........##------####.......',
-  '.........##++--++####.......',
-  '.........##------####.......',
-  '.........###----###.##......',
-  '..........########..##......',
-  '..........########..##......',
-  '..........########..##......',
-  '.........##########..##.....',
-  '........###++++++###.##.....',
-  '.......####++++++######.....',
-  '.......####++++++####.##....',
-  '......#####++++++#######....',
-  '......#####++++++#######....',
-  '......#####++++++#######....',
-  '......#####++++++#####.##...',
-  '......#####++++++#####.##...',
-  '......#####++++++#####.##...',
-  '......#####++++++#####.##...',
-  '.....######++++++######.##..',
-  '.....######++++++######.##..',
-  '.....######++++++######.##..',
-  '.....######++++++######..##.',
-  '.....######++++++######..##.',
-  '.....######++++++######..##.',
-  '......#####++++++#####...##.',
-  '......################....##',
-  '......++.++.++.++.++.++...##',
+  '...............+###.........',
+  '.................+####......',
+  '....................+####...',
+  '............+##+.......##...',
+  '...........+####+......##...',
+  '..........##+--+##.....##...',
+  '..........##----##.....##...',
+  '.........##------##....##...',
+  '.........##------##....##...',
+  '.........##+----+##....##...',
+  '.........##++--++##....##...',
+  '........##++++++++##...##...',
+  '......##++++++++++++##.##...',
+  '.....##+++#+++++#+++##.##...',
+  '.....##+++#+++++#+++##.##...',
+  '.....##+++#+++++#+++##.##...',
+  '.....##+++#+++++#+++#####...',
+  '.....##+++#+++++#+++#####...',
+  '.....##+++#+++++#+++##.##...',
+  '.....##+++#+++++#+++##.##...',
+  '.....##+++#+++++#+++##.##...',
+  '....##++++#+++++#+++##.##...',
+  '....##++++#+++++#+++##.##...',
+  '....##++++#+++++#+++##.##...',
+  '....##++++#+++++#+++##.##...',
+  '....##++++#+++++#+++##.##...',
+  '....##++++#+++++#+++##.##...',
+  '....##++++#+++++#+++##.##...',
+  '....##++++#+++++#+++##.##...',
+  '....##++++#+++++#+++##.##...',
+  '....##++++#+++++#+++##.##...',
+  '....##++++#+++++#+++##.##...',
+  '....##++++#+++++#+++##.##...',
+  '....+#+.+#+.+#+.+#+.++.##...',
 ];
 
 const CLOUD = [
@@ -222,16 +248,33 @@ function compile(art, dark, light, opacity) {
 
 // The order is the script: The Cloud, an angel, a grim reaper, and The Cloud again wearing a face.
 // Ramp *and* opacity per figure, because the two trade against each other and the reaper needs
-// both. Composited at 84% over mid-grey, its near-black void and dark-grey cowl come out eight
-// levels apart and the hood stops having a hollow in it; brighten the cowl to fix that and he is a
-// pale figure, which is a ghost, not a reaper. Keeping the ramp dark and taking his opacity almost
-// to solid gets a black hollow inside a dark cloak, which is the thing itself.
+// both. His ramp runs to STONE rather than SLATE — the cowl has to be far enough above the void
+// inside it for the hood to have a hollow, and at the old spacing they came out a few levels apart
+// and he had a smooth head. Widening the ramp *and* dropping the opacity is not a wash: it buys back
+// the internal contrast the extra transparency costs, so he sits deeper in the weather than before
+// and reads better in it. What is not allowed is brightening him to fix the hollow, which gets a
+// pale figure, and a pale figure is a ghost.
 export const FIGURES = [
-  compile(CLOUD, ASH, LINEN, 0.6),
-  compile(ANGEL, ASH, SNOW, 0.68),
-  compile(REAPER, VOID, SLATE, 0.82),
-  compile(FACE, PITCH, SNOW, 0.7),
+  compile(CLOUD, ASH, LINEN, 0.5),
+  compile(ANGEL, ASH, SNOW, 0.58),
+  compile(REAPER, VOID, STONE, 0.72),
+  compile(FACE, PITCH, SNOW, 0.6),
 ];
+
+/**
+ * How many levels of veiling the figure is drawn at.
+ *
+ * One `tone` for the whole apparition makes it uniformly faint, which is a decal turned down rather
+ * than something inside weather. Sampling the fog's own density per cell buries the parts of it that
+ * have a bank in front of them and lets the rest through, so the figure surfaces unevenly and the
+ * pattern crawls across it as the bank drifts — and *that* is what being behind fog looks like.
+ * Quantised, because a per-cell alpha means a fill per cell; four bands keeps the whole thing to a
+ * couple of dozen fills and is finer than anything the eye can pick out through a cloud.
+ */
+const VEIL_BANDS = 4;
+// Allocated once. An apparition is on screen about eight percent of the time and this would
+// otherwise be a few hundred numbers thrown away sixty times a second.
+const VEIL = new Uint8Array(COLS * ROWS);
 
 /** Where in its life each figure is fully itself. Between them, the cells change over. */
 const KEYS = [0.06, 0.32, 0.54, 0.76];
@@ -302,9 +345,11 @@ export function drawApparition(ctx, W, H, t, densityAt = null) {
 
   const S = Math.min(W, H);
   const size = S * 0.6;
-  // How much of it survives the cloud directly above it. The caller owns the fog's own density
-  // field, so it hands one in rather than this file growing a second opinion about where the banks
-  // are — two fields disagreeing would put the figure brightest exactly where the fog is thickest.
+  // How much survives the cloud directly above the *site* — used for the halo and the veil, which
+  // are one mass each and have nowhere to put a per-cell answer. The figure itself is veiled cell by
+  // cell further down. The caller owns the fog's own density field and hands one in rather than this
+  // file growing a second opinion about where the banks are: two fields disagreeing would put the
+  // figure brightest exactly where the fog is thickest.
   const tone = densityAt ? clamp(densityAt(event.x * W, event.y * H), 0.15, 1) : 1;
   const cell = size / ROWS;
   const originX = event.x * W - (COLS * cell) / 2;
@@ -345,6 +390,21 @@ export function drawApparition(ctx, W, H, t, densityAt = null) {
   // A held clock, so the grid stutters between states instead of sliding between them.
   const beat = Math.floor(t * 9) / 9;
 
+  // The veil, sampled on every second cell in each direction: the bank field is smooth at this scale
+  // and the figure is 28x34, so this is a quarter of the noise calls for a result nobody can tell
+  // apart. Written as a band index so the batching below compares integers.
+  for (let r = 0; r < ROWS; r += 2) {
+    for (let c = 0; c < COLS; c += 2) {
+      const local = densityAt
+        ? clamp(densityAt(originX + (c + 1) * cell, originY + (r + 1) * cell), 0.12, 1)
+        : 1;
+      const band = Math.max(1, Math.ceil(local * VEIL_BANDS));
+      for (let dr = 0; dr < 2 && r + dr < ROWS; dr += 1) {
+        for (let dc = 0; dc < 2 && c + dc < COLS; dc += 1) VEIL[(r + dr) * COLS + c + dc] = band;
+      }
+    }
+  }
+
   for (let f = 0; f < 2; f += 1) {
     const index = f === 0 ? event.from : event.to;
     if (f === 1 && event.to === event.from) break;
@@ -352,64 +412,72 @@ export function drawApparition(ctx, W, H, t, densityAt = null) {
 
     for (let step = 0; step < 3; step += 1) {
       const value = step / 2;
-      ctx.beginPath();
-      let drawn = 0;
-
-      for (let i = 0; i < figure.count; i += 1) {
-        if (figure.level[i] !== value) continue;
-        const c = figure.col[i];
-        const r = figure.row[i];
-        const roll = hash2(c * 1.9 + 0.3, r * 2.7 + 0.9);
-
-        // The change-over, one cell at a time: past the threshold a cell belongs to the new figure.
-        const changed = roll < event.blend;
-        if ((f === 1) !== changed) continue;
-        // ...and on the way out, cells stop belonging to anything.
-        if (event.scatter > 0 && hash2(c * 3.3 + 7.1, r * 1.3 + 5.5) < event.scatter) continue;
-
-        // Displacement, strongest for the cells that are changing over right now.
-        const near = 1 - Math.min(1, Math.abs(roll - event.blend) * 6);
-        const kick = churn * near + event.scatter * 0.7;
-        const dx = kick * cell * 3.4 * (hash2(r * 4.1, beat + c * 0.7) - 0.5);
-        const dy = kick * cell * 1.1 * (hash2(c * 6.7, beat + r * 0.5) - 0.5);
-
-        ctx.rect(originX + c * cell + dx, originY + r * cell + dy, cell * 0.98, cell * 0.98);
-        drawn += 1;
-      }
-
-      if (!drawn) continue;
       const [dr, dg, db] = figure.dark;
       const [lr, lg, lb] = figure.light;
       const red = Math.round(lerp(dr, lr, value));
       const green = Math.round(lerp(dg, lg, value));
       const blue = Math.round(lerp(db, lb, value));
-      // Never fully opaque — a figure at alpha 1 is a sprite lying on the picture, and one you can
-      // see a little of the weather through is something the weather is doing. The same alpha for
-      // every *step* of a figure, though: fading the dark steps harder than the bright ones sounds
-      // like the same idea and is not, because a figure whose darkest ink is its deepest shadow
-      // loses that shadow first.
-      const opacity = clamp(event.presence * tone * figure.opacity, 0, 1);
-      ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${opacity.toFixed(4)})`;
-      ctx.fill();
+
+      for (let band = 1; band <= VEIL_BANDS; band += 1) {
+        ctx.beginPath();
+        let drawn = 0;
+
+        for (let i = 0; i < figure.count; i += 1) {
+          if (figure.level[i] !== value) continue;
+          const c = figure.col[i];
+          const r = figure.row[i];
+          if (VEIL[r * COLS + c] !== band) continue;
+          const roll = hash2(c * 1.9 + 0.3, r * 2.7 + 0.9);
+
+          // The change-over, one cell at a time: past the threshold a cell belongs to the new figure.
+          const changed = roll < event.blend;
+          if ((f === 1) !== changed) continue;
+          // ...and on the way out, cells stop belonging to anything.
+          if (event.scatter > 0 && hash2(c * 3.3 + 7.1, r * 1.3 + 5.5) < event.scatter) continue;
+
+          // Displacement, strongest for the cells that are changing over right now.
+          const near = 1 - Math.min(1, Math.abs(roll - event.blend) * 6);
+          const kick = churn * near + event.scatter * 0.7;
+          const dx = kick * cell * 3.4 * (hash2(r * 4.1, beat + c * 0.7) - 0.5);
+          const dy = kick * cell * 1.1 * (hash2(c * 6.7, beat + r * 0.5) - 0.5);
+
+          ctx.rect(originX + c * cell + dx, originY + r * cell + dy, cell * 0.98, cell * 0.98);
+          drawn += 1;
+        }
+
+        if (!drawn) continue;
+        // Never fully opaque — a figure at alpha 1 is a sprite lying on the picture, and one you can
+        // see a little of the weather through is something the weather is doing. The same alpha for
+        // every *step* of a figure, though: fading the dark steps harder than the bright ones sounds
+        // like the same idea and is not, because a figure whose darkest ink is its deepest shadow
+        // loses that shadow first. The *band* is allowed to vary between cells, which is a different
+        // thing again — that is the cloud in front, not the figure behind.
+        const opacity = clamp(event.presence * (band / VEIL_BANDS) * figure.opacity, 0, 1);
+        ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${opacity.toFixed(4)})`;
+        ctx.fill();
+      }
     }
   }
 
-  // Five masses drifting across the front of it, at both ends of the ramp. Without these the grid
+  // Seven masses drifting across the front of it, at both ends of the ramp. Without these the grid
   // has nothing between it and the viewer, and a hard-edged thing with clear air in front of it is
   // the one arrangement that cannot be happening inside a bank of fog. Dark ones as well as pale:
   // a figure only ever veiled by white haze reads as lit from in front, which is a spotlight, not
-  // weather.
-  for (let i = 0; i < 5; i += 1) {
+  // weather. Two more of them than there were, wider and heavier, because this and the per-cell
+  // veiling are the two halves of the same job — one puts cloud *in front of* the figure, the other
+  // decides how much of it the cloud *behind* is letting through, and either alone leaves it looking
+  // stuck to the glass.
+  for (let i = 0; i < 7; i += 1) {
     const drift = t * 0.07 + i * 1.27;
     lobe(
       ctx,
-      event.x * W + Math.cos(drift) * size * (0.2 + i * 0.12),
-      event.y * H + Math.sin(drift * 0.7 + i * 1.9) * size * (0.16 + i * 0.09),
-      size * (0.34 + i * 0.11),
-      size * (0.2 + i * 0.07),
+      event.x * W + Math.cos(drift) * size * (0.2 + i * 0.1),
+      event.y * H + Math.sin(drift * 0.7 + i * 1.9) * size * (0.16 + i * 0.08),
+      size * (0.36 + i * 0.1),
+      size * (0.22 + i * 0.065),
       Math.sin(drift * 0.3 + i) * 0.7,
-      [LINEN, STONE, ASH, PITCH, LINEN][i],
-      clamp((i === 3 ? 0.3 : 0.34) * event.presence * tone, 0, 1),
+      [LINEN, STONE, ASH, PITCH, LINEN, ASH, LINEN][i],
+      clamp((i === 3 ? 0.34 : 0.4) * event.presence * tone, 0, 1),
       0.1,
       0.46,
       event.n + i * 5.1 + t * 0.9,
