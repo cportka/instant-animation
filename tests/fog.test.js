@@ -10,7 +10,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createRng } from '../site/lib/rng.js';
-import { planFog, windowCoverage, glitchAt } from '../site/scenes/above-the-fog/fog.js';
+import { planFog, windowCoverage } from '../site/scenes/above-the-fog/fog.js';
+import { DURATION, FIGURES, PERIOD, apparitionAt } from '../site/scenes/above-the-fog/apparition.js';
 import { createRecordingContext } from './helpers/recording-context.mjs';
 import * as scene from '../site/scenes/above-the-fog/index.js';
 
@@ -102,22 +103,65 @@ test('the fog is 95% of the scene, at every viewport, at every moment sampled', 
   }
 });
 
-test('the fog glitches often, and is quiet most of the time', () => {
-  let broken = 0;
-  let bad = 0;
-  let samples = 0;
-  for (let t = 0; t < 900; t += 0.05) {
-    const g = glitchAt(t);
-    assert.ok(g >= 0 && g <= 1, `glitchAt(${t}) = ${g} is out of range`);
-    assert.equal(g, glitchAt(t), 'glitchAt must be a pure function of time');
-    if (g > 0.06) broken += 1;
-    if (g > 0.45) bad += 1;
-    samples += 1;
+test('The Cloud comes about once a minute, and is gone the rest of the time', () => {
+  // "Randomly every minute or so" is a claim about *rarity* as much as about frequency. An
+  // apparition that showed up every twenty seconds would stop being an event, and one that only
+  // ever fired at the top of the minute would be a clock.
+  const starts = [];
+  let live = 0;
+  let previous = null;
+  for (let t = 0; t < 1800; t += 0.05) {
+    const event = apparitionAt(t);
+    assert.deepEqual(event, apparitionAt(t), 'apparitionAt must be a pure function of time');
+    if (!event) {
+      previous = null;
+      continue;
+    }
+    assert.ok(event.u > 0 && event.u < 1, `u ${event.u} out of range at t=${t}`);
+    assert.ok(event.x > 0.1 && event.x < 0.9 && event.y > 0.1 && event.y < 0.9, 'apparition off frame');
+    live += 1;
+    if (previous !== event.n) starts.push(t);
+    previous = event.n;
   }
-  assert.ok(broken / samples > 0.08, `something is only wrong ${((broken / samples) * 100).toFixed(0)}% of the time`);
-  assert.ok(broken / samples < 0.6, `the fog is broken ${((broken / samples) * 100).toFixed(0)}% of the time`);
-  assert.ok(bad > 0, 'it never once falls apart properly');
-  assert.ok(bad / samples < 0.08, 'the worst of it is supposed to be rare');
+
+  assert.equal(starts.length, Math.floor(1800 / PERIOD), 'one apparition per cycle, no more and no fewer');
+  assert.ok(live * 0.05 / 1800 < 0.3, 'The Cloud is up too much of the time to be an event');
+
+  // Not on a beat: the gaps between them must actually vary.
+  const gaps = starts.slice(1).map((s, i) => s - starts[i]);
+  const spread = Math.max(...gaps) - Math.min(...gaps);
+  assert.ok(spread > 4, `every apparition arrives ${gaps[0]}s after the last — that is a metronome`);
+});
+
+test('one apparition shows all four figures, in order, one at a time', () => {
+  // The whole point of the feature is the sequence: The Cloud, an angel, a grim reaper, and The
+  // Cloud again wearing a face. If a morph window ever swallowed a figure whole, nothing else in
+  // the suite would notice.
+  const seen = [];
+  let start = null;
+  for (let t = 0; t < PERIOD; t += 0.05) {
+    if (apparitionAt(t)) { start = t; break; }
+  }
+  assert.ok(start !== null, 'no apparition in the first cycle');
+
+  for (let t = start; t < start + DURATION; t += 0.02) {
+    const event = apparitionAt(t);
+    if (!event) continue;
+    // "Settled" means this figure is on screen essentially alone.
+    const settled = event.blend < 0.02 ? event.from : event.blend > 0.98 ? event.to : null;
+    if (settled !== null && seen[seen.length - 1] !== settled) seen.push(settled);
+  }
+
+  assert.deepEqual(seen, [0, 1, 2, 3], `figures resolved in the order ${seen.join(' → ')}`);
+  assert.equal(FIGURES.length, 4);
+  for (const figure of FIGURES) {
+    assert.ok(figure.count > 120, `a figure with only ${figure.count} cells will not read`);
+    // Flat is unreadable at this size: a silhouette alone cannot tell an angel from a reaper.
+    assert.ok(new Set(figure.level).size >= 2, 'a figure drawn at one tone is a blob');
+  }
+  // Between them the figures use the full depth — the darkest step is what hollows out the
+  // reaper's cowl and cuts the eyes and mouth into the happy face, and nothing else supplies it.
+  assert.equal(new Set(FIGURES.flatMap((f) => f.level)).size, 3);
 });
 
 /* ------------------------------------------------------------- helpers ---- */
@@ -195,7 +239,7 @@ function occlusion(lobes, x, y) {
 }
 
 /** The lowest the aerial wash ever falls to. Measured off `wash()` in the scene. */
-const WASH = 0.3;
+const WASH = 0.4;
 
 /** The gradient's alpha at a fraction of the radius, interpolated between the recorded stops. */
 function alphaAt(stops, r) {

@@ -3,10 +3,18 @@
 // The brief asks for three things that pull against each other, and the whole structure of this
 // file is the arrangement that gets all three at once:
 //
-//   *coverage* — the ground below is almost never visible, and where it is, it is a gap a few
+//   *coverage* — the ground below is almost never visible, and where it is, it is a gap a couple of
 //   hundred pixels across for a second or two;
 //   *range* — the fog runs from near-black to near-white, not a field of mid-grey;
-//   *failure* — clouds glitch out of existence and back, like a decoder losing them.
+//   *change* — masses billow, draw out, thin away and are replaced by masses welling up through
+//   them, so the field is always turning into itself rather than sliding past.
+//
+// Nothing here glitches. There was a whole pass of it once — lobes strobing out, bands of the
+// lattice shoved sideways, the finished frame shredded — and the trouble with all of it is that fog
+// has no detail to corrupt, so damaging it can only ever *remove* it. Fog vanishing in chunks does
+// not read as a fault in the picture, it reads as a fault in the renderer. The glitching moved
+// wholesale into `apparition.js`, where it belongs to one object with an outline and a face, and is
+// unmistakably something happening rather than something broken.
 //
 // **Coverage is geometric, not lucky.** The base of the fog is a lattice: a jittered grid of lobes,
 // each a good half wider than its cell, so every point in the frame is inside two or three of them
@@ -36,7 +44,7 @@
 import { TAU, clamp, smoothstep, wrap01 } from '../../lib/draw.js';
 import { curl, fbm, flowAngle, hash2 } from '../../effects/field.js';
 import { lobe, vignette } from '../../effects/volume.js';
-import { blockRepeat, chromaSplit, damageAt, makeRepeatCells, makeShredZones, shred, smearStreaks } from '../../effects/vhs.js';
+import { drawApparition } from './apparition.js';
 
 /* ------------------------------------------------------------- palette ---- */
 
@@ -101,26 +109,28 @@ export function planFog(rng) {
   // Wisps: the fine frequency. Long, thin, aligned to the flow, and much brighter than they are
   // big. Without a second scale an order of magnitude finer than the billows, the whole thing reads
   // as smoke from a machine rather than as a fog bank — this is the layer that decides it.
-  const wisps = Array.from({ length: 44 }, (_, i) => ({
+  const wisps = Array.from({ length: 70 }, (_, i) => ({
     id: i * 5.13 + salt * 1.7,
-    life: rng.range(6, 14),
+    // Short lives on purpose. A filament that took half a minute to draw out and go would be
+    // indistinguishable from one sitting still; at five to eleven seconds you watch it happen.
+    life: rng.range(5, 11),
     phase: rng.next(),
     tone: Math.floor(rng.range(0, CREST.length)),
-    alpha: rng.range(0.035, 0.09),
-    size: rng.range(0.06, 0.16),
-    squash: rng.range(0.2, 0.4),
+    alpha: rng.range(0.05, 0.13),
+    size: rng.range(0.055, 0.15),
+    squash: rng.range(0.16, 0.34),
   }));
 
   // Erosion: the same shape in near-black, drawn last over the light, so the crests come apart into
   // strands instead of sitting there as smooth blobs. Fog is as dark as it is bright.
-  const streaks = Array.from({ length: 26 }, (_, i) => ({
+  const streaks = Array.from({ length: 40 }, (_, i) => ({
     id: i * 7.31 + salt * 2.3,
-    life: rng.range(7, 16),
+    life: rng.range(6, 13),
     phase: rng.next(),
     tone: Math.floor(rng.range(0, 3)),
-    alpha: rng.range(0.08, 0.18),
-    size: rng.range(0.055, 0.14),
-    squash: rng.range(0.2, 0.42),
+    alpha: rng.range(0.09, 0.2),
+    size: rng.range(0.05, 0.13),
+    squash: rng.range(0.16, 0.36),
   }));
 
   // The peek-a-boos. Evenly spread around one shared period; only the duty cycle varies, which
@@ -128,10 +138,10 @@ export function planFog(rng) {
   const windows = Array.from({ length: 7 }, (_, i) => ({
     id: i * 17.33 + salt * 3.1,
     phase: i / 7 + rng.range(-0.018, 0.018),
-    duty: rng.range(0.29, 0.38),
+    duty: rng.range(0.2, 0.28),
   }));
 
-  return { salt, billows, wisps, streaks, windows, zones: makeShredZones(rng, 3), peek: makeRepeatCells(rng, 1) };
+  return { salt, billows, wisps, streaks, windows };
 }
 
 /* ------------------------------------------------------- time and chance ---- */
@@ -151,33 +161,47 @@ const cellRand = (col, row, salt, k) =>
  */
 const bankAt = (x, y, S, t) => fbm((x / S) * 0.85 + t * 0.008, (y / S) * 0.85 - t * 0.004, 3);
 
-/** A value that holds still for a beat and then jumps, for anything that should stutter. */
-const judder = (t, rate) => Math.floor(t * rate) / rate;
-
-/**
- * How broken the fog is right now, 0..1.
- *
- * Borrowed wholesale from the tape scene's damage schedule, which was built to arrive in bursts and
- * silences rather than on a beat, and is tested for exactly that. A fog bank that glitched every
- * four seconds would be a metronome with clouds on it.
- */
-const glitchAt = (t) => clamp(damageAt(t * 0.62, 19.4) / 20, 0, 1);
-
 /**
  * One incarnation of a recycled element: which life it is on, how far through, and where that life
  * put it. Stateless — ask at any `t`, in any order, and get the same answer, which is what lets the
  * render tests sample time backwards.
+ *
+ * **A mass dissolves, it does not fade.** `spread` grows monotonically through the life while
+ * `swell` rises and falls, so a mass arrives small and dense and leaves wide and thin — which is
+ * what vapour does, and the difference between fog that dissipates and fog that simply stops being
+ * drawn. Scaling opacity and size together, the old way, gives you a shape that shrinks back to a
+ * point: a thing being removed rather than a thing spreading out until it is indistinguishable from
+ * the air around it.
+ *
+ * **And each life begins where the last one ended.** The home of incarnation `n` is the home of
+ * `n - 1` plus a short hop, so a mass that has just thinned away is replaced by one welling up
+ * through it rather than by one somewhere else entirely — the eye joins them into a single body of
+ * air turning over. Cheap, and it is most of what makes the field read as *changing into itself*
+ * rather than as a set of independent puffs taking turns.
  */
 function incarnate(element, t, W, H) {
   const cycles = (t + element.phase * element.life) / element.life;
   const n = Math.floor(cycles);
   const u = cycles - n;
-  // A fresh home for every life. Spread wider than the frame so births and deaths happen off the
-  // edges as often as not.
-  const x = (hash2(element.id, n) * 1.44 - 0.22) * W;
-  const y = (hash2(element.id + 41.7, n * 1.31 + 3) * 1.44 - 0.22) * H;
-  // Zero at both ends: nothing ever pops into or out of existence except when it is meant to.
-  return { u, n, x, y, swell: Math.sin(u * Math.PI) ** 0.62 };
+
+  // The chain: a walk that only ever moves a little at each step, evaluated from the incarnation
+  // number so it stays closed-form. Two hops of history is enough for the handover to read.
+  const hop = (k, salt) => (hash2(element.id + salt, k) - 0.5) * 0.34;
+  const x = (wrap01(hash2(element.id, n >> 2) + hop(n, 0) + hop(n - 1, 0) * 0.5) * 1.36 - 0.18) * W;
+  const y = (wrap01(hash2(element.id + 41.7, n >> 2) + hop(n, 9.1) + hop(n - 1, 9.1) * 0.5) * 1.36 - 0.18) * H;
+
+  return {
+    u,
+    n,
+    x,
+    y,
+    // Zero at both ends: nothing pops into or out of existence.
+    swell: Math.sin(u * Math.PI) ** 0.62,
+    // Always growing. Never zero, so a mass is never a point.
+    spread: 0.52 + 1.22 * u,
+    // Fine detail boils harder as a mass comes apart. The outline is where this shows.
+    unrest: 0.6 + 2.4 * u * u,
+  };
 }
 
 /* -------------------------------------------------------------- windows ---- */
@@ -192,7 +216,7 @@ function openWindows(fog, t, W, H) {
     const u = cycles - n;
     if (u >= w.duty) continue;
     const open = Math.sin((u / w.duty) * Math.PI) ** 0.7;
-    const r = S * (0.035 + 0.03 * hash2(w.id + 7.3, n)) * open;
+    const r = S * (0.034 + 0.026 * hash2(w.id + 7.3, n)) * open;
     if (r < 2) continue;
     // Held off the very edge of the frame: a peek-a-boo half out of shot is a torn corner.
     const hx = 0.13 + 0.74 * hash2(w.id, n);
@@ -215,7 +239,7 @@ function clearance(wins, x, y, R) {
   let a = 1;
   for (let i = 0; i < wins.length; i += 1) {
     const w = wins[i];
-    const reach = w.r + Math.min(R, w.r * 2.6) * 0.9;
+    const reach = w.r + Math.min(R, w.r * 3.2) * 1.02;
     a *= smoothstep(reach * 0.24, reach, Math.hypot(x - w.x, y - w.y));
     if (a < 0.004) return 0;
   }
@@ -224,21 +248,19 @@ function clearance(wins, x, y, R) {
 
 /* ----------------------------------------------------------------- draw ---- */
 
-export function drawFog(ctx, W, H, t, fog, tape = null) {
+export function drawFog(ctx, W, H, t, fog) {
   const S = Math.min(W, H);
-  const g = glitchAt(t);
   const wins = openWindows(fog, t, W, H);
 
-  // The layer the datamosh prints from: the ground before any fog reached it. Only worth the blit
-  // when something is actually about to go wrong.
-  if (g > 0.06) tape?.capture(ctx, 'clear');
-
   wash(ctx, W, H, t);
-  curtain(ctx, W, H, S, t, fog, wins, g);
-  billows(ctx, W, H, S, t, fog, wins, g);
-  wisps(ctx, W, H, S, t, fog, wins, g);
-  erosion(ctx, W, H, S, t, fog, wins, g);
-  if (g > 0.06) mosh(ctx, W, H, t, fog, g, tape);
+  curtain(ctx, W, H, S, t, fog, wins);
+  billows(ctx, W, H, S, t, fog, wins);
+  // The apparition sits *inside* the weather, not on top of it: the filaments and the dark strands
+  // below still pass in front of it, so it is a thing the fog is doing rather than a thing drawn
+  // over the fog.
+  drawApparition(ctx, W, H, t);
+  wisps(ctx, W, H, S, t, fog, wins);
+  erosion(ctx, W, H, S, t, fog, wins);
   vignette(ctx, W, H, VOID, 0.34);
 }
 
@@ -251,9 +273,9 @@ function wash(ctx, W, H, t) {
   const g = ctx.createLinearGradient(0, 0, W * 0.22, H);
   const swing = 0.5 + 0.5 * Math.sin(t * 0.043);
   // The wash breathes, but only a little: it is the one layer that moves the *whole* frame at once.
-  g.addColorStop(0, `rgba(116, 122, 126, ${(0.34 + swing * 0.05).toFixed(4)})`);
-  g.addColorStop(0.55, `rgba(96, 102, 107, ${(0.30 + swing * 0.04).toFixed(4)})`);
-  g.addColorStop(1, `rgba(74, 80, 85, ${(0.36 - swing * 0.04).toFixed(4)})`);
+  g.addColorStop(0, `rgba(116, 122, 126, ${(0.44 + swing * 0.05).toFixed(4)})`);
+  g.addColorStop(0.55, `rgba(96, 102, 107, ${(0.40 + swing * 0.04).toFixed(4)})`);
+  g.addColorStop(1, `rgba(74, 80, 85, ${(0.46 - swing * 0.04).toFixed(4)})`);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 }
@@ -269,14 +291,13 @@ function wash(ctx, W, H, t) {
  * index is offset by however many whole cells have passed, so a cell that wraps off the right edge
  * is the same cell arriving on the left, not a new one popping into existence.
  */
-function curtain(ctx, W, H, S, t, fog, wins, damage) {
+function curtain(ctx, W, H, S, t, fog, wins) {
   const cell = Math.hypot(W, H) * 0.058;
   const shift = (t * S * 0.021) / cell;
   const base = Math.floor(shift);
   const frac = shift - base;
   const cols = Math.ceil(W / cell) + 3;
   const rows = Math.ceil(H / cell) + 3;
-  const stutter = damage > 0.25 ? judder(t, 11) : t;
 
   for (let row = -1; row < rows; row += 1) {
     // Rows slide at their own rate. Overhead there is no parallax to sell depth, so this shear is
@@ -290,18 +311,12 @@ function curtain(ctx, W, H, S, t, fog, wins, damage) {
       const r4 = cellRand(id, row, fog.salt, 4);
       const r5 = cellRand(id, row, fog.salt, 5);
 
-      // Clouds coming apart into shifted blocks: whole bands of the lattice jump sideways at once.
-      const band = Math.floor(row / 2);
-      const mosh = damage > 0.3
-        ? (hash2(band * 13.7, judder(t, 9)) - 0.5) * cell * 2.6 * damage
-        : 0;
-
-      let x = (col - 1 + frac) * cell + (r1 - 0.5) * cell * 0.52 + shear + mosh;
+      let x = (col - 1 + frac) * cell + (r1 - 0.5) * cell * 0.52 + shear;
       let y = (row - 1) * cell + (r2 - 0.5) * cell * 0.52;
 
       // A coherent wander on top, from the divergence-free flow. Bounded to a third of a cell, so
       // neighbours breathe and shear against each other without the lattice ever tearing open.
-      const v = curl(x / S, y / S, stutter * 0.55, 2.4);
+      const v = curl(x / S, y / S, t * 0.55, 2.4);
       x += v.x * cell * 0.34;
       y += v.y * cell * 0.34;
 
@@ -314,46 +329,26 @@ function curtain(ctx, W, H, S, t, fog, wins, damage) {
 
       // Never to zero. This deck is the coverage; it breathes, it does not blink.
       const breath = 0.86 + 0.14 * Math.cos(wrap01((t + r3 * 19) / 19) * TAU);
-      const major = cell * (1.3 + r4 * 0.38) * (0.94 + 0.16 * Math.sin(t * 0.19 + r5 * 9));
+      const major = cell * (1.54 + r4 * 0.42) * (0.94 + 0.16 * Math.sin(t * 0.19 + r5 * 9));
       const minor = major * (0.58 + r5 * 0.28);
 
-      let alpha = (0.78 + r3 * 0.22) * breath * clearance(wins, x, y, major);
+      const alpha = (0.82 + r3 * 0.18) * breath * clearance(wins, x, y, major);
       if (alpha < 0.01) continue;
-
-      // In and out of existence, one cloud at a time — its neighbours hold, which is what makes it
-      // read as the picture failing rather than as the fog thinning.
-      //
-      // A glitched cloud mostly **jumps** rather than disappearing, and that is the whole design of
-      // this pass. Simply dropping a fraction of the lattice during a burst opens the fog, and an
-      // opening in the fog is a view of the town — so the glitch stops being a fault in the picture
-      // and becomes the one moment the picture is on show, which is the opposite of the brief.
-      // Displaced, the same lobe is somewhere wrong instead of nowhere: the coverage survives and
-      // the failure is louder, not quieter. Only a twelfth actually go.
-      let jumpX = 0;
-      let jumpY = 0;
-      if (damage > 0.12) {
-        const roll = hash2(id * 2.3 + row * 7.7, judder(t, 13));
-        if (roll < damage * 0.12) continue;
-        if (roll < damage * 0.6) {
-          jumpX = (hash2(id * 5.1, judder(t, 13) + 2) - 0.5) * cell * 3.4 * damage;
-          jumpY = (hash2(row * 8.9, judder(t, 13) + 4) - 0.5) * cell * 1.6 * damage;
-        }
-      }
-      if (damage > 0.5) alpha *= 1.12;
 
       lobe(
         ctx,
-        x + jumpX,
-        y + jumpY,
+        x,
+        y,
         major,
         minor,
-        flowAngle(x / S, y / S, stutter * 0.4, 2.4),
+        flowAngle(x / S, y / S, t * 0.4, 2.4),
         CURTAIN[tone],
         clamp(alpha, 0, 1),
         0.18,
         0.38,
-        r4 * 12 + t * 0.42,
-        damage > 0.34 ? 3 + Math.floor(r2 * 3) : 0,
+        // Each cell's outline turns over on its own clock, at its own rate. One shared rate and the
+        // whole lattice writhes in step, which reads as a single surface rippling.
+        r4 * 12 + t * (0.5 + r2 * 0.7),
       );
     }
   }
@@ -367,13 +362,12 @@ function curtain(ctx, W, H, S, t, fog, wins, damage) {
  * not decoration: a near-white lobe composited normally over grey lands at grey plus a bit, and the
  * top of the ramp is simply never reached. `lighter` climbs to white and stays there.
  */
-function billows(ctx, W, H, S, t, fog, wins, damage) {
+function billows(ctx, W, H, S, t, fog, wins) {
   const lit = [];
 
   for (const b of fog.billows) {
     const live = incarnate(b, t, W, H);
     if (live.swell < 0.02) continue;
-    if (damage > 0.15 && hash2(b.id * 1.9, judder(t, 10)) < damage * 0.22) continue;
 
     const drift = curl(live.x / S, live.y / S, t * 0.4, 1.6);
     // Carried by the same wind the lattice runs in, but centred on its home: a life begins half a
@@ -382,24 +376,25 @@ function billows(ctx, W, H, S, t, fog, wins, damage) {
     const travel = S * 0.021 * b.life;
     const x = live.x + drift.x * S * 0.13 * live.u + travel * (live.u - 0.5);
     const y = live.y + drift.y * S * 0.13 * live.u;
-    const major = S * b.size * (0.58 + 0.62 * live.swell);
+    // Always expanding, whatever the opacity is doing. This is what makes a mass *dissolve* into
+    // the fog around it rather than shrink back to the point it grew from.
+    const major = S * b.size * live.spread;
     const minor = major * b.squash;
     const angle = flowAngle(x / S, y / S, t * 0.3, 1.6);
     const alpha = b.alpha * live.swell * clearance(wins, x, y, major);
     if (alpha < 0.008) continue;
 
-    const facet = damage > 0.4 ? 3 + Math.floor(hash2(b.id, live.n) * 3) : 0;
-    const phase = b.id + live.n * 3.1 + t * 0.5;
-    cluster(ctx, x, y, major, minor, angle, b.id + live.n, BODY[b.tone], alpha, 0.2, phase, facet);
+    const phase = b.id + live.n * 3.1 + t * 0.42 * live.unrest;
+    cluster(ctx, x, y, major, minor, angle, b.id + live.n, BODY[b.tone], alpha, 0.2, phase);
     const top = 0.12 + 0.88 * smoothstep(0.38, 0.72, bankAt(x, y, S, t));
-    if (b.lit) lit.push({ b, x, y, major, minor, angle, live, phase, facet, top });
+    if (b.lit) lit.push({ b, x, y, major, minor, angle, live, phase, top });
   }
 
   if (!lit.length) return;
 
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  for (const { b, x, y, major, minor, angle, live, phase, facet, top } of lit) {
+  for (const { b, x, y, major, minor, angle, live, phase, top } of lit) {
     const offset = S * 0.016 * (0.5 + live.swell);
     cluster(
       ctx,
@@ -413,7 +408,6 @@ function billows(ctx, W, H, S, t, fog, wins, damage) {
       b.crestAlpha * live.swell * top * clearance(wins, x, y, major),
       0.16,
       phase + 1.7,
-      facet,
     );
   }
   ctx.restore();
@@ -426,7 +420,7 @@ function billows(ctx, W, H, S, t, fog, wins, damage) {
  * separate blobs, and only at about a third of a radius do they merge into one lumpy mass with a
  * silhouette no single ellipse could have.
  */
-function cluster(ctx, x, y, major, minor, angle, seed, colour, alpha, core, phase, facet) {
+function cluster(ctx, x, y, major, minor, angle, seed, colour, alpha, core, phase) {
   for (let i = 0; i < 4; i += 1) {
     const a = hash2(seed + i * 3.1, i) * TAU;
     const d = (0.24 + hash2(seed + i * 5.7, i + 2) * 0.4) * major;
@@ -442,26 +436,40 @@ function cluster(ctx, x, y, major, minor, angle, seed, colour, alpha, core, phas
       alpha,
       core,
       0.4,
-      phase + i * 2.3,
-      facet,
+      // Every lobe of a mass turns over at a different rate, so the mass churns internally instead
+      // of deforming as one rigid object.
+      phase * (0.7 + i * 0.22) + i * 2.3,
     );
   }
 }
 
-/** The fine frequency: filaments stretched along the wind, bright, and barely there. */
-function wisps(ctx, W, H, S, t, fog, wins, damage) {
+/**
+ * The fine frequency: filaments stretched along the wind, bright, and barely there.
+ *
+ * These are the layer that carries "dissolving and changing into each other". A filament is born as
+ * a short soft puff and *draws out* along the flow as it ages — the major axis running away with
+ * the life while the minor barely moves — so it stretches into a thread and thins to nothing while
+ * the next one is already welling up through where it was.
+ */
+function wisps(ctx, W, H, S, t, fog, wins) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   for (const w of fog.wisps) {
     const live = incarnate(w, t, W, H);
     if (live.swell < 0.04) continue;
-    if (damage > 0.2 && hash2(w.id * 2.7, judder(t, 15)) < damage * 0.4) continue;
 
     const drift = curl(live.x / S, live.y / S, t * 0.6, 2.9);
     const travel = S * 0.028 * w.life;
     const x = live.x + drift.x * S * 0.2 * live.u + travel * (live.u - 0.5);
     const y = live.y + drift.y * S * 0.2 * live.u;
-    const major = S * w.size * (0.5 + 0.7 * live.swell);
+    // A filament does not just grow, it *draws out*: the major axis runs away with the life while
+    // the minor one barely moves, so a soft puff becomes a long thread and then nothing. Watching
+    // one is the clearest read in the scene of fog changing rather than fog moving.
+    // Drawing out is a change in *aspect*, and it has to be bounded. Letting the major axis run
+    // while the minor one stands still gives ratios past fifty to one by the end of a life, and a
+    // fifty-to-one ellipse is not a filament, it is a scratch on the lens.
+    const major = S * w.size * live.spread * (0.75 + 0.55 * live.u);
+    const minor = major * w.squash * (1.15 - 0.45 * live.u);
     const alpha =
       w.alpha * live.swell * smoothstep(0.3, 0.66, bankAt(x, y, S, t)) * clearance(wins, x, y, major);
     if (alpha < 0.006) continue;
@@ -471,33 +479,31 @@ function wisps(ctx, W, H, S, t, fog, wins, damage) {
       x,
       y,
       major,
-      major * w.squash,
+      minor,
       // Aligned to the flow, so the filaments lie along the wind rather than across it — a wisp at
       // right angles to the direction everything else is travelling reads instantly as a mistake.
       flowAngle(x / S, y / S, t * 0.5, 2.9),
       CREST[w.tone],
       alpha,
       0.06,
-      0.44,
-      w.id + live.n * 2.7 + t * 0.8,
-      damage > 0.45 ? 2 + Math.floor(hash2(w.id, live.n) * 3) : 0,
+      0.46,
+      w.id + live.n * 2.7 + t * 0.7 * live.unrest,
     );
   }
   ctx.restore();
 }
 
 /** Near-black strands drawn over the light, so the crests come apart instead of staying smooth. */
-function erosion(ctx, W, H, S, t, fog, wins, damage) {
+function erosion(ctx, W, H, S, t, fog, wins) {
   for (const s of fog.streaks) {
     const live = incarnate(s, t, W, H);
     if (live.swell < 0.04) continue;
-    if (damage > 0.25 && hash2(s.id * 3.3, judder(t, 12)) < damage * 0.28) continue;
 
     const drift = curl(live.x / S, live.y / S, t * 0.5, 2.3);
     const travel = S * 0.021 * s.life;
     const x = live.x + drift.x * S * 0.17 * live.u + travel * (live.u - 0.5);
     const y = live.y + drift.y * S * 0.17 * live.u;
-    const major = S * s.size * (0.55 + 0.6 * live.swell);
+    const major = S * s.size * live.spread * (0.8 + 0.5 * live.u);
     // The mirror of the crest gate. Between them, a pale bank gets both the brightest and the
     // darkest values in the frame — which is what fog actually does, and what gives a single frame
     // the whole range rather than making the range something you only see over a minute.
@@ -511,44 +517,15 @@ function erosion(ctx, W, H, S, t, fog, wins, damage) {
       x,
       y,
       major,
-      major * s.squash,
+      major * s.squash * (1.15 - 0.4 * live.u),
       flowAngle(x / S, y / S, t * 0.44, 2.3),
       [VOID, COAL, PITCH][s.tone],
       alpha,
       0.16,
-      0.42,
-      s.id + live.n * 4.1 + t * 0.7,
-      damage > 0.45 ? 2 + Math.floor(hash2(s.id, live.n) * 3) : 0,
+      0.44,
+      s.id + live.n * 4.1 + t * 0.6 * live.unrest,
     );
   }
-}
-
-/**
- * The data mosh proper, once the fog itself is down.
- *
- * The lobes above glitch by being *drawn* wrong — dropped, banded, shoved. This is the other half:
- * the finished frame torn up as an image. Some of the stuck blocks print from the layer captured
- * before the fog went on, so a strip of bare town repeats across the frame — a peek-a-boo that
- * arrives as a decoding failure rather than as a gap in the weather, which is exactly the thing the
- * brief asks for and the one effect the fog itself cannot produce.
- */
-function mosh(ctx, W, H, t, fog, damage, tape) {
-  if (!tape) return;
-  tape.capture(ctx);
-  // Displacement, not replacement. The stuck-macroblock artefact was built for a picture full of
-  // high-frequency detail: tiling one block of *that* prints an obvious repeat. Fog has no detail
-  // to repeat, so the same effect here tiles a smooth patch into a flat grey rectangle and reads as
-  // a rectangle somebody drew. Shredding keeps the picture and breaks it, which on a soft image is
-  // the only one of the two that survives.
-  shred(ctx, W, H, t, fog.zones, 0.4 + damage * 2.2, tape);
-  smearStreaks(ctx, W, H, t, 4, damage * 0.5, tape);
-  // The one thing allowed to print from before the fog: a single stuck cell, so a strip of bare
-  // town repeats across the frame. A handful of tiles is a decode failure; a screenful is the
-  // picture with the weather switched off.
-  if (damage > 0.5) blockRepeat(ctx, W, H, t, fog.peek, (damage - 0.5) * 0.9, tape, 'clear');
-  // The only colour in the frame, and only at the worst of it. In a picture with no saturation
-  // anywhere, a chroma break is the loudest possible way to say that something is broken.
-  if (damage > 0.45) chromaSplit(ctx, W, H, t, (damage - 0.45) * 9, tape);
 }
 
 /** Exported for the tests: the open-window area at a moment, as a fraction of the frame. */
@@ -556,4 +533,3 @@ export function windowCoverage(fog, t, W, H) {
   return openWindows(fog, t, W, H).reduce((sum, w) => sum + Math.PI * w.r * w.r, 0) / (W * H);
 }
 
-export { glitchAt };

@@ -1,41 +1,53 @@
 // The ground, seen from directly overhead: a river, a town on its banks, and a lot of trees.
 //
-// This layer is almost never visible. The fog above it covers about ninety-five percent of the
-// frame, so what reaches the viewer is a gap a few hundred pixels across, for a second or two, at
-// a random place. Everything here is built for that: **value** does the work, not detail. The water
-// is the darkest thing on the ground, the roads are the lightest, the roofs sit between them, and
-// the vegetation is dark enough to frame all three. Drop a hole anywhere and the shapes read
-// immediately, because they differ in brightness rather than in hue.
+// This layer is almost never visible. The fog above it covers well over ninety-five percent of the
+// frame, so what reaches the viewer is a gap a couple of hundred pixels across, for a second or
+// two, at a random place. Everything here is built for that: **value** does the work, not detail.
+// Drop a hole anywhere and the shapes read immediately, because they differ in brightness rather
+// than in hue.
 //
-// De-saturated on purpose — nothing here is more than about 20% saturated. It is a real place on
-// an overcast morning, not a game board.
+// **The palette is reversed** — every colour is its own photo negative, channel by channel. So the
+// water is now the *lightest* thing on the ground and the roads the darkest, the vegetation is a
+// pale lilac rather than a dark green, and the whole ground comes up bright underneath grey
+// weather. Inverting is not the same as picking pale colours: it takes the hues to their
+// complements too, which is what makes a glimpse of it read as a photographic negative — something
+// that is not quite a place — rather than as a place lit differently.
+//
+// The value *structure* survives the inversion intact, which is the reason it works: everything
+// that was distinguishable by brightness still is, just the other way up. Still de-saturated —
+// nothing here is more than about 20% saturated — because inverting a near-neutral leaves a
+// near-neutral.
 
 import { TAU, clamp, lerp } from '../../lib/draw.js';
 import { fbm, hash2, noise2 } from '../../effects/field.js';
 
 /* ------------------------------------------------------------- palette ---- */
 
-const GRASS = ['#3c4535', '#454f3c', '#4e5943', '#57624b'];
-const SCRUB = '#333c2e';
-const WATER_DEEP = '#2f3a40';
-const WATER = '#3a474e';
-const WATER_LIT = '#4c5b62';
-const BANK = '#5a5c50';
-const ROAD = '#63625e';
-const ROAD_EDGE = '#73726c';
-const ROOF_SLATE = '#4f545a';
-const ROOF_TILE = '#6b5b50';
-const ROOF_LEAD = '#5a5f63';
-const WALL_SHADOW = 'rgba(14, 17, 14, 0.5)';
-const CAFE_ROOF = '#7d5646';
-const RESTAURANT_ROOF = '#6d4f52';
+// Each of these is `255 - c` per channel of the colour it replaced. The comments name what the
+// thing *is*, not what it now looks like, so the inversion stays legible as an inversion.
+const GRASS = ['#c3baca', '#bab0c3', '#b1a6bc', '#a89db4'];
+const SCRUB = '#ccc3d1';
+const WATER_DEEP = '#d0c5bf';
+const WATER = '#c5b8b1';
+const WATER_LIT = '#b3a49d';
+const BANK = '#a5a3af';
+const ROAD = '#9c9da1';
+const ROAD_EDGE = '#8c8d93';
+const ROOF_SLATE = '#b0aba5';
+const ROOF_TILE = '#94a4af';
+const ROOF_LEAD = '#a5a09c';
+// The one place the inversion is felt as more than a colour swap: a shadow becomes a *highlight*,
+// so the side of a roof that was dark now flares.
+const WALL_SHADOW = 'rgba(241, 238, 241, 0.5)';
+const CAFE_ROOF = '#82a9b9';
+const RESTAURANT_ROOF = '#92b0ad';
 // Twelve shops, twelve awnings. Jewel colours pulled most of the way to grey — at this size the
 // awning is four pixels of hue, and four saturated pixels would be the only saturated thing in the
 // frame and would read as an error.
-const JEWEL = ['#5c6f78', '#6d5f75', '#77685a', '#5f7566', '#75606a', '#66707c'];
+const JEWEL = ['#a39087', '#929fa8', '#8897a5', '#a08a99', '#8a9f95', '#998f83'];
 
-const TREE = ['#2f3a2c', '#374330', '#3f4b36'];
-const TREE_LIT = '#4a5740';
+const TREE = ['#d0c5d3', '#c8bccf', '#c0b4c9'];
+const TREE_LIT = '#b5a8bf';
 
 /* ---------------------------------------------------------------- plan ---- */
 
@@ -332,9 +344,10 @@ function drawTrees(ctx, W, H, S, trees) {
     }
   };
 
-  // Shadows first, all of them, in one path — from overhead, a tree is a dark shape with a slightly
-  // darker one beside it, and that offset is the entire read of "this thing stands up".
-  ctx.fillStyle = 'rgba(12, 16, 12, 0.34)';
+  // Shadows first, all of them, in one path. Inverted, a cast shadow is a *pale* shape beside the
+  // crown rather than a dark one — but the offset is doing the same job it always did, and it is
+  // the offset, not the darkness, that reads as "this thing stands up".
+  ctx.fillStyle = 'rgba(243, 239, 243, 0.34)';
   ctx.beginPath();
   for (const tree of trees) {
     crown(tree, (tree.x + tree.r * 0.4) * W, (tree.y + tree.r * 0.48) * H, 1);
@@ -387,8 +400,9 @@ function drawBuildings(ctx, W, H, S, buildings) {
       ctx.fillRect(-w / 2, -h / 2, w, h);
 
       // A ridge line down the middle of the roof: the single detail that reads as a pitched roof
-      // from overhead, and it costs one rectangle.
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.09)';
+      // from overhead, and it costs one rectangle. Inverted along with everything else, so the lit
+      // ridge is now a dark one.
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.09)';
       if (w > h) ctx.fillRect(-w / 2, -Math.max(1, h * 0.06), w, Math.max(1, h * 0.12));
       else ctx.fillRect(-Math.max(1, w * 0.06), -h / 2, Math.max(1, w * 0.12), h);
 
@@ -398,14 +412,14 @@ function drawBuildings(ctx, W, H, S, buildings) {
         ctx.fillStyle = b.awning;
         ctx.fillRect(-w / 2, h / 2, w, Math.max(1.5, h * 0.3));
         if (b.lamp) {
-          ctx.fillStyle = 'rgba(224, 206, 168, 0.5)';
+          ctx.fillStyle = 'rgba(31, 49, 87, 0.5)';
           ctx.fillRect(-w * 0.1, h / 2 + h * 0.34, Math.max(1.5, w * 0.2), Math.max(1.5, h * 0.16));
         }
       }
 
       if (b.kind === 'cafe') {
         // Parasols on the forecourt. Circles, from above, in a rough arc.
-        ctx.fillStyle = '#8d8172';
+        ctx.fillStyle = '#727e8d';
         ctx.beginPath();
         for (let i = 0; i < b.parasols; i += 1) {
           const px = lerp(-w * 0.45, w * 0.45, i / (b.parasols - 1));
@@ -419,9 +433,9 @@ function drawBuildings(ctx, W, H, S, buildings) {
 
       if (b.kind === 'restaurant') {
         // A terrace: a paler slab with tables on it.
-        ctx.fillStyle = 'rgba(158, 152, 138, 0.55)';
+        ctx.fillStyle = 'rgba(97, 103, 117, 0.55)';
         ctx.fillRect(-w * 0.55, h / 2, w * 1.1, h * 0.5);
-        ctx.fillStyle = '#3f423c';
+        ctx.fillStyle = '#c0bdc3';
         ctx.beginPath();
         for (let i = 0; i < b.tables; i += 1) {
           const px = lerp(-w * 0.42, w * 0.42, i / (b.tables - 1));
