@@ -45,7 +45,6 @@ import { TAU, clamp, rampAt, smoothstep, wrap01 } from '../../lib/draw.js';
 import { curl, fbm, flowAngle, hash2 } from '../../effects/field.js';
 import { lobe, vignette } from '../../effects/volume.js';
 import { drawApparition } from './apparition.js';
-import { burstAt, fireBloom, flickerAt } from './town.js';
 
 /* ------------------------------------------------------------- palette ---- */
 
@@ -173,7 +172,7 @@ const GUST_B = 0.22;
 const GUST_V = 0.043;
 
 /** The wind's speed at time `t`, as a multiple of the base. */
-const gustAt = (t) => 1 + GUST_A * Math.sin(t * GUST_W) + GUST_B * Math.sin(t * GUST_V + 1.7);
+export const gustAt = (t) => 1 + GUST_A * Math.sin(t * GUST_W) + GUST_B * Math.sin(t * GUST_V + 1.7);
 
 /**
  * How far the wind has carried something by time `t`, as a multiple of the base speed — the
@@ -190,7 +189,7 @@ const windAt = (t) =>
   - (GUST_B / GUST_V) * (Math.cos(t * GUST_V + 1.7) - Math.cos(1.7));
 
 /** Base wind speed, in fractions of the short edge per second. */
-const WIND = 0.045;
+export const WIND = 0.045;
 
 /**
  * One incarnation of a recycled element: which life it is on, how far through, and where that life
@@ -294,7 +293,7 @@ function clearance(wins, x, y, R) {
 
 /* ----------------------------------------------------------------- draw ---- */
 
-export function drawFog(ctx, W, H, t, fog, fires) {
+export function drawFog(ctx, W, H, t, fog) {
   const S = Math.min(W, H);
   const wins = openWindows(fog, t, W, H);
 
@@ -308,9 +307,6 @@ export function drawFog(ctx, W, H, t, fog, fires) {
   billows(ctx, W, H, S, t, fog, wins);
   wisps(ctx, W, H, S, t, fog, wins);
   erosion(ctx, W, H, S, t, fog, wins);
-  // Light from the fires below, scattered by everything above it. Last, because that light has come
-  // through the whole depth of the cloud and lands on the near side of all of it.
-  fireBloom(ctx, W, H, S, t, fires);
   vignette(ctx, W, H, VOID, 0.34);
 }
 

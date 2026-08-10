@@ -140,27 +140,36 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   scene beneath runs all the way to near-white and an arrow with only a glow disappears the moment a
   lit crest passes under it.
 
-- **Something is burning down there, in blue and green.** Seven fires in the fields, off the water
-  and away from the houses — one burning alone in a field is more interesting than a town on fire —
-  each throwing the occasional **neon burst**: a broken ring going out with a few spikes, thin and
-  brief, because a neon tube's whole character is that it is a *line* of light and anything soft
-  would read as a second glow. They are the only saturated thing in the gallery's third animation,
-  and that is the point: against a scene pulled to within twenty percent of neutral and then
-  inverted, a cyan and a green at full chroma do not read as coloured pixels, they read as the one
-  thing in frame that is *lit* rather than merely visible.
+- **Something is burning down there, and somebody is setting off fireworks** — `lights.js`, and the
+  only colour in the animation. Against a ground that is a photo negative of an already de-saturated
+  palette, under six greys of weather, a cyan and a green at full chroma do not read as coloured
+  pixels; they read as the one thing in frame that is *lit* rather than merely visible.
 
-  The half that makes it work is that the fires are drawn twice. The flame itself is small, under
-  the whole depth of the cloud, and mostly invisible. What you actually see is its light **scattered
-  by the fog above it** — an order of magnitude wider, far fainter, drawn last of everything,
-  because fog does not hide a light so much as carry it: a lamp inside a bank turns the bank into
-  the lamp. It is the only colour that survives to the top of the frame, so the scene reads as grey
-  weather with something burning underneath rather than as grey weather.
+  Both rules that shape it come from the camera being **directly overhead**:
 
-  Two mistakes worth keeping, both from the same misreading. `glow`'s last argument is the alpha at
-  45% of the radius, not a falloff rate — handing it a number larger than the centre alpha turns the
-  gradient inside out and draws a **ring**, which is emphatically not what a light in fog looks like
-  and rendered as seven flying saucers. And the first burst was a full circle with nine evenly
-  spaced rays: a compass rose, the one shape in frame that could only have come from arithmetic.
+  *Nothing is radially symmetric.* A flame from above is a bright base with a plume of light lying
+  downwind of it, not a disc — the first version was a symmetric glow with a ring and some rays
+  around it, which is a lens flare, or a flying saucer, and looked like one. Every light leans now,
+  and the flame body is rebuilt on a **held clock** twelve times a second rather than eased, because
+  fire does not ease, it gutters.
+
+  *Gravity points at the camera.* A firework's sparks cannot arc downward when "down" is away from
+  you, so they spread, decelerate hard and dim in place while the wind carries the whole burst
+  sideways. The climb is drawn as a point that brightens and grows rather than one that travels, for
+  the same reason. Neither is how a firework looks from the ground and both are how one looks from
+  above it. They go up in *shows* — three to five shells in a ragged sequence from one spot, then
+  nothing there for a minute and a half — because people do not set off one firework.
+
+  And every light is drawn **twice**: once on the ground, under the whole depth of the cloud, where
+  it is mostly invisible; and once as the light it throws *into* the fog — wide, faint, last of
+  everything. Fog does not hide a light so much as carry it, and a shell going off inside weather
+  lights the weather. That second pass is what is actually looked at, and the only reason any of
+  this registers through ninety-seven percent coverage.
+
+  One mistake worth keeping: `glow`'s last argument is the alpha at 45% of the radius, not a falloff
+  rate. Hand it a number larger than the centre alpha and the gradient turns inside out and draws a
+  **ring** — which is emphatically not what a light in fog looks like, and rendered as seven flying
+  saucers hanging in the cloud.
 
 #### The Cloud
 

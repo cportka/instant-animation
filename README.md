@@ -17,7 +17,7 @@ picture tears itself apart, then settles.
 
 | Animation | From the description |
 | --- | --- |
-| **Above the Fog** | *an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and changing into each other, over a lazy winding river and a riverside town in reversed colour — blue and green fires burning underneath with neon bursts, and every few minutes one cloud pixelates into an angel, then a grim reaper, then a giant happy face* |
+| **Above the Fog** | *an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and changing into each other, over a lazy winding river and a riverside town in reversed colour — blue and green fires burning underneath and people setting off fireworks, and every few minutes one cloud pixelates into an angel, then a grim reaper, then a giant happy face* |
 | **Westbound on Grizzly Peak** | *2.5D 16-bit from the perspective of a car travelling diagonally up and to the left, a series of copper bronze street lamps, a cliff drop-off overlooking the bay, trees, and a fiery sunset in a night sky* |
 | **Asleep Among the Stars** | *a bed floating in space with someone snuggled under the covers peacefully sleeping while the bed gently floats amongst the stars* |
 
