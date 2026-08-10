@@ -23,6 +23,7 @@
 
 import { TAU, clamp, glow, rgba, wrap01 } from '../../lib/draw.js';
 import { curl, hash2, noise2 } from '../../effects/field.js';
+import { ditherGlow, pixelSize } from '../../effects/pixel.js';
 import { lobe } from '../../effects/volume.js';
 import { WIND, gustAt } from './fog.js';
 
@@ -126,6 +127,49 @@ const shellGlare = (shell) =>
   shell.u < BURST_AT
     ? 0.1 * (shell.u / BURST_AT) ** 2
     : Math.max(0, 1 - (shell.u - BURST_AT) / (1 - BURST_AT)) ** 1.8;
+
+/** How far into its burst a shell is, 0..1 — undefined before it goes off. */
+const burstProgress = (shell) => (shell.u - BURST_AT) / (1 - BURST_AT);
+
+/** How wide this particular shell throws, in pixels. Fixed per shell, so it is a size, not a swell. */
+const burstSpread = (shell, S) => S * (0.075 + 0.075 * hash2(shell.seed, 3));
+
+const SPARKS = 54;
+/** How many alpha levels the sparks are drawn at — see the batching note in `drawShell`. */
+const SPARK_BANDS = 5;
+
+/**
+ * The sparks of a burst, as geometry.
+ *
+ * Shared by the ground pass and the pass that lights the fog, which is the whole point of pulling it
+ * out: the light in the cloud is then the shape of *this* burst rather than a circle standing in for
+ * it. A coloured circle growing and shrinking is what a firework looks like to someone who has only
+ * ever seen one described.
+ *
+ * Two per-spark quantities do all the work of not being a circle. A **speed**, so the front is
+ * ragged rather than a rim — one radius for every spark is a disc however it is coloured. And a
+ * **life**, so they go out one at a time over a couple of seconds instead of the whole shape dimming
+ * together, which is the difference between an explosion and a dial being turned down.
+ */
+function burstSparks(shell, spread, out, fade, beat) {
+  const sparks = [];
+  for (let i = 0; i < SPARKS; i += 1) {
+    // Hashed angles, not even ones. Fifty-four rays at exactly 6.7 degrees apart is a compass rose,
+    // and the eye finds that instantly.
+    const h = hash2(shell.seed + i * 1.9, i);
+    const k = hash2(shell.seed + i * 3.3, i + 5);
+    const j = hash2(shell.seed + i * 6.1, i + 9);
+    sparks.push({
+      // A little curl on top of the radial line, growing as it goes out — a streamer bends, a ray
+      // does not.
+      angle: h * TAU + (j - 0.5) * 0.7 * out,
+      reach: spread * out * (0.42 + k * 1.05),
+      // Twinkling on the held clock. A spark that is going out does not go out smoothly.
+      life: clamp(fade * (0.45 + j * 1.1), 0, 1) * (0.55 + 0.45 * hash2(shell.seed + i, beat)),
+    });
+  }
+  return sparks;
+}
 
 /* ----------------------------------------------------------- the ground ---- */
 
@@ -232,6 +276,12 @@ function drawFire(ctx, W, H, S, t, fire) {
  * The climb is drawn as a point that **brightens and grows** rather than one that travels, because
  * it is coming straight up at the camera. The burst spreads, slows and dims in place. Neither is
  * how a firework looks from the ground, and both are how one looks from above it.
+ *
+ * What a burst is *made of* here is streamers, crackle and pixelated puffs, in that order. There is
+ * a flash, but it is small and lasts about a fifth of a second — the previous one was a disc most of
+ * the width of the burst that grew and shrank, and a disc that grows and shrinks is the one shape
+ * that says "a value is being animated" instead of "something exploded". The light a firework throws
+ * belongs to the sparks; it is not a ball of colour they happen to be near.
  */
 function drawShell(ctx, W, H, S, t, shell) {
   const wind = windHere(shell.x * W, shell.y * H, S, t);
@@ -255,42 +305,104 @@ function drawShell(ctx, W, H, S, t, shell) {
     return;
   }
 
-  const v = (shell.u - BURST_AT) / (1 - BURST_AT);
-  const spread = S * (0.075 + 0.075 * hash2(shell.seed, 3));
+  const v = burstProgress(shell);
+  const spread = burstSpread(shell, S);
   // Decelerating: a spark loses almost all of its speed in the first third of its life, which is
   // what makes a burst read as an explosion rather than as an expanding circle.
   const out = 1 - (1 - v) ** 2.4;
   const fade = (1 - v) ** 1.6;
   const drift = wind.speed * SHELL_LIFE * (1 - BURST_AT) * v * 0.5;
+  const dx = wind.x * drift;
+  const dy = wind.y * drift;
+  // Fireworks are lit on a held clock for the same reason fire is: they crackle, they do not ease.
+  const beat = Math.floor(t * 14) / 14;
+  const sparks = burstSparks(shell, spread, out, fade, beat);
 
-  if (v < 0.18) {
-    // The flash. Brief, and bigger than anything else the scene contains — but it keeps the shell's
-    // colour in it. A white flash the size of the burst throws away the one moment the picture has
-    // a hue in it.
-    const punch = 1 - v / 0.18;
-    glow(ctx, x, y, spread * (0.7 + punch * 1.1), body, clamp(punch * 0.6, 0, 1), clamp(punch * 0.3, 0, 1));
-    glow(ctx, x, y, spread * (0.2 + punch * 0.4), core, clamp(punch * 0.9, 0, 1), 0.3);
+  // The pop, at the instant of ignition. A twentieth of the burst's life and a tenth of its width —
+  // enough to register as a bang, far too brief and too small to be the thing you are looking at.
+  if (v < 0.05) {
+    const punch = 1 - v / 0.05;
+    glow(ctx, x, y, spread * 0.16 * (0.6 + punch * 0.6), core, clamp(punch * 0.9, 0, 1), 0.3);
   }
 
+  // The streamers. Wide coloured body first, then a thin near-white centre on top of it, which is
+  // what gives a spark a hot middle instead of making it a coloured line.
+  //
+  // Sparks are grouped into a handful of **alpha bands** and one path is stroked per band. A path
+  // carries a single alpha, so the obvious way to give every spark its own is a `stroke()` each —
+  // and that is fifty-four rasteriser passes per pass per shell, which measured at seven
+  // milliseconds a frame all by itself. Quantising the life to five levels is free to look at: they
+  // are already twinkling on a held clock, over a range narrower than the twinkle.
   for (const [colour, width, alpha, scale] of [
-    [core, 0.0024, 0.85, 0.5],
-    [body, 0.0017, 0.75, 1],
+    [body, 0.0019, 0.8, 1],
+    [core, 0.0011, 0.9, 0.66],
   ]) {
-    ctx.strokeStyle = rgba(colour, clamp(fade * alpha, 0, 1));
     ctx.lineWidth = Math.max(1, S * width);
+    ctx.lineCap = 'round';
+    for (let band = 1; band <= SPARK_BANDS; band += 1) {
+      let any = false;
+      ctx.beginPath();
+      for (const s of sparks) {
+        if (Math.ceil(s.life * SPARK_BANDS) !== band) continue;
+        const reach = s.reach * scale;
+        // Long streaks while they are moving, short blips once they have stopped — a streamer is a
+        // spark plus the distance it covered while the eye was open.
+        const tail = reach * (0.26 + 0.6 * (1 - v));
+        const px = x + Math.cos(s.angle) * reach + dx;
+        const py = y + Math.sin(s.angle) * reach + dy;
+        ctx.moveTo(px, py);
+        ctx.lineTo(px - Math.cos(s.angle) * tail, py - Math.sin(s.angle) * tail);
+        any = true;
+      }
+      if (!any) continue;
+      ctx.strokeStyle = rgba(colour, clamp((band / SPARK_BANDS) * alpha, 0, 1));
+      ctx.stroke();
+    }
+  }
+
+  // Crackle: every sixth spark comes apart near the end of its run and throws a knot of smaller
+  // ones sideways. Two dozen extra marks, and they are most of why the burst has a texture.
+  if (v > 0.18) {
+    ctx.strokeStyle = rgba(core, clamp(fade * 0.5, 0, 1));
+    ctx.lineWidth = Math.max(1, S * 0.0012);
     ctx.beginPath();
-    for (let i = 0; i < 42; i += 1) {
-      // Hashed angles, not even ones. Forty-two rays at exactly 8.6 degrees apart is a compass
-      // rose, and the eye finds that instantly.
-      const a = hash2(shell.seed + i * 1.9, i) * TAU;
-      const reach = spread * scale * out * (0.55 + hash2(shell.seed + i * 3.3, i + 5) * 0.75);
-      const tail = reach * 0.42 * (0.35 + fade);
-      const px = x + Math.cos(a) * reach + wind.x * drift;
-      const py = y + Math.sin(a) * reach + wind.y * drift;
-      ctx.moveTo(px, py);
-      ctx.lineTo(px - Math.cos(a) * tail, py - Math.sin(a) * tail);
+    for (let i = 0; i < SPARKS; i += 6) {
+      const s = sparks[i];
+      if (s.life < 0.05) continue;
+      const bx = x + Math.cos(s.angle) * s.reach * 0.78 + dx;
+      const by = y + Math.sin(s.angle) * s.reach * 0.78 + dy;
+      for (let j = 0; j < 3; j += 1) {
+        const a = hash2(shell.seed + i * 2.1 + j, beat) * TAU;
+        const d = spread * 0.09 * (0.4 + hash2(shell.seed + j * 5.7, i) * 1.2) * out;
+        ctx.moveTo(bx + Math.cos(a) * d, by + Math.sin(a) * d);
+        ctx.lineTo(bx + Math.cos(a) * d * 0.55, by + Math.sin(a) * d * 0.55);
+      }
     }
     ctx.stroke();
+  }
+
+  // Pixelated puffs: chunky clots of colour hanging in the burst, dissolving on the ordered dither
+  // matrix rather than fading smoothly. This is the shared 16-bit toolkit — the same `bayerOn` that
+  // The Cloud comes apart on — so the one thing in this scene that breaks into blocks now has
+  // company, and the fireworks are tied to the scene's own vocabulary instead of being generic.
+  const px = pixelSize(W, H) * 2;
+  const puffBeat = Math.floor(t * 9) / 9;
+  for (let i = 0; i < 7; i += 1) {
+    const strength = fade * (0.35 + hash2(shell.seed + i * 8.3, i + 2) * 0.5)
+      * (0.45 + 0.55 * hash2(shell.seed + i, puffBeat));
+    if (strength < 0.04) continue;
+    const a = hash2(shell.seed + i * 4.7, i + 11) * TAU;
+    const d = spread * out * (0.2 + hash2(shell.seed + i * 2.9, i + 4) * 0.7);
+    // A puff jitters by a chunk or two on the held clock instead of drifting, so it reads as
+    // something being redrawn rather than something moving.
+    const jx = (hash2(shell.seed + i * 3.1, puffBeat) - 0.5) * px * 3;
+    const jy = (hash2(shell.seed + i * 7.3, puffBeat + 5) - 0.5) * px * 3;
+    ditherGlow(
+      ctx,
+      x + Math.cos(a) * d + dx + jx, y + Math.sin(a) * d + dy + jy,
+      spread * (0.1 + 0.13 * hash2(shell.seed + i * 6.7, i)) * (0.55 + out * 0.75),
+      rgba(i % 3 === 0 ? core : body, 0.5), strength, px, 1, 1.5,
+    );
   }
 }
 
@@ -314,13 +426,17 @@ export function drawLightBloom(ctx, W, H, t, lights) {
     const flicker = flickerAt(fire, t);
     const wind = windHere(fire.x * W, fire.y * H, S, t);
     const r = S * fire.r;
-    const centre = clamp(0.04 + flare * 0.26, 0, 1);
+    // A fire at full flare used to throw the largest, brightest coloured mass in the frame — larger
+    // and brighter than a shell going off, which puts the hierarchy exactly the wrong way up. A fire
+    // is a steady thing you keep noticing; a firework is an event. The fire keeps its glow, it just
+    // stops winning.
+    const centre = clamp(0.035 + flare * 0.19, 0, 1);
     // Stretched downwind like everything else it belongs to, and offset the same way: the fog it is
     // lighting has already been carried along by the time the light gets up there.
     lobe(
       ctx,
       fire.x * W + wind.x * r * 2.2, fire.y * H + wind.y * r * 2.2,
-      r * (4.4 + flare * 7) * (0.85 + flicker * 0.3), r * (2.8 + flare * 4.4) * (0.85 + flicker * 0.3),
+      r * (4.2 + flare * 4.2) * (0.85 + flicker * 0.3), r * (2.6 + flare * 2.6) * (0.85 + flicker * 0.3),
       wind.angle, NEON[fire.hue].body, centre, 0.1, 0.34, fire.phase + t * 0.5,
     );
   }
@@ -328,13 +444,45 @@ export function drawLightBloom(ctx, W, H, t, lights) {
   for (const shell of shellsAt(lights.shows, t)) {
     const glare = shellGlare(shell);
     if (glare < 0.01) continue;
-    const spread = S * (0.1 + 0.16 * glare + 0.06 * hash2(shell.seed, 3));
-    glow(
-      ctx,
-      shell.x * W, shell.y * H,
-      spread, NEON[shell.colour].body,
-      clamp(glare * 0.42, 0, 1), clamp(glare * 0.2, 0, 1),
-    );
+    const { body, core } = NEON[shell.colour];
+    const wind = windHere(shell.x * W, shell.y * H, S, t);
+    const x = shell.x * W;
+    const y = shell.y * H;
+
+    if (shell.u < BURST_AT) {
+      // Climbing. A dull point moving up through the cloud, and nothing else.
+      glow(ctx, x, y, S * 0.03, body, clamp(glare * 0.5, 0, 1), clamp(glare * 0.25, 0, 1));
+      continue;
+    }
+
+    const v = burstProgress(shell);
+    const spread = burstSpread(shell, S);
+    const out = 1 - (1 - v) ** 2.4;
+    const fade = (1 - v) ** 1.6;
+    const drift = wind.speed * SHELL_LIFE * (1 - BURST_AT) * v * 0.5;
+
+    // Fog lit by a burst is lit in the *shape* of the burst — arms, not a ball. Wide soft strokes
+    // down the same rays the sparks are on, which is the entire difference between light coming off
+    // an explosion and a coloured circle being turned up and turned down again. It used to be one
+    // `glow()` whose radius grew with its brightness, and that single call was the orb: it is drawn
+    // last, over everything, so it was also the only part of a firework you could reliably see.
+    ctx.lineWidth = Math.max(2, S * 0.015);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = rgba(body, clamp(glare * 0.17, 0, 1));
+    ctx.beginPath();
+    for (const s of burstSparks(shell, spread, out, fade, Math.floor(t * 7) / 7)) {
+      if (s.life < 0.06) continue;
+      const px = x + Math.cos(s.angle) * s.reach + wind.x * drift;
+      const py = y + Math.sin(s.angle) * s.reach + wind.y * drift;
+      ctx.moveTo(x + Math.cos(s.angle) * s.reach * 0.15, y + Math.sin(s.angle) * s.reach * 0.15);
+      ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+
+    // ...and a base glare underneath it at a **fixed** radius. Faint, and it only ever changes
+    // brightness — the moment its size follows its brightness there is a pulsing ball in the frame
+    // again, whatever is drawn on top.
+    glow(ctx, x, y, spread * 0.85, core, clamp(glare * 0.12, 0, 1), clamp(glare * 0.07, 0, 1));
   }
 
   ctx.restore();
