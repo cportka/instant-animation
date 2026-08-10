@@ -106,21 +106,40 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   where it belongs to one object with an outline and a face and is unmistakably something happening.
   Losing the full-frame tape effects also took the frame cost from ~95ms to ~6ms software-rasterised
   — they were the entire budget.
-- **The town below** (`site/scenes/above-the-fog/town.js`) is now its own **photo negative** —
-  every colour `255 - c`, channel by channel — so the water is the lightest thing on the ground, the
-  roads the darkest, and the vegetation a pale lilac. Inverting is not the same as picking pale
-  colours: it takes the hues to their complements too, which is what makes a glimpse read as a
-  negative — somewhere that is not quite a place — rather than as a place lit differently. The value
-  *structure* survives intact, which is why it works at all: everything that was distinguishable by
-  brightness still is, just the other way up. It is built out of **value**, not detail, because it is
-  only ever glimpsed — drop a gap anywhere and the shapes read in the second before it closes. The
-  river is generated first and
-  everything else is placed relative to it, which is what stops the result looking like three
-  unrelated layers stacked up: twelve jewellers in a parade along the front with awnings pulled most
-  of the way to grey, a cafe with a forecourt of parasols, a larger restaurant with its own terrace,
-  twenty-six houses on rows behind, and four hundred trees rejection-sampled against the water and
-  the roofs — a canopy sitting on a roof is the one mistake that makes an overhead view stop reading
-  as an overhead view.
+- **The town below** (`site/scenes/above-the-fog/town.js`) is a **photo negative**: hues at their
+  complements, so the water is the lightest thing on the ground, the roads the darkest, and the
+  vegetation violet. A glimpse reads as somewhere that is not quite a place rather than as a place
+  lit differently, and the value *structure* survives the flip intact — everything that was
+  distinguishable by brightness still is, just the other way up. It is built out of **value**, not
+  detail, because it is only ever glimpsed: drop a gap anywhere and the shapes have to read in the
+  second before it closes.
+
+  It is deliberately **not** a literal `255 - c` inversion any more, and it was. The negative of a
+  de-saturated photograph is another de-saturated photograph — everything landed between about 130
+  and 210, which is one flat mid-grey wash with a hint of lilac in it, and through a hole the size of
+  a fist that is nothing at all. So: **contrast is value** — the ladder now runs the whole way, roads
+  near black at about 26 and the river near white at about 240, because brightness is the only thing
+  that survives being seen for a second through a hole. And **off-ness is hue** — the complements are
+  taken at real chroma instead of pulled back toward grey, giving violet grass, sand-coloured water,
+  teal and slate roofs, jewel-toned awnings, and a *dark* glitter crawling downstream on a pale
+  river. What stops it becoming a cartoon is that none of it is allowed to be **lit**: every colour
+  down there is pigment, mid-to-dark, sitting still, and the neon in `lights.js` stays the only thing
+  in the frame that emits.
+
+  Two things that were invisible at the old contrast and unbearable at the new one, both fixed with
+  the value spread kept: the grass tiers are drawn as **overlapping discs** rather than as a grid of
+  rectangles — the grid genuinely could not be seen while the four tiers were a few levels apart, and
+  across seventy levels it became a wall of tiles, which is the one texture that announces *generated*
+  out loud. And the glints on the water lie **across** the current, the way a wave crest does, with
+  their position in the channel drifting on its own noise: along it, evenly spaced down the middle of
+  a pale ribbon, they had become a road's centre line.
+
+  The river is generated first and everything else is placed relative to it, which is what stops the
+  result looking like three unrelated layers stacked up: twelve jewellers in a parade along the front
+  under jewel-coloured awnings, a cafe with a forecourt of parasols, a larger restaurant with its own
+  terrace, twenty-six houses on rows behind, and four hundred trees rejection-sampled against the
+  water and the roofs — a canopy sitting on a roof is the one mistake that makes an overhead view
+  stop reading as an overhead view.
 - **No blur.** `ctx.filter = 'blur(24px)'` would give softer lobes and is not worth it: it allocates
   and composites an offscreen layer per drawing operation, so a couple of hundred of them is tens of
   milliseconds a frame — and where it is unsupported it fails *silently*, landing every shape
@@ -159,6 +178,34 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   the same reason. Neither is how a firework looks from the ground and both are how one looks from
   above it. They go up in *shows* — three to five shells in a ragged sequence from one spot, then
   nothing there for a minute and a half — because people do not set off one firework.
+
+  A burst is **streamers, crackle and pixelated puffs**, and the flash is small and lasts about a
+  fifth of a second. It used to be a disc most of the width of the burst that grew and shrank, and a
+  disc that grows and shrinks is the one shape that says *a value is being animated* rather than
+  *something exploded*. Two per-spark quantities do the work of not being a circle: a **speed**, so
+  the front is ragged rather than a rim (one radius for every spark is a disc however it is
+  coloured), and a **life**, so sparks go out one at a time over a couple of seconds instead of the
+  whole shape dimming together. Every sixth streamer comes apart near the end of its run and throws
+  a knot of smaller ones sideways, and the puffs are chunky clots of colour dissolving on the ordered
+  dither matrix from `effects/pixel.js` — the same `bayerOn` The Cloud comes apart on, so the one
+  thing in this scene that breaks into blocks now has company.
+
+  The spark geometry is shared with the pass that lights the fog, which is the point of pulling it
+  out: **the cloud is lit in the shape of the burst**, in arms rather than as a ball. That pass is
+  drawn last over everything, so its single `glow()` — whose radius grew with its brightness — was
+  not merely *an* orb, it was the only part of a firework that could reliably be seen. What is left
+  of it is a base glare at a **fixed** radius that only ever changes brightness; the moment a size
+  follows a brightness there is a pulsing ball in the frame again, whatever is drawn on top of it.
+  The fires' own glow came down at the same time, for the same reason in reverse: at full flare a
+  campfire was throwing the largest, brightest coloured mass in the frame, out-punching a shell going
+  off, which puts the hierarchy the wrong way up. A fire is a steady thing you keep noticing; a
+  firework is an event.
+
+  Sparks are stroked in five **alpha bands** rather than one `stroke()` each. A path carries a single
+  alpha, so the obvious way to give every spark its own life is fifty-four rasteriser passes per
+  colour per shell, which measured at around seven milliseconds a frame by itself; quantising a life
+  that is already twinkling on a held clock, over a range narrower than the twinkle, is free to look
+  at.
 
   And every light is drawn **twice**: once on the ground, under the whole depth of the cloud, where
   it is mostly invisible; and once as the light it throws *into* the fog — wide, faint, last of
