@@ -228,36 +228,56 @@ back into The Cloud, now wearing an enormous happy face; and then it comes apart
 Nobody comments on it. It is the only thing in the scene that glitches, and that is the point — the
 fog going to pieces reads as a rendering fault, one object doing it reads as something happening.
 
-Two decisions carry it:
+Three decisions carry it:
 
-- **The figures are hand-drawn bitmaps, not procedural shapes,** on a 28×34 grid. Twenty-two across
-  was not enough and no amount of care with a dozen cells fixed it — an angel and a reaper are both
-  "a vertical mass with a lump on top" until there is room for a wing to be a wing. Six more columns
-  bought the angel a halo, a head clear of its shoulders and two wings sweeping up behind it, and
-  the reaper a pointed cowl, a hollow with eyes in it, and a crescent blade on a snath that stays
-  outside the robe for its whole length instead of vanishing into it. They are ASCII art in the source, four levels deep, where they can be read and edited *as*
-  art. Each carries its own two-colour ramp **and its own opacity**, because the two trade against
-  each other — the reaper's near-black void inside a dark-grey cowl comes out eight levels apart
-  once it is composited at 84% over mid-grey, and brightening the cowl to fix that makes him a
-  ghost. Keeping the ramp dark and taking his opacity nearly to solid gets a black hollow inside a
-  dark cloak, which is the thing itself.
+- **The figures are hand-drawn bitmaps, not procedural shapes,** on a 28×34 grid, as ASCII art in
+  the source where they can be read and edited *as* art. Twenty-two columns across was not enough
+  and no amount of care with a dozen cells fixed it — an angel and a reaper are both "a vertical
+  mass with a lump on top" until there is room for a wing to be a wing.
+
+  Resolution alone did not fix it either, which took two goes to learn. What separates a figure from
+  a lump at this size is a **silhouette that changes width in a recognisable order** — halo, head,
+  shoulders, wings, robe — and **one direction of light**, every figure lit down its left edge and
+  shadowed down its right. A shape that widens smoothly from top to bottom is a bowling pin; a shape
+  drawn in a single tone is a sticker. Both shipped here before that was written down. The angel now
+  has an oval halo ring that reads as a ring rather than as a floating rectangle, a head clear of
+  both the halo above it and the shoulders below, wings that meet those shoulders and sweep up and
+  out with a feather break in them, and a robe with a lit side and a shadowed one. The reaper has a
+  pointed cowl with a genuine hollow in it, shoulders wider than the hood, a hanging robe with fold
+  lines and a ragged hem, and a crescent blade on a snath held clear of the body — always silhouetted
+  against fog rather than against cloak, with an arm reaching out to grip it, which is what stops a
+  scythe reading as a stray line beside him.
+
+  Each figure carries its own two-colour ramp **and its own opacity**, because the two trade against
+  each other. The reaper's ramp runs to a lighter stone than it did: the cowl has to sit far enough
+  above the void inside it for the hood to *have* a hollow, and at the old spacing they were a few
+  levels apart and he had a smooth head. Widening the ramp while dropping the opacity is not a wash —
+  it buys back the contrast the extra transparency costs, so he sits deeper in the weather than
+  before and reads better in it. What is not allowed is brightening him to fix the hollow, because a
+  pale figure is a ghost.
 - **The morph is a per-cell coin toss, not a cross-fade.** Each cell picks the old figure or the new
   one depending on whether its own hash has been passed by a sweeping threshold, so the angel is not
   dissolved into the reaper, it is *replaced* by it, cell by cell, in a scatter — and the cells
   nearest the threshold shove sideways while they change. That is what a decoder does when handed a
   keyframe it cannot fully apply.
+- **It is veiled cell by cell, not as a whole.** The fog's density field is sampled across the
+  figure's own grid and quantised into four bands, so parts of it are buried behind a bank while
+  others come through, and the pattern crawls across it as the weather drifts. One opacity for the
+  whole apparition is a decal turned down: uniformly faint, and still unmistakably lying *on* the
+  picture rather than inside it. Sampled on every second cell in each direction — the field is smooth
+  at that scale, so it is a quarter of the noise calls for a result nobody can tell apart.
 
-It is drawn **early** — under the billows, the crests, the filaments and the dark strands, all of
-which pass in front of it — and dimmed by however thick the fog is directly above it, sampling the
-scene's own density field rather than growing a second opinion about where the banks are. Drawn
-late it was a sprite on the weather; drawn here it is a thing happening some way down inside a bank
-of it. Five masses drift across its face, dark ones as well as pale: a figure only ever veiled by
-white haze reads as lit from in front, which is a spotlight, not weather.
+It is also drawn **early** — under the billows, the crests, the filaments and the dark strands, all
+of which pass in front of it. Drawn late it was a sprite on the weather; drawn here it is a thing
+happening some way down inside a bank of it. Seven masses drift across its face, dark ones as well
+as pale: a figure only ever veiled by white haze reads as lit from in front, which is a spotlight,
+not weather. Cloud in front and per-cell veiling from behind are two halves of one job, and either
+alone leaves it looking stuck to the glass.
 
-At most six fills for the whole thing, mid-morph, with two figures on screen and every cell
-displaced by its own amount. `tests/fog.test.js` asserts one apparition per cycle with genuinely
-varying gaps, and that all four figures resolve, in order, one at a time — if a morph window ever
-swallowed a figure whole, nothing else in the suite would notice.
+Two dozen fills for the whole thing at its worst, mid-morph, with two figures on screen, four veil
+bands and every cell displaced by its own amount. `tests/fog.test.js` asserts one apparition per
+cycle with genuinely varying gaps, and that all four figures resolve, in order, one at a time — if a
+morph window ever swallowed a figure whole, nothing else in the suite would notice.
 
 ### Changed — the channel change wears the scene it arrives at
 
