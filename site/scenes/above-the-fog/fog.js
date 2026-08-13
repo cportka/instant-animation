@@ -161,6 +161,17 @@ const cellRand = (col, row, salt, k) =>
  */
 const bankAt = (x, y, S, t) => fbm((x / S) * 0.85 + t * 0.008, (y / S) * 0.85 - t * 0.004, 3);
 
+/**
+ * How much of what is underneath gets up through the cloud here: 1 where the bank is thin, down
+ * toward a half where it is thick.
+ *
+ * Exported because two other things need to agree with the fog about where its banks are — the
+ * apparition, which is veiled cell by cell, and the fireworks, whose chunks are eaten by it. A
+ * second opinion about where the fog is would put both of them brightest exactly where it is
+ * thickest.
+ */
+export const cloudDensity = (x, y, S, t) => 1 - 0.5 * bankAt(x, y, S, t);
+
 /* ------------------------------------------------------------------ wind ---- */
 
 // The wind gusts. Two slow sine terms on top of a steady base, at deliberately non-harmonic
@@ -303,7 +314,7 @@ export function drawFog(ctx, W, H, t, fog) {
   // strands, all of which then pass in front of it. Drawn late it was a sprite on the weather;
   // drawn here it is a thing happening some way down inside a bank of it. It is also dimmed by
   // however thick the fog is directly above it, which is the other half of the same idea.
-  drawApparition(ctx, W, H, t, (x, y) => 1 - 0.5 * bankAt(x, y, S, t));
+  drawApparition(ctx, W, H, t, (x, y) => cloudDensity(x, y, S, t));
   billows(ctx, W, H, S, t, fog, wins);
   wisps(ctx, W, H, S, t, fog, wins);
   erosion(ctx, W, H, S, t, fog, wins);

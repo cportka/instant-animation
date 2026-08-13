@@ -18,9 +18,9 @@ MAJOR bump means here — see `.claude/CLAUDE.md`.
 From *"an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and
 changing into each other, over a lazy winding river and a cute riverside town with a cafe, a
 restaurant and twelve jewellery shops — the ground in reversed colour and barely ever visible, with
-people down there setting blue and green fires and letting off fireworks that burst amongst the fog
-as stylised orange and red pixel art, and every few minutes one cloud pixelates into an angel, then
-a grim reaper, then a giant happy face before dissolving back into fog"*.
+people down there setting fires and letting off fireworks that burst amongst the fog as stylised
+orange and red fractal pixel art, and every few minutes one cloud pixelates into an angel, then a
+grim reaper, then a giant happy face before dissolving back into fog"*.
 
 Straight down and orthographic, so there is no perspective anywhere in it and no horizon to hang
 depth on. Every cue that says *thick moving volume of air* rather than *scrolling texture* has to
@@ -119,7 +119,7 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   de-saturated photograph is another de-saturated photograph — everything landed between about 130
   and 210, which is one flat mid-grey wash with a hint of lilac in it, and through a hole the size of
   a fist that is nothing at all. So: **contrast is value** — the ladder runs the whole way, roads
-  near black at about 20 and the river the brightest thing on the ground, because brightness is the
+  near black at about 14 and the river the brightest thing on the ground, because brightness is the
   only thing that survives being seen for a second through a hole. And **off-ness is hue** — the
   complements are taken at real chroma instead of pulled back toward grey, giving violet grass, amber
   water, teal and slate roofs, jewel-toned awnings, and a *dark* glitter crawling downstream on a
@@ -134,9 +134,11 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   within a few levels of the cloud in front of it and dissolved into it, and a peek-a-boo stopped
   looking like a hole. And every light in the scene is additive, so a bright ground is a bright floor
   under the fires and the fireworks and leaves them less room to be brighter than it. The river is a
-  deep amber at 170 now rather than a cream at 238, the grass runs 110 down to 57, the canopy sits
+  burnt amber at 139 now rather than a cream at 238, the grass runs 87 down to 45, the canopy sits
   between them, and the awnings and roofs went with them — richer than the pale version and most of
-  it forty or fifty levels below where it was. The people's pale shoulder highlight carries more of
+  it a hundred levels below where it started. The gap between the brightest grass and the darkest
+  canopy is fifteen levels and it is the tightest join in the palette: close it and four hundred
+  trees disappear into the field, open it and they come back as pale speckle. The people's pale shoulder highlight carries more of
   their read than it did, because a dark dot on deep grass has only a few dozen levels to work with.
 
   Two things that were invisible at the old contrast and unbearable at the new one, both fixed with
@@ -194,11 +196,14 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   palette, under six greys of weather, anything at full chroma does not read as coloured pixels; it
   reads as the one thing in frame that is *lit* rather than merely visible.
 
-  The colour is split in two, and the split is the point. **The fires are cold** — cyan and green,
-  low, steady, always there. **The fireworks are hot** — a five-step ramp from a warm white through
-  yellow and orange to two reds, brief and violent and high in the air. Two kinds of burning that
-  cannot be confused for one another even glimpsed through a hole in a cloud, which is what tells you
-  the fireworks are an *event* while the fires are a *place*.
+  **Everything that burns is warm**, out of one five-step ramp: a warm white, a yellow, an orange and
+  two reds. The fires were cyan and green for several rounds, on the theory that cold fires against
+  hot fireworks would separate the two. It did separate them — and it also put the only cool hue in
+  the animation on the one thing that is on screen continuously, so a soft blue-green disc sat in the
+  cloud above every fire the whole time, which is not a fire, it is a bubble of light. Fires and
+  fireworks stay distinct on **shape and duration** instead, which is a stronger distinction anyway:
+  a three-second event that comes apart into branching chunks cannot be confused with a mass that has
+  sat there guttering for two minutes.
 
   Both rules that shape the drawing come from the camera being **directly overhead**:
 
@@ -215,10 +220,23 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   They go up in *shows* — three to five shells in a ragged sequence from one spot, then nothing there
   for a minute and a half — because people do not set off one firework.
 
-  **A burst is pixel art.** Every spark is a run of chunks snapped to a coarse grid, stepping down the
-  ramp from a warm-white head to a deep red tail, at full opacity with hard edges — and it is drawn
-  twice, once under the whole depth of the cloud and once over it at just under half strength, so
-  what you see is chunky sparks *amongst* the fog rather than a soft glow behind it. Softness is the
+  **A burst is branching pixel art.** Every limb is a run of chunks snapped to a coarse grid,
+  stepping down the ramp from a warm-white head to a deep red tail, at full opacity with hard edges —
+  and every limb **forks in two, twice**, so two dozen rays leave the centre and two hundred are on
+  screen, each generation shorter, kinked further off its parent and starting further down the ramp
+  than the one it grew from. Self-similar at three scales. A plain radial star is the one arrangement
+  that reads as *drawn* rather than as something that burst, and that is what this was.
+
+  A limb is a point, a direction and a length rather than an angle from the centre, because a branch
+  does not start at the centre. Its chunks are laid from the tip backwards, spaced by a fraction of
+  its own length — fixed spacing puts the tail of any limb shorter than two chunks behind its own
+  root, where it gets culled, which would have deleted every branch in the burst.
+
+  It is drawn twice: once under the whole depth of the cloud, and once over it at a third strength
+  with **the cloud eating chunks**. Where the bank in front is thick a chunk is simply not drawn, on
+  a hash of its own position so the pattern is stable rather than sparkling, reading the same density
+  field the fog and the apparition read. That is what "fog over a firework" has to mean for something
+  made of hard squares: you cannot half-hide a pixel, so you take some of them away. Softness is the
   default a canvas hands you for free and it is the wrong default here: a firework seen through
   weather is the one thing in this scene allowed a hard edge.
 
@@ -259,6 +277,13 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   mass in the frame, which puts the hierarchy the wrong way up. A fire is a steady thing you keep
   noticing; a firework is an event.
 
+  A fire's light in the cloud is a **3:1 smear along the wind at a very low alpha, with dithered
+  chunks laid down it** — not the soft round mass it was. Firelight genuinely does diffuse through
+  cloud, so refusing it any softness at all does not remove the bubble; tried on its own, a tight
+  dither is a tidy little pile of squares. What made the old one a bubble was that it was round,
+  bright, blue-green and on screen continuously. Long, warm, faint and leaning is a different object,
+  and the chunks in it give the plume the same grain as everything else that burns.
+
   **And the people.** They exist because everything else in the file implies them: something set those
   fires and something is lighting those shells, and an overhead view with no one in it says the town
   is abandoned and the fires are wild. Ninety-odd of them, clustered — a knot around each fire, a
@@ -266,8 +291,14 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   about on their own slow noise, and a crowd with a shell in the air above it backs away from the
   launch spot, which costs one number per person and is the only reason they read as *doing*
   something rather than standing in a field. They are the one thing in the file that is an object
-  rather than a light, so they composite normally, under everything additive, and take their contrast
-  from the negative's near-white river and near-black roads. Two fills for the lot of them.
+  rather than a light, so they composite normally, under everything additive.
+
+  Each is four marks: a **halo** of near-black, a body, a highlight on the shoulder, and — for a
+  third of them — a carried light, since the people setting the fires ought to have arrived with
+  something burning in hand. The halo is the part that does the work. A person is two pixels across
+  on a ground that runs from 45 to 139, and a single dark dot on it was very nearly invisible; a ring
+  of dark separates the figure from whatever it happens to be standing on, which at this size is the
+  whole difference between a person and a speck of texture. Four fills for the lot of them.
 
   And every light is drawn **twice**: once on the ground, under the whole depth of the cloud, where
   it is mostly invisible; and once as the light it throws *into* the fog — wide, faint, last of

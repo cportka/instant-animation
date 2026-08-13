@@ -34,7 +34,7 @@ export const meta = {
   id: 'above-the-fog',
   title: 'Above the Fog',
   prompt:
-    'an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and changing into each other, over a lazy winding river and a cute riverside town with a cafe, a restaurant and twelve jewellery shops — the ground in reversed colour and barely ever visible, with people down there setting blue and green fires and letting off fireworks that burst amongst the fog as stylised orange and red pixel art, and every few minutes one cloud pixelates into an angel, then a grim reaper, then a giant happy face before dissolving back into fog',
+    'an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and changing into each other, over a lazy winding river and a cute riverside town with a cafe, a restaurant and twelve jewellery shops — the ground in reversed colour and barely ever visible, with people down there setting fires and letting off fireworks that burst amongst the fog as stylised orange and red fractal pixel art, and every few minutes one cloud pixelates into an angel, then a grim reaper, then a giant happy face before dissolving back into fog',
   created: '2026-08-09',
   background: '#0e1113',
   // Mid-apparition, on the beat where the reaper has fully resolved. Of everything this scene does

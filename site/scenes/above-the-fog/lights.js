@@ -5,13 +5,14 @@
 // read as coloured pixels, it reads as the one thing in frame that is *lit* rather than merely
 // visible. So it is worth being careful with, and it is kept in one place.
 //
-// The colour is split in two, and the split is the point:
-//
-// **The fires are cold.** Cyan and green, low to the ground, steady, always there.
-// **The fireworks are hot.** A four-step ramp from white through yellow and orange to a deep red,
-// brief and violent and high in the air. Two kinds of burning that cannot be confused for one
-// another even glimpsed through a hole in a cloud, which is what tells you the fireworks are an
-// *event* while the fires are a *place*.
+// **Everything that burns here is warm**, out of one five-step ramp: a warm white, a yellow, an
+// orange and two reds. The fires were cyan and green for several rounds, on the theory that cold
+// fires against hot fireworks would separate the two. It did separate them — and it also put the
+// only cool hue in the animation on the one thing that is on screen continuously, so a soft
+// blue-green disc sat in the cloud above every fire all the time, which is not a fire, it is a
+// bubble of light. Fires and fireworks stay distinct on **shape and duration** instead, which is a
+// stronger distinction anyway: a three-second event that comes apart into branching chunks cannot be
+// confused with a mass that has sat there guttering for two minutes.
 //
 // Two rules govern the drawing, and both come from the camera being **directly overhead**:
 //
@@ -23,18 +24,25 @@
 // from you — they spread, decelerate and cool in place while the wind carries the whole burst
 // sideways.
 //
-// The bursts are drawn as **pixel art**: every spark is a run of chunks snapped to a coarse grid,
-// stepping down the ramp from a white head to a red tail, at full opacity with hard edges. They are
-// drawn twice — once under the whole depth of the cloud and once over it at partial strength — so
-// what you see is chunky sparks *amongst* the fog rather than a soft glow behind it. Softness is the
-// default a canvas gives you for free and it is the wrong default here: a firework seen through
-// weather is the one thing in this scene allowed a hard edge.
+// The bursts are drawn as **branching pixel art**. Every limb is a run of chunks snapped to a coarse
+// grid, stepping down the ramp from a warm-white head to a red tail at full opacity with hard edges;
+// and every limb forks in two, twice, so two dozen rays leave the centre and two hundred are on
+// screen — each generation shorter, kinked further off its parent and cooler than the one it grew
+// from. A plain radial star is the one arrangement that reads as *drawn* rather than as something
+// that burst.
+//
+// They are drawn twice: once under the whole depth of the cloud, and once over it at a third
+// strength with **the cloud eating chunks** — where the bank in front is thick a chunk is simply not
+// drawn, on a hash of its own position so it is stable rather than sparkling. That is what "fog over
+// a firework" has to mean for something made of hard squares: you cannot half-hide a pixel, so you
+// take some of them away. Softness is the default a canvas gives you for free and it is the wrong
+// default here: a firework seen through weather is the one thing in this scene allowed a hard edge.
 
 import { TAU, clamp, glow, rampAt, rgba, smoothstep, wrap01 } from '../../lib/draw.js';
 import { curl, hash2, noise2 } from '../../effects/field.js';
 import { chunk, ditherGlow } from '../../effects/pixel.js';
 import { lobe } from '../../effects/volume.js';
-import { WIND, gustAt } from './fog.js';
+import { WIND, cloudDensity, gustAt } from './fog.js';
 
 /* ------------------------------------------------------------- palette ---- */
 
@@ -51,18 +59,21 @@ const EMBER = [
   [176, 22, 26],
 ];
 
-// The fires. Cold on purpose — see the note at the top.
-const COLD = {
-  cyan: { body: [64, 200, 255], core: [214, 246, 255] },
-  green: { body: [72, 255, 158], core: [222, 255, 236] },
+// The fires, out of the same family as the bursts — see the note at the top for why they are no
+// longer cold. Two of them so a field of fires is not a field of one colour.
+const FIRE = {
+  ember: { body: [255, 108, 24], core: [255, 216, 150] },
+  coal: { body: [226, 48, 20], core: [255, 176, 96] },
 };
 
 // People, seen from directly above: a dot the size of a pair of shoulders with a highlight on it.
 // The body is dark and the highlight carries most of the read — with the ground taken down into the
 // 60s and 100s, a dark dot alone has only a few dozen levels to work with on the deepest grass, and
 // the pale mark on its shoulder is what still separates a person from a shadow.
-const FIGURE = 'rgba(20, 16, 28, 0.88)';
-const FIGURE_LIT = 'rgba(252, 246, 232, 0.85)';
+const FIGURE = 'rgba(16, 12, 22, 0.94)';
+const FIGURE_LIT = 'rgba(255, 250, 238, 0.92)';
+/** Carried by a third of them. The one warm mark on the ground that is not a fire. */
+const TORCH = 'rgba(255, 168, 58, 0.95)';
 
 /* ---------------------------------------------------------------- plan ---- */
 
@@ -79,7 +90,7 @@ export function planLights(rng, river, nearestRiver) {
     fires.push({
       x,
       y,
-      hue: i % 2 ? 'cyan' : 'green',
+      hue: i % 2 ? 'ember' : 'coal',
       r: rng.range(0.011, 0.024),
       phase: rng.range(0, 30),
       // A fire surges every ten to twenty-five seconds and settles again. Separate from the flicker,
@@ -220,17 +231,24 @@ const burstSpread = (shell, S) => S * (0.11 + 0.09 * hash2(shell.seed, 3));
  */
 const burstPixel = (S) => Math.max(3, Math.round(S / 130));
 
-const SPARKS = 54;
+const SPARKS = 24;
 /** Chunks in a spark's trail at full life — and, not coincidentally, steps in the ramp. */
 const TRAIL = EMBER.length;
+/** How many times a spark splits. Each generation forks in two, so 2 gives seven limbs per ray. */
+const FORKS = 2;
 
 /**
- * The sparks of a burst, as geometry.
+ * The sparks of a burst, as geometry — a **branching** structure, not a star.
  *
- * Shared by the ground pass and the pass that lights the fog, which is the whole point of pulling it
- * out: the light in the cloud is then the shape of *this* burst rather than a circle standing in for
- * it. A coloured circle growing and shrinking is what a firework looks like to someone who has only
- * ever seen one described.
+ * Every primary ray forks in two partway along its length, and each of those forks again, so what
+ * leaves the centre is thirty limbs and what you see is two hundred. Each generation is shorter,
+ * kinked further off its parent and shorter-lived than the one it came from, which is the whole of
+ * it: self-similar at three scales. A firework really does come apart this way, and a plain radial
+ * star — which is what this was — is the one arrangement that reads as *drawn* rather than as
+ * something that burst.
+ *
+ * A spark is a point, a direction and a length rather than an angle from the centre, because a
+ * branch does not start at the centre. Its chunks are laid from the tip backwards.
  *
  * Two per-spark quantities do all the work of not being a circle. A **speed**, so the front is
  * ragged rather than a rim — one radius for every spark is a disc however it is coloured. And a
@@ -240,22 +258,49 @@ const TRAIL = EMBER.length;
  */
 function burstSparks(shell, spread, out, fade, beat) {
   const sparks = [];
+
+  const grow = (x0, y0, angle, len, life, depth, id) => {
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    sparks.push({ x0, y0, dx, dy, len, life, depth });
+    if (depth >= FORKS) return;
+    for (let b = 0; b < 2; b += 1) {
+      const h = hash2(shell.seed + id * 2.7 + b * 5.3, depth + 3);
+      const k = hash2(shell.seed + id * 4.1 + b * 1.9, depth + 11);
+      // Fork somewhere in the outer half of the parent, so the limb it leaves has room to read as a
+      // limb rather than as a second ray from the same point.
+      const at = len * (0.4 + h * 0.34);
+      grow(
+        x0 + dx * at, y0 + dy * at,
+        angle + (b ? 1 : -1) * (0.4 + k * 0.5),
+        len * (0.5 + h * 0.3),
+        life * (0.62 + k * 0.16),
+        depth + 1,
+        id * 4 + b + 1,
+      );
+    }
+  };
+
   for (let i = 0; i < SPARKS; i += 1) {
-    // Hashed angles, not even ones. Fifty-four rays at exactly 6.7 degrees apart is a compass rose,
+    // Hashed angles, not even ones. Two dozen rays at exactly fifteen degrees apart is a compass rose,
     // and the eye finds that instantly.
     const h = hash2(shell.seed + i * 1.9, i);
     const k = hash2(shell.seed + i * 3.3, i + 5);
     const j = hash2(shell.seed + i * 6.1, i + 9);
-    // Twinkling on the held clock: a spark blinks out for a beat and comes back. On a soft mark this
-    // would be a defect; on a hard-edged one it is the thing that makes it look alive.
-    if (hash2(shell.seed + i, beat) < 0.11) continue;
-    sparks.push({
+    // Twinkling on the held clock: a limb blinks out for a beat and comes back, and takes everything
+    // growing off it with it. On a soft mark this would be a defect; on a hard-edged one it is the
+    // thing that makes it look alive.
+    if (hash2(shell.seed + i, beat) < 0.09) continue;
+    grow(
+      0, 0,
       // A little curl on top of the radial line, growing as it goes out — a streamer bends, a ray
       // does not.
-      angle: h * TAU + (j - 0.5) * 0.7 * out,
-      reach: spread * out * (0.42 + k * 1.05),
-      life: clamp(fade * (0.45 + j * 1.1), 0, 1),
-    });
+      h * TAU + (j - 0.5) * 0.7 * out,
+      spread * out * (0.42 + k * 1.05),
+      clamp(fade * (0.45 + j * 1.1), 0, 1),
+      0,
+      i + 1,
+    );
   }
   return sparks;
 }
@@ -283,7 +328,7 @@ function windHere(x, y, S, t) {
 export function drawCrowd(ctx, W, H, t, lights) {
   if (!lights) return;
   const S = Math.min(W, H);
-  const r = Math.max(1.3, S * 0.0034);
+  const r = Math.max(1.8, S * 0.0052);
   const live = shellsAt(lights.shows, t);
   // A crowd with a shell in the air above it backs away from the launch spot. It costs one number
   // per person and it is the only reason the people read as *doing* something rather than standing
@@ -291,27 +336,46 @@ export function drawCrowd(ctx, W, H, t, lights) {
   const firing = [false, false, false];
   for (const shell of live) firing[shell.show] = true;
 
-  for (const [style, offset, scale] of [[FIGURE, 0, 1], [FIGURE_LIT, -r * 0.5, 0.5]]) {
+  const at = (p) => {
+    // Milling about: two slow noise reads, so nobody walks in a circle or on a straight line.
+    let x = p.x + (noise2(p.phase, t * 0.09) - 0.5) * p.drift * 2;
+    let y = p.y + (noise2(p.phase + 5.7, t * 0.07) - 0.5) * p.drift * 2;
+    if (p.show >= 0 && firing[p.show]) {
+      const show = lights.shows[p.show];
+      const dx = x - show.x;
+      const dy = y - show.y;
+      const d = Math.hypot(dx, dy) || 1;
+      x += (dx / d) * 0.024;
+      y += (dy / d) * 0.024;
+    }
+    return [x * W, y * H];
+  };
+
+  // Four passes and four fills. A person is two pixels across on a ground that runs from 45 to 139,
+  // and a single dark dot on it was very nearly invisible — so each one now gets a **halo** of the
+  // ground's own dark, a body, a highlight on the shoulder and, for a third of them, a carried
+  // light. The halo is the part that does the work: it separates the figure from whatever it happens
+  // to be standing on, which for a mark this small is the whole difference between a person and a
+  // speck of texture.
+  for (const [style, dx, dy, scale, only] of [
+    ['rgba(8, 5, 14, 0.5)', 0, 0, 1.75, null],
+    [FIGURE, 0, 0, 1, null],
+    [FIGURE_LIT, -r * 0.42, -r * 0.42, 0.46, null],
+    [TORCH, r * 0.66, r * 0.5, 0.4, 3],
+  ]) {
     ctx.fillStyle = style;
     ctx.beginPath();
-    for (const p of lights.people) {
-      // Milling about: two slow noise reads, so nobody walks in a circle or on a straight line.
-      let x = p.x + (noise2(p.phase, t * 0.09) - 0.5) * p.drift * 2;
-      let y = p.y + (noise2(p.phase + 5.7, t * 0.07) - 0.5) * p.drift * 2;
-      if (p.show >= 0 && firing[p.show]) {
-        const show = lights.shows[p.show];
-        const dx = x - show.x;
-        const dy = y - show.y;
-        const d = Math.hypot(dx, dy) || 1;
-        x += (dx / d) * 0.024;
-        y += (dy / d) * 0.024;
-      }
-      const cx = x * W;
-      const cy = y * H + offset;
-      ctx.moveTo(cx + r * scale, cy);
-      ctx.arc(cx, cy, r * scale, 0, TAU);
+    let any = false;
+    for (let i = 0; i < lights.people.length; i += 1) {
+      // A third of them are carrying something burning. They are the ones setting the fires, so at
+      // least some of them ought to have arrived with a light in their hand.
+      if (only !== null && i % only !== 0) continue;
+      const [cx, cy] = at(lights.people[i]);
+      ctx.moveTo(cx + dx + r * scale, cy + dy);
+      ctx.arc(cx + dx, cy + dy, r * scale, 0, TAU);
+      any = true;
     }
-    ctx.fill();
+    if (any) ctx.fill();
   }
 }
 
@@ -346,7 +410,7 @@ function drawFire(ctx, W, H, S, t, fire, life) {
   // one. Both feed the same number, so nothing downstream has to know which is happening.
   const flare = Math.max(flareAt(fire, t) * life, catching);
   const wind = windHere(x, y, S, t);
-  const { body, core } = COLD[fire.hue];
+  const { body, core } = FIRE[fire.hue];
   const beat = Math.floor(t * 12) / 12;
   const size = (1 + flare * 0.8) * flicker;
 
@@ -421,7 +485,7 @@ function drawFire(ctx, W, H, S, t, fire, life) {
  * looks like pixel art and why it is cheap: the version this replaced gave each spark its own alpha
  * and therefore its own `stroke()`, which was fifty-four rasteriser passes a shell.
  */
-function drawShell(ctx, W, H, S, t, shell, px, strength) {
+function drawShell(ctx, W, H, S, t, shell, px, strength, veil = null) {
   const wind = windHere(shell.x * W, shell.y * H, S, t);
   const x = shell.x * W + wind.x * S * 0.02 * shell.u;
   const y = shell.y * H + wind.y * S * 0.02 * shell.u;
@@ -472,30 +536,36 @@ function drawShell(ctx, W, H, S, t, shell, px, strength) {
     ctx.fill();
   }
 
-  // One path per ramp step. A spark's head sits at its reach and its tail runs back toward the
-  // centre, one chunk per step; as it dies it loses tail chunks and its head cools down the ramp, so
-  // a burst ends as a scatter of single red squares rather than as a shape being faded out.
+  // One path per ramp step. A limb's head sits at its tip and its tail runs back along itself, one
+  // chunk per step; as it dies it loses tail chunks and its head cools down the ramp, so a burst
+  // ends as a scatter of single red squares rather than as a shape being faded out. Deeper
+  // generations start further down the ramp, so the branches are cooler than what they grew off.
   for (let step = 0; step < TRAIL; step += 1) {
     let any = false;
     ctx.beginPath();
     for (const s of sparks) {
       const alive = 1 + Math.round(s.life * (TRAIL - 1));
-      const cooled = Math.round((1 - s.life) * 2);
-      // Trail spacing is a *fraction* of how far out the spark is, capped at a couple of grid
-      // squares. A fixed spacing means a spark that has not travelled two chunks yet has its whole
-      // tail behind the centre of the burst, where it gets culled — so the first half of every burst
-      // was a dense knot with no radiating in it at all.
-      const gap = Math.min(px * 2.2, s.reach * 0.22);
+      const cooled = Math.round((1 - s.life) * 2) + s.depth;
+      // Trail spacing is a *fraction* of the limb's length, capped at a couple of grid squares. A
+      // fixed spacing means a limb shorter than two chunks has its whole tail behind its own root,
+      // where it gets culled — so the first half of every burst was a knot with no radiating in it,
+      // and every branch would have vanished for the same reason.
+      const gap = Math.min(px * 2.2, s.len * 0.24);
       for (let k = 0; k < alive; k += 1) {
         if (Math.min(TRAIL - 1, k + cooled) !== step) continue;
-        const reach = s.reach - k * gap;
-        if (reach < px * 0.4) continue;
-        // Only half a chunk bigger at the head. A double-size white square is four times the area of
-        // the tail chunks behind it, so the ramp's hottest step ends up covering more of the burst
-        // than the other four together and the whole thing reads white.
-        const size = k === 0 ? px * 1.5 : px;
-        const cx = x + Math.cos(s.angle) * reach + dx;
-        const cy = y + Math.sin(s.angle) * reach + dy;
+        const along = s.len - k * gap;
+        if (along < px * 0.4) continue;
+        // Only half a chunk bigger at the head, and only on a primary. A double-size white square is
+        // four times the area of the tail chunks behind it, so the ramp's hottest step ends up
+        // covering more of the burst than the other four together and the whole thing reads white.
+        const size = k === 0 && s.depth === 0 ? px * 1.5 : px;
+        const cx = x + s.x0 + s.dx * along + dx;
+        const cy = y + s.y0 + s.dy * along + dy;
+        // The cloud eats chunks. Where the bank in front is thick a chunk is simply not drawn, and
+        // the decision is a hash of its own position so it is stable frame to frame rather than
+        // sparkling. This is what "more fog over the fireworks" means for something made of hard
+        // squares: you cannot half-hide a pixel, so you take some of them away.
+        if (veil && hash2(cx * 0.021, cy * 0.019) > veil(cx, cy)) continue;
         chunk(ctx, cx - size / 2, cy - size / 2, size, size, px);
         any = true;
       }
@@ -546,6 +616,11 @@ export function drawLightBloom(ctx, W, H, t, lights) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
 
+  // A fire's light in the cloud, as **three chunky masses laid downwind** rather than one soft
+  // ellipse. The ellipse was a bubble: a smooth coloured disc hanging over every fire, on screen the
+  // whole time, and the single most artificial thing in the frame. Dithered blocks in a row that
+  // leans with the wind read as a lit patch of cloud instead — and they are made of the same squares
+  // the fireworks are, so the two things that glow now glow in the same language.
   for (const fire of lights.fires) {
     const life = fireLifeAt(fire, t);
     if (life < 0.01) continue;
@@ -553,18 +628,32 @@ export function drawLightBloom(ctx, W, H, t, lights) {
     const flicker = flickerAt(fire, t);
     const wind = windHere(fire.x * W, fire.y * H, S, t);
     const r = S * fire.r * (0.55 + life * 0.45);
+    const { body } = FIRE[fire.hue];
     // A fire at full flare used to throw the largest, brightest coloured mass in the frame — larger
     // and brighter than a shell going off, which puts the hierarchy exactly the wrong way up. A fire
     // is a steady thing you keep noticing; a firework is an event.
-    const centre = clamp((0.035 + flare * 0.19) * life, 0, 1);
-    // Stretched downwind like everything else it belongs to, and offset the same way: the fog it is
-    // lighting has already been carried along by the time the light gets up there.
+    const power = clamp((0.42 + flare * 0.85) * life * (0.75 + flicker * 0.35), 0, 1);
+    // A soft base, drawn as a **3:1 smear along the wind** at a low alpha. Firelight genuinely does
+    // diffuse through cloud, and refusing it any softness at all does not remove the bubble, it just
+    // replaces it with a tidy little pile of squares — which is what a tight dither on its own looks
+    // like. What made the old one a bubble was that it was round, blue-green, bright, and on screen
+    // continuously. Long, warm, faint and leaning is a different object.
     lobe(
       ctx,
-      fire.x * W + wind.x * r * 2.2, fire.y * H + wind.y * r * 2.2,
-      r * (4.2 + flare * 4.2) * (0.85 + flicker * 0.3), r * (2.6 + flare * 2.6) * (0.85 + flicker * 0.3),
-      wind.angle, COLD[fire.hue].body, centre, 0.1, 0.34, fire.phase + t * 0.5,
+      fire.x * W + wind.x * r * 2.6, fire.y * H + wind.y * r * 2.6,
+      r * (5.2 + flare * 4) * (0.85 + flicker * 0.3), r * (1.7 + flare * 1.3) * (0.85 + flicker * 0.3),
+      wind.angle, body, clamp(power * 0.13, 0, 1), 0.08, 0.4, fire.phase + t * 0.5,
     );
+    // ...and chunks in it, so the plume has the same grain as everything else that burns.
+    for (let i = 0; i < 2; i += 1) {
+      const reach = r * (1.1 + i * 2.2) * (1 + flare * 0.7);
+      ditherGlow(
+        ctx,
+        fire.x * W + wind.x * reach, fire.y * H + wind.y * reach,
+        r * (1.5 - i * 0.4) * (1 + flare * 0.5),
+        rgba(body, 0.5), power * (0.8 - i * 0.3), px, 1, 2.6,
+      );
+    }
   }
 
   for (const shell of shellsAt(lights.shows, t)) {
@@ -575,12 +664,14 @@ export function drawLightBloom(ctx, W, H, t, lights) {
     glow(
       ctx, shell.x * W, shell.y * H,
       burstSpread(shell, S) * 0.9, rampAt(EMBER, 1 + shell.tint),
-      clamp(glare * 0.16, 0, 1), clamp(glare * 0.09, 0, 1),
+      clamp(glare * 0.12, 0, 1), clamp(glare * 0.07, 0, 1),
     );
-    // ...and the burst itself again, chunk for chunk, at just under half strength. Full strength here
-    // would be the same firework drawn twice and the fog would count for nothing; leaving it out
-    // altogether is what made a burst a soft smudge, which is what it was.
-    drawShell(ctx, W, H, S, t, shell, px, 0.45);
+    // ...and the burst itself again, chunk for chunk, at a third strength and with the cloud eating
+    // whichever chunks have a bank in front of them. Full strength here would be the same firework
+    // drawn twice and the fog would count for nothing; leaving it out altogether is what made a
+    // burst a soft smudge, which is what it was. This is the middle, and it is where a firework
+    // *inside* weather actually lives — most of it hidden, a scatter of it not.
+    drawShell(ctx, W, H, S, t, shell, px, 0.34, (cx, cy) => cloudDensity(cx, cy, S, t) ** 3.4);
   }
 
   ctx.restore();
