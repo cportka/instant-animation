@@ -27,14 +27,14 @@
 
 import { createRng } from '../../lib/rng.js';
 import { drawGround, nearestRiver, planGround } from './town.js';
-import { drawLightBloom, drawLights, planLights } from './lights.js';
+import { drawCrowd, drawLightBloom, drawLights, planLights } from './lights.js';
 import { drawFog, planFog } from './fog.js';
 
 export const meta = {
   id: 'above-the-fog',
   title: 'Above the Fog',
   prompt:
-    'an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and changing into each other, over a lazy winding river and a cute riverside town with a cafe, a restaurant and twelve jewellery shops — the ground in reversed colour and barely ever visible with blue and green fires burning on it and people setting off fireworks, and every few minutes one cloud pixelates into an angel, then a grim reaper, then a giant happy face before dissolving back into fog',
+    'an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and changing into each other, over a lazy winding river and a cute riverside town with a cafe, a restaurant and twelve jewellery shops — the ground in reversed colour and barely ever visible, with people down there setting blue and green fires and letting off fireworks that burst amongst the fog as stylised orange and red pixel art, and every few minutes one cloud pixelates into an angel, then a grim reaper, then a giant happy face before dissolving back into fog',
   created: '2026-08-09',
   background: '#0e1113',
   // Mid-apparition, on the beat where the reaper has fully resolved. Of everything this scene does
@@ -75,6 +75,9 @@ export function create({ width, height, seed = meta.id }) {
     draw(ctx, t) {
       ctx.save();
       drawGround(ctx, W, H, t, ground);
+      // The people are part of the ground, not part of the light: they composite normally, before
+      // anything additive, so they are objects standing on the town rather than more glow.
+      drawCrowd(ctx, W, H, t, lights);
       // Fires and fireworks sit on the ground, under the entire depth of the cloud — and then get
       // drawn a second time after it, as the light they throw *into* the fog. That second pass is
       // what you actually see almost all of the time.

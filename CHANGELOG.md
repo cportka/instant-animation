@@ -17,9 +17,10 @@ MAJOR bump means here — see `.claude/CLAUDE.md`.
 
 From *"an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and
 changing into each other, over a lazy winding river and a cute riverside town with a cafe, a
-restaurant and twelve jewellery shops — the ground in reversed colour and barely ever visible with
-blue and green fires burning on it, and every few minutes one cloud pixelates into an angel, then a
-grim reaper, then a giant happy face before dissolving back into fog"*.
+restaurant and twelve jewellery shops — the ground in reversed colour and barely ever visible, with
+people down there setting blue and green fires and letting off fireworks that burst amongst the fog
+as stylised orange and red pixel art, and every few minutes one cloud pixelates into an angel, then
+a grim reaper, then a giant happy face before dissolving back into fog"*.
 
 Straight down and orthographic, so there is no perspective anywhere in it and no horizon to hang
 depth on. Every cue that says *thick moving volume of air* rather than *scrolling texture* has to
@@ -140,6 +141,23 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   terrace, twenty-six houses on rows behind, and four hundred trees rejection-sampled against the
   water and the roofs — a canopy sitting on a roof is the one mistake that makes an overhead view
   stop reading as an overhead view.
+- **The periodic multi-second stall was the measuring rig, not the scene.** Worth writing down
+  because it was reported as an open performance problem for three rounds running. Rendering this
+  scene off-screen in headless Chromium pauses for about a second and a half every twenty-odd
+  frames. It survives `--disable-gpu` and `--disable-accelerated-2d-canvas` unchanged; it survives
+  replacing all eight hundred of the frame's radial gradients with a single shared one; it happens
+  with `t` **frozen**, so it is not the content at some particular moment; and a synthetic loop of
+  seven hundred large translucent circles — no scene code involved at all — reproduces it exactly.
+  It is the browser flushing deferred rasterisation for a canvas that is never presented, and the
+  whole batch lands on whichever frame triggers the flush. There is nothing here to fix. The number
+  that means anything is the median, which is **9–11ms** software-rasterised at 1280×800, and which
+  did not move when the fires doubled, ninety people arrived and the bursts became pixel art.
+- **Gradient caching was measured and rejected.** A full frame builds ~810 radial gradients, and
+  since a lobe's gradient is always the unit circle, caching on the colour stops looked free. It is
+  not: only **24%** of them repeat, because the lattice reads its grey at a continuous ramp position
+  so almost every lobe has stops nobody else has. A quarter of the gradients is worth well under a
+  millisecond, and buying it would cost `tests/fog.test.js` its independence — coverage is
+  reconstructed from the recorded `addColorStop` alphas, and a cache hit records nothing.
 - **No blur.** `ctx.filter = 'blur(24px)'` would give softer lobes and is not worth it: it allocates
   and composites an offscreen layer per drawing operation, so a couple of hundred of them is tens of
   milliseconds a frame — and where it is unsupported it fails *silently*, landing every shape
@@ -159,12 +177,18 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   scene beneath runs all the way to near-white and an arrow with only a glow disappears the moment a
   lit crest passes under it.
 
-- **Something is burning down there, and somebody is setting off fireworks** — `lights.js`, and the
-  only colour in the animation. Against a ground that is a photo negative of an already de-saturated
-  palette, under six greys of weather, a cyan and a green at full chroma do not read as coloured
-  pixels; they read as the one thing in frame that is *lit* rather than merely visible.
+- **People are down there setting fires and letting off fireworks** — `lights.js`, and the only
+  colour in the animation. Against a ground that is a photo negative of an already de-saturated
+  palette, under six greys of weather, anything at full chroma does not read as coloured pixels; it
+  reads as the one thing in frame that is *lit* rather than merely visible.
 
-  Both rules that shape it come from the camera being **directly overhead**:
+  The colour is split in two, and the split is the point. **The fires are cold** — cyan and green,
+  low, steady, always there. **The fireworks are hot** — a five-step ramp from a warm white through
+  yellow and orange to two reds, brief and violent and high in the air. Two kinds of burning that
+  cannot be confused for one another even glimpsed through a hole in a cloud, which is what tells you
+  the fireworks are an *event* while the fires are a *place*.
+
+  Both rules that shape the drawing come from the camera being **directly overhead**:
 
   *Nothing is radially symmetric.* A flame from above is a bright base with a plume of light lying
   downwind of it, not a disc — the first version was a symmetric glow with a ring and some rays
@@ -173,39 +197,65 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   fire does not ease, it gutters.
 
   *Gravity points at the camera.* A firework's sparks cannot arc downward when "down" is away from
-  you, so they spread, decelerate hard and dim in place while the wind carries the whole burst
-  sideways. The climb is drawn as a point that brightens and grows rather than one that travels, for
-  the same reason. Neither is how a firework looks from the ground and both are how one looks from
-  above it. They go up in *shows* — three to five shells in a ragged sequence from one spot, then
-  nothing there for a minute and a half — because people do not set off one firework.
+  you, so they spread, decelerate hard and cool in place while the wind carries the whole burst
+  sideways. The climb is a chunk that brightens and grows rather than one that travels, for the same
+  reason. Neither is how a firework looks from the ground and both are how one looks from above it.
+  They go up in *shows* — three to five shells in a ragged sequence from one spot, then nothing there
+  for a minute and a half — because people do not set off one firework.
 
-  A burst is **streamers, crackle and pixelated puffs**, and the flash is small and lasts about a
-  fifth of a second. It used to be a disc most of the width of the burst that grew and shrank, and a
-  disc that grows and shrinks is the one shape that says *a value is being animated* rather than
-  *something exploded*. Two per-spark quantities do the work of not being a circle: a **speed**, so
-  the front is ragged rather than a rim (one radius for every spark is a disc however it is
-  coloured), and a **life**, so sparks go out one at a time over a couple of seconds instead of the
-  whole shape dimming together. Every sixth streamer comes apart near the end of its run and throws
-  a knot of smaller ones sideways, and the puffs are chunky clots of colour dissolving on the ordered
-  dither matrix from `effects/pixel.js` — the same `bayerOn` The Cloud comes apart on, so the one
-  thing in this scene that breaks into blocks now has company.
+  **A burst is pixel art.** Every spark is a run of chunks snapped to a coarse grid, stepping down the
+  ramp from a warm-white head to a deep red tail, at full opacity with hard edges — and it is drawn
+  twice, once under the whole depth of the cloud and once over it at just under half strength, so
+  what you see is chunky sparks *amongst* the fog rather than a soft glow behind it. Softness is the
+  default a canvas hands you for free and it is the wrong default here: a firework seen through
+  weather is the one thing in this scene allowed a hard edge.
 
-  The spark geometry is shared with the pass that lights the fog, which is the point of pulling it
-  out: **the cloud is lit in the shape of the burst**, in arms rather than as a ball. That pass is
-  drawn last over everything, so its single `glow()` — whose radius grew with its brightness — was
-  not merely *an* orb, it was the only part of a firework that could reliably be seen. What is left
-  of it is a base glare at a **fixed** radius that only ever changes brightness; the moment a size
-  follows a brightness there is a pulsing ball in the frame again, whatever is drawn on top of it.
-  The fires' own glow came down at the same time, for the same reason in reverse: at full flare a
-  campfire was throwing the largest, brightest coloured mass in the frame, out-punching a shell going
-  off, which puts the hierarchy the wrong way up. A fire is a steady thing you keep noticing; a
-  firework is an event.
+  Four decisions make that work, and three of them were mistakes first:
 
-  Sparks are stroked in five **alpha bands** rather than one `stroke()` each. A path carries a single
-  alpha, so the obvious way to give every spark its own life is fifty-four rasteriser passes per
-  colour per shell, which measured at around seven milliseconds a frame by itself; quantising a life
-  that is already twinkling on a held clock, over a range narrower than the twinkle, is free to look
-  at.
+  - **The chunks composite normally, not additively.** This is the one that decides whether it looks
+    like pixel art or like a lens flare. Additive is the natural mode for light and it is fatal here:
+    an orange chunk over a yellow one over a red one sums past white, so the middle of every burst —
+    where the sparks are densest and the eye goes first — came out as a flat white blob with a few
+    coloured squares around the rim. Flat, opaque, unblended colour is what makes the ramp readable,
+    and a readable ramp is the whole of "high contrast".
+  - **Trail spacing is a fraction of how far out a spark is,** capped at a couple of grid squares. At
+    a fixed spacing, a spark that has not yet travelled two chunks has its whole tail behind the
+    centre of the burst where it gets culled — so the first half of every burst was a dense knot with
+    no radiating in it at all.
+  - **The hottest step is a warm white, there are two reds, and the head chunk is only half a square
+    bigger than the tail.** A double-size white square is four times the area of the chunks behind it,
+    so an evenly spaced ramp with one white in it comes out white.
+  - **A spark dies by losing its tail and turning red, never by fading.** Life decides how many trail
+    chunks a spark still has and how far its head has cooled, so a burst ends as a scatter of single
+    red squares. A half-transparent chunk is not a pixel.
+
+  It costs **five fills a shell** — one per ramp step, every chunk of that colour in a single path.
+  The version this replaced gave each spark its own alpha and therefore its own `stroke()`, which was
+  fifty-four rasteriser passes per colour per shell.
+
+  Smoke is chunky clots dissolving on the ordered dither matrix from `effects/pixel.js` — the same
+  `bayerOn` The Cloud comes apart on, so the two things in this scene that break into blocks break
+  into the same blocks. Those *are* additive: they are glow rather than spark, and faint enough never
+  to sum to white.
+
+  **The fires catch, burn and die back.** Twelve of them rather than six, each on its own two-to-five
+  minute cycle, so at any moment some are alight, one or two are just going up and one is out — the
+  field is not a fixed constellation you learn after a minute. The catch is much faster than the
+  die-back: somebody puts a light to it and it goes up in a couple of seconds, and it takes a minute
+  to fall to embers. Symmetrical would read as a dimmer being turned. A fire's glare into the cloud
+  is kept below a shell's, too: at full flare a campfire was throwing the largest brightest coloured
+  mass in the frame, which puts the hierarchy the wrong way up. A fire is a steady thing you keep
+  noticing; a firework is an event.
+
+  **And the people.** They exist because everything else in the file implies them: something set those
+  fires and something is lighting those shells, and an overhead view with no one in it says the town
+  is abandoned and the fires are wild. Ninety-odd of them, clustered — a knot around each fire, a
+  larger crowd back from each launch site — because scattered evenly they read as speckle. They mill
+  about on their own slow noise, and a crowd with a shell in the air above it backs away from the
+  launch spot, which costs one number per person and is the only reason they read as *doing*
+  something rather than standing in a field. They are the one thing in the file that is an object
+  rather than a light, so they composite normally, under everything additive, and take their contrast
+  from the negative's near-white river and near-black roads. Two fills for the lot of them.
 
   And every light is drawn **twice**: once on the ground, under the whole depth of the cloud, where
   it is mostly invisible; and once as the light it throws *into* the fog — wide, faint, last of
@@ -261,11 +311,18 @@ Three decisions carry it:
   nearest the threshold shove sideways while they change. That is what a decoder does when handed a
   keyframe it cannot fully apply.
 - **It is veiled cell by cell, not as a whole.** The fog's density field is sampled across the
-  figure's own grid and quantised into four bands, so parts of it are buried behind a bank while
+  figure's own grid and quantised into six bands, so parts of it are buried behind a bank while
   others come through, and the pattern crawls across it as the weather drifts. One opacity for the
   whole apparition is a decal turned down: uniformly faint, and still unmistakably lying *on* the
   picture rather than inside it. Sampled on every second cell in each direction — the field is smooth
   at that scale, so it is a quarter of the noise calls for a result nobody can tell apart.
+
+  The band is taken from the **cube** of the density rather than from the density itself, and a cell
+  can land on band zero and not be drawn at all. The field runs about 0.5 to 1 across the frame,
+  which as a straight multiplier is a figure that is *evenly* half-lit — the whole thing dimmed and
+  nothing actually buried. Raising it to a power pushes the thick end down toward nothing while
+  barely touching the thin end, so the parts under a bank genuinely go and only the parts under a
+  thin patch come through. That is the difference between "dimmer" and "behind something".
 
 It is also drawn **early** — under the billows, the crests, the filaments and the dark strands, all
 of which pass in front of it. Drawn late it was a sprite on the weather; drawn here it is a thing
@@ -274,10 +331,11 @@ as pale: a figure only ever veiled by white haze reads as lit from in front, whi
 not weather. Cloud in front and per-cell veiling from behind are two halves of one job, and either
 alone leaves it looking stuck to the glass.
 
-Two dozen fills for the whole thing at its worst, mid-morph, with two figures on screen, four veil
-bands and every cell displaced by its own amount. `tests/fog.test.js` asserts one apparition per
-cycle with genuinely varying gaps, and that all four figures resolve, in order, one at a time — if a
-morph window ever swallowed a figure whole, nothing else in the suite would notice.
+The cells are sorted into their (tonal step, veil band) buckets in **one pass** and drawn from
+there, rather than the figure being walked once per bucket — which was fine at three steps and four
+bands and is eighteen full scans at six. `tests/fog.test.js` asserts one apparition per cycle with
+genuinely varying gaps, and that all four figures resolve, in order, one at a time — if a morph
+window ever swallowed a figure whole, nothing else in the suite would notice.
 
 ### Changed — the channel change wears the scene it arrives at
 
