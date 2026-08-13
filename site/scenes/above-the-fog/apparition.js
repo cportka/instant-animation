@@ -271,10 +271,24 @@ export const FIGURES = [
  * Quantised, because a per-cell alpha means a fill per cell; four bands keeps the whole thing to a
  * couple of dozen fills and is finer than anything the eye can pick out through a cloud.
  */
-const VEIL_BANDS = 4;
+const VEIL_BANDS = 6;
+/**
+ * How hard the veiling bites.
+ *
+ * The density field runs roughly 0.5..1 over the frame, which as a straight multiplier is a figure
+ * that is *evenly* half-lit — the whole thing dimmed, nothing actually buried. Raising it to a power
+ * pushes the thick end down toward nothing while barely touching the thin end, so the parts of the
+ * figure under a bank genuinely go, and only the parts under a thin patch come through. That is the
+ * difference between "dimmer" and "behind something".
+ */
+const VEIL_BITE = 3.2;
 // Allocated once. An apparition is on screen about eight percent of the time and this would
 // otherwise be a few hundred numbers thrown away sixty times a second.
 const VEIL = new Uint8Array(COLS * ROWS);
+// One bucket per (tonal step, veil band): where the cells are sorted before anything is drawn, so a
+// figure is walked once rather than once per bucket. Flat x, y pairs, emptied and refilled.
+const BUCKETS = 3 * VEIL_BANDS;
+const BUCKET = Array.from({ length: BUCKETS }, () => []);
 
 /** Where in its life each figure is fully itself. Between them, the cells change over. */
 const KEYS = [0.06, 0.32, 0.54, 0.76];
@@ -396,9 +410,11 @@ export function drawApparition(ctx, W, H, t, densityAt = null) {
   for (let r = 0; r < ROWS; r += 2) {
     for (let c = 0; c < COLS; c += 2) {
       const local = densityAt
-        ? clamp(densityAt(originX + (c + 1) * cell, originY + (r + 1) * cell), 0.12, 1)
+        ? clamp(densityAt(originX + (c + 1) * cell, originY + (r + 1) * cell), 0, 1) ** VEIL_BITE
         : 1;
-      const band = Math.max(1, Math.ceil(local * VEIL_BANDS));
+      // Band 0 is allowed now: a cell with a bank squarely in front of it is not drawn at all, which
+      // is the only honest answer and also the cheapest one.
+      const band = Math.round(local * VEIL_BANDS);
       for (let dr = 0; dr < 2 && r + dr < ROWS; dr += 1) {
         for (let dc = 0; dc < 2 && c + dc < COLS; dc += 1) VEIL[(r + dr) * COLS + c + dc] = band;
       }
@@ -410,52 +426,60 @@ export function drawApparition(ctx, W, H, t, densityAt = null) {
     if (f === 1 && event.to === event.from) break;
     const figure = FIGURES[index];
 
-    for (let step = 0; step < 3; step += 1) {
-      const value = step / 2;
-      const [dr, dg, db] = figure.dark;
-      const [lr, lg, lb] = figure.light;
+    // One pass over the cells, sorting each into its (tonal step, veil band) bucket — rather than one
+    // pass per bucket, which is how this was written when there were four bands and is eighteen
+    // scans of the whole figure at six. The buckets are module-level and emptied rather than
+    // rebuilt, so an apparition allocates nothing per frame.
+    for (let b = 0; b < BUCKETS; b += 1) BUCKET[b].length = 0;
+
+    for (let i = 0; i < figure.count; i += 1) {
+      const c = figure.col[i];
+      const r = figure.row[i];
+      const band = VEIL[r * COLS + c];
+      // Band zero is a cell with a bank squarely in front of it. Not drawn at all — the honest
+      // answer, and the cheap one.
+      if (band === 0) continue;
+      const roll = hash2(c * 1.9 + 0.3, r * 2.7 + 0.9);
+
+      // The change-over, one cell at a time: past the threshold a cell belongs to the new figure.
+      const changed = roll < event.blend;
+      if ((f === 1) !== changed) continue;
+      // ...and on the way out, cells stop belonging to anything.
+      if (event.scatter > 0 && hash2(c * 3.3 + 7.1, r * 1.3 + 5.5) < event.scatter) continue;
+
+      // Displacement, strongest for the cells that are changing over right now.
+      const near = 1 - Math.min(1, Math.abs(roll - event.blend) * 6);
+      const kick = churn * near + event.scatter * 0.7;
+      const dx = kick * cell * 3.4 * (hash2(r * 4.1, beat + c * 0.7) - 0.5);
+      const dy = kick * cell * 1.1 * (hash2(c * 6.7, beat + r * 0.5) - 0.5);
+
+      const bucket = BUCKET[Math.round(figure.level[i] * 2) * VEIL_BANDS + (band - 1)];
+      bucket.push(originX + c * cell + dx, originY + r * cell + dy);
+    }
+
+    const [dr, dg, db] = figure.dark;
+    const [lr, lg, lb] = figure.light;
+    for (let b = 0; b < BUCKETS; b += 1) {
+      const cells = BUCKET[b];
+      if (!cells.length) continue;
+      const value = Math.floor(b / VEIL_BANDS) / 2;
+      const band = (b % VEIL_BANDS) + 1;
+      ctx.beginPath();
+      for (let i = 0; i < cells.length; i += 2) {
+        ctx.rect(cells[i], cells[i + 1], cell * 0.98, cell * 0.98);
+      }
       const red = Math.round(lerp(dr, lr, value));
       const green = Math.round(lerp(dg, lg, value));
       const blue = Math.round(lerp(db, lb, value));
-
-      for (let band = 1; band <= VEIL_BANDS; band += 1) {
-        ctx.beginPath();
-        let drawn = 0;
-
-        for (let i = 0; i < figure.count; i += 1) {
-          if (figure.level[i] !== value) continue;
-          const c = figure.col[i];
-          const r = figure.row[i];
-          if (VEIL[r * COLS + c] !== band) continue;
-          const roll = hash2(c * 1.9 + 0.3, r * 2.7 + 0.9);
-
-          // The change-over, one cell at a time: past the threshold a cell belongs to the new figure.
-          const changed = roll < event.blend;
-          if ((f === 1) !== changed) continue;
-          // ...and on the way out, cells stop belonging to anything.
-          if (event.scatter > 0 && hash2(c * 3.3 + 7.1, r * 1.3 + 5.5) < event.scatter) continue;
-
-          // Displacement, strongest for the cells that are changing over right now.
-          const near = 1 - Math.min(1, Math.abs(roll - event.blend) * 6);
-          const kick = churn * near + event.scatter * 0.7;
-          const dx = kick * cell * 3.4 * (hash2(r * 4.1, beat + c * 0.7) - 0.5);
-          const dy = kick * cell * 1.1 * (hash2(c * 6.7, beat + r * 0.5) - 0.5);
-
-          ctx.rect(originX + c * cell + dx, originY + r * cell + dy, cell * 0.98, cell * 0.98);
-          drawn += 1;
-        }
-
-        if (!drawn) continue;
-        // Never fully opaque — a figure at alpha 1 is a sprite lying on the picture, and one you can
-        // see a little of the weather through is something the weather is doing. The same alpha for
-        // every *step* of a figure, though: fading the dark steps harder than the bright ones sounds
-        // like the same idea and is not, because a figure whose darkest ink is its deepest shadow
-        // loses that shadow first. The *band* is allowed to vary between cells, which is a different
-        // thing again — that is the cloud in front, not the figure behind.
-        const opacity = clamp(event.presence * (band / VEIL_BANDS) * figure.opacity, 0, 1);
-        ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${opacity.toFixed(4)})`;
-        ctx.fill();
-      }
+      // Never fully opaque — a figure at alpha 1 is a sprite lying on the picture, and one you can
+      // see a little of the weather through is something the weather is doing. The same alpha for
+      // every *step* of a figure, though: fading the dark steps harder than the bright ones sounds
+      // like the same idea and is not, because a figure whose darkest ink is its deepest shadow
+      // loses that shadow first. The *band* is allowed to vary between cells, which is a different
+      // thing again — that is the cloud in front, not the figure behind.
+      const opacity = clamp(event.presence * (band / VEIL_BANDS) * figure.opacity, 0, 1);
+      ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${opacity.toFixed(4)})`;
+      ctx.fill();
     }
   }
 
