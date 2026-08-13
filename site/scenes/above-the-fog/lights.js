@@ -58,9 +58,11 @@ const COLD = {
 };
 
 // People, seen from directly above: a dot the size of a pair of shoulders with a highlight on it.
-// Dark against the negative's pale ground, which is where all of its contrast lives.
-const FIGURE = 'rgba(26, 22, 34, 0.86)';
-const FIGURE_LIT = 'rgba(250, 244, 232, 0.7)';
+// The body is dark and the highlight carries most of the read — with the ground taken down into the
+// 60s and 100s, a dark dot alone has only a few dozen levels to work with on the deepest grass, and
+// the pale mark on its shoulder is what still separates a person from a shadow.
+const FIGURE = 'rgba(20, 16, 28, 0.88)';
+const FIGURE_LIT = 'rgba(252, 246, 232, 0.85)';
 
 /* ---------------------------------------------------------------- plan ---- */
 

@@ -16,16 +16,26 @@
 // the ground came up as one flat mid-grey wash with faint lilac in it, and through a hole the size
 // of a fist that is nothing at all. Two things changed.
 //
-// **Contrast is value.** The ladder now runs the whole way — roads near black at about 26, the
-// river near white at about 240 — because the only thing that survives being seen for a second
-// through a hole is the difference between light and dark. Everything that was distinguishable by
-// brightness before still is; there is just four times as much room between the rungs.
+// **Contrast is value.** The ladder runs the whole way — roads near black at about 20, the river the
+// brightest thing on the ground at about 170 — because the only thing that survives being seen for a
+// second through a hole is the difference between light and dark. Everything that was
+// distinguishable by brightness before still is; there is just far more room between the rungs.
 //
-// **Off-ness is hue.** The complements are taken at real chroma now instead of being pulled back to
-// grey — violet grass, sand-coloured water, teal roofs, a *dark* glint crawling on a pale river.
-// What keeps it from looking like a cartoon is that none of it is allowed to be **lit**: every
-// colour here is pigment, mid-to-dark, sitting still. The neon in `lights.js` is the only thing in
-// the frame that emits, and it stays the only thing.
+// **Off-ness is hue.** The complements are taken at real chroma instead of being pulled back to
+// grey — violet grass, amber water, teal roofs, a *dark* glint crawling on a bright river. What
+// keeps it from looking like a cartoon is that none of it is allowed to be **lit**: every colour
+// here is pigment, sitting still. The neon in `lights.js` is the only thing in the frame that emits,
+// and it stays the only thing.
+//
+// **And the whole ladder sits low.** The first pass at this took the values *up* as it took the
+// chroma up — grass in the 130s to 200s, a near-white river, pale lilac trees — which is the wrong
+// half of the range to be in for two reasons. The fog above is a bright grey, so a pale ground has
+// nothing to be seen *against*: the river came within a few levels of the cloud in front of it and
+// simply dissolved into it. And every light in the scene is additive, so a bright ground is a bright
+// floor under the fires and the fireworks, and they had less room to be brighter than it. Deep
+// violet grass under a deep amber river, all of it richer than the pale version and most of it forty
+// or fifty levels below where it was, gives the peek-a-boos something to be a hole *in* and the
+// neon somewhere to burn.
 
 import { TAU, clamp, lerp } from '../../lib/draw.js';
 import { fbm, hash2, noise2 } from '../../effects/field.js';
@@ -36,42 +46,46 @@ import { fbm, hash2, noise2 } from '../../effects/field.js';
 // legible as an inversion. The number after each is its rough luminance — the ladder is the point,
 // so it is written down where it can be checked rather than trusted.
 
-// Grass, at four steps that are genuinely four steps apart. 205 → 124 is a wider spread than the
-// entire old palette occupied.
-const GRASS = ['#d6c0e2', '#c1a6d2', '#ab8ec0', '#9576ac'];
-// Hedge lines between the fields — dark violet, and *darker than the grass*, which is what a hedge
-// from above actually is. It was paler than everything it crossed and read as a scratch.
-const SCRUB = '#5c3f74';
-// The river. Deep water was the darkest thing in the world, so inverted it is the brightest thing
-// on the ground: near-white sand at 238, banked by a violet that is 130 levels below it.
-const WATER_DEEP = '#f8eed9';
-const WATER = '#e5d0ae';
+// Grass, at four steps that are genuinely four steps apart: deep violet, 110 down to 57.
+const GRASS = ['#8163a6', '#6d5194', '#5a4083', '#472f70'];
+// Hedge lines between the fields — and *darker than the grass*, which is what a hedge from above
+// actually is. It was paler than everything it crossed and read as a scratch.
+const SCRUB = '#33205c';
+// The river. Deep water was the darkest thing in the world, so inverted it is the brightest thing on
+// the ground — but "brightest on the ground" is a deep amber at 170, not the cream at 238 it was.
+// Against a bright cloud, a near-white river is not a river, it is a gap in the fog.
+const WATER_DEEP = '#cfa55f';
+const WATER = '#b98b45';
 // The crawl of light on the surface, which inverts to a crawl of *dark*. Keeping that honest is the
 // single oddest thing in the frame and worth all of the rest: a black glitter running downstream.
-const WATER_LIT = '#8a7047';
-const BANK = '#6b6178';
+const WATER_LIT = '#5c4018';
+const BANK = '#3f3550';
 // Tarmac was pale, so the roads are the near-black in this picture — the one hard value in a scene
 // with no hard edges, and the thing a peek-a-boo lands on and immediately reads as a town.
-const ROAD = '#2a3439';
-const ROAD_EDGE = '#151b1f';
-// Roofs, spread from near-white slate down to a deep teal tile, so a cluster of buildings is a
-// cluster of *different* buildings rather than one grey mass with lines on it.
-const ROOF_SLATE = '#d3dad6';
-const ROOF_TILE = '#3f6a80';
-const ROOF_LEAD = '#7c8189';
-// The one place the inversion is felt as more than a colour swap: a shadow becomes a *highlight*,
-// so the side of a roof that was dark now flares, and now flares properly.
-const WALL_SHADOW = 'rgba(255, 251, 236, 0.66)';
-const CAFE_ROOF = '#2f7d90';
-const RESTAURANT_ROOF = '#7a5a95';
+const ROAD = '#1c2429';
+const ROAD_EDGE = '#0c1013';
+// Roofs, spread from a pale slate down to a deep teal tile, so a cluster of buildings is a cluster
+// of *different* buildings rather than one mass with lines on it. Slate stays the lightest thing in
+// the town because a roof catching the sky is the one place a bright value belongs.
+const ROOF_SLATE = '#8a9c96';
+const ROOF_TILE = '#245066';
+const ROOF_LEAD = '#5a6069';
+// The one place the inversion is felt as more than a colour swap: a shadow becomes a *highlight*, so
+// the side of a roof that was dark now flares. Amber rather than white, so it belongs to the river's
+// half of the palette instead of being the one uncoloured thing in frame.
+const WALL_SHADOW = 'rgba(240, 226, 178, 0.55)';
+const CAFE_ROOF = '#1d6274';
+const RESTAURANT_ROOF = '#553a70';
 // Twelve shops, twelve awnings, at jewel chroma. These used to be pulled most of the way to grey on
 // the grounds that four saturated pixels would be the only saturated thing in frame — but they are
-// four *dark* pixels, and dark saturated pigment on a pale roof reads as an awning. Nothing here is
-// bright enough to be mistaken for something burning, which was the actual risk.
-const JEWEL = ['#8f4257', '#37607e', '#3f7a6f', '#7d5a2b', '#5a4a8a', '#8a4034'];
+// four *dark* pixels, and dark saturated pigment reads as an awning. Nothing here is bright enough
+// to be mistaken for something burning, which was the actual risk.
+const JEWEL = ['#6e2438', '#1f4463', '#245a4f', '#5e3d12', '#3d2f6b', '#6b2418'];
 
-const TREE = ['#ead9f2', '#dec8ea', '#d0b6e0'];
-const TREE_LIT = '#f8f0fd';
+// Canopy, sitting above the grass in value and below the river — so a wood reads as a wood against
+// the field it stands in, which is the only job these have.
+const TREE = ['#a68fc0', '#9881b4', '#8a73a8'];
+const TREE_LIT = '#c0acd4';
 
 
 /* ---------------------------------------------------------------- plan ---- */
@@ -401,7 +415,7 @@ function drawTrees(ctx, W, H, S, trees) {
   // Shadows first, all of them, in one path. Inverted, a cast shadow is a *pale* shape beside the
   // crown rather than a dark one — but the offset is doing the same job it always did, and it is
   // the offset, not the darkness, that reads as "this thing stands up".
-  ctx.fillStyle = 'rgba(255, 249, 232, 0.5)';
+  ctx.fillStyle = 'rgba(226, 206, 156, 0.45)';
   ctx.beginPath();
   for (const tree of trees) {
     crown(tree, (tree.x + tree.r * 0.4) * W, (tree.y + tree.r * 0.48) * H, 1);
@@ -456,7 +470,7 @@ function drawBuildings(ctx, W, H, S, buildings) {
       // A ridge line down the middle of the roof: the single detail that reads as a pitched roof
       // from overhead, and it costs one rectangle. Inverted along with everything else, so the lit
       // ridge is now a dark one.
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.24)';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
       if (w > h) ctx.fillRect(-w / 2, -Math.max(1, h * 0.06), w, Math.max(1, h * 0.12));
       else ctx.fillRect(-Math.max(1, w * 0.06), -h / 2, Math.max(1, w * 0.12), h);
 
@@ -473,7 +487,7 @@ function drawBuildings(ctx, W, H, S, buildings) {
 
       if (b.kind === 'cafe') {
         // Parasols on the forecourt. Circles, from above, in a rough arc.
-        ctx.fillStyle = '#2f3a4a';
+        ctx.fillStyle = '#1b2330';
         ctx.beginPath();
         for (let i = 0; i < b.parasols; i += 1) {
           const px = lerp(-w * 0.45, w * 0.45, i / (b.parasols - 1));
@@ -487,9 +501,9 @@ function drawBuildings(ctx, W, H, S, buildings) {
 
       if (b.kind === 'restaurant') {
         // A terrace: a paler slab with tables on it.
-        ctx.fillStyle = 'rgba(30, 36, 50, 0.5)';
+        ctx.fillStyle = 'rgba(18, 22, 34, 0.55)';
         ctx.fillRect(-w * 0.55, h / 2, w * 1.1, h * 0.5);
-        ctx.fillStyle = '#f2ead9';
+        ctx.fillStyle = '#d8c69a';
         ctx.beginPath();
         for (let i = 0; i < b.tables; i += 1) {
           const px = lerp(-w * 0.42, w * 0.42, i / (b.tables - 1));

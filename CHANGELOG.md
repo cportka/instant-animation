@@ -118,14 +118,26 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   It is deliberately **not** a literal `255 - c` inversion any more, and it was. The negative of a
   de-saturated photograph is another de-saturated photograph — everything landed between about 130
   and 210, which is one flat mid-grey wash with a hint of lilac in it, and through a hole the size of
-  a fist that is nothing at all. So: **contrast is value** — the ladder now runs the whole way, roads
-  near black at about 26 and the river near white at about 240, because brightness is the only thing
-  that survives being seen for a second through a hole. And **off-ness is hue** — the complements are
-  taken at real chroma instead of pulled back toward grey, giving violet grass, sand-coloured water,
-  teal and slate roofs, jewel-toned awnings, and a *dark* glitter crawling downstream on a pale
-  river. What stops it becoming a cartoon is that none of it is allowed to be **lit**: every colour
-  down there is pigment, mid-to-dark, sitting still, and the neon in `lights.js` stays the only thing
-  in the frame that emits.
+  a fist that is nothing at all. So: **contrast is value** — the ladder runs the whole way, roads
+  near black at about 20 and the river the brightest thing on the ground, because brightness is the
+  only thing that survives being seen for a second through a hole. And **off-ness is hue** — the
+  complements are taken at real chroma instead of pulled back toward grey, giving violet grass, amber
+  water, teal and slate roofs, jewel-toned awnings, and a *dark* glitter crawling downstream on a
+  bright river. What stops it becoming a cartoon is that none of it is allowed to be **lit**: every
+  colour down there is pigment, sitting still, and the neon in `lights.js` stays the only thing in
+  the frame that emits.
+
+  **And the whole ladder sits low.** The first pass at the above took the values *up* as it took the
+  chroma up — grass in the 130s to 200s, a near-white river at 238, pale lilac trees — which is the
+  wrong half of the range to be in, for two reasons that only show up once everything else is in
+  place. The fog is a bright grey, so a pale ground has nothing to be seen *against*: the river came
+  within a few levels of the cloud in front of it and dissolved into it, and a peek-a-boo stopped
+  looking like a hole. And every light in the scene is additive, so a bright ground is a bright floor
+  under the fires and the fireworks and leaves them less room to be brighter than it. The river is a
+  deep amber at 170 now rather than a cream at 238, the grass runs 110 down to 57, the canopy sits
+  between them, and the awnings and roofs went with them — richer than the pale version and most of
+  it forty or fifty levels below where it was. The people's pale shoulder highlight carries more of
+  their read than it did, because a dark dot on deep grass has only a few dozen levels to work with.
 
   Two things that were invisible at the old contrast and unbearable at the new one, both fixed with
   the value spread kept: the grass tiers are drawn as **overlapping discs** rather than as a grid of
