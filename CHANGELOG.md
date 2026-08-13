@@ -22,10 +22,11 @@ people down there setting fires and letting off fireworks that burst amongst the
 orange and red fractal pixel art, and every few minutes one cloud pixelates into an angel, then a
 grim reaper, then a giant happy face before dissolving back into fog"*.
 
-Straight down and orthographic, so there is no perspective anywhere in it and no horizon to hang
-depth on. Every cue that says *thick moving volume of air* rather than *scrolling texture* has to
-come out of the motion: shear between layers, light that moves independently of the shape it is on,
-and masses that grow, draw out, thin away and are replaced by masses welling up through them.
+Straight down, or very nearly — a long lens almost overhead, so there is no horizon to hang depth on
+and the only perspective in it is the small radial lean that gives the ground its height. Every cue
+that says *thick moving volume of air* rather than *scrolling texture* still has to come out of the
+motion: shear between layers, light that moves independently of the shape it is on, and masses that
+grow, draw out, thin away and are replaced by masses welling up through them.
 
 - **Coverage is geometric, not lucky.** The base of the fog is a *lattice*: a jittered grid of
   lobes, each a good half wider than its cell, so every point in frame is inside two or three of them
@@ -61,6 +62,17 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   light so they sit on the shoulder of something, and they are **additive**, which is the only way
   to actually reach white — a near-white lobe composited normally over grey lands at grey plus a
   bit, and the top of the ramp is never arrived at.
+- **Haze: the frequency that was missing.** Below it the fog runs from cell-sized lattice lobes down
+  to filaments; above it there was nothing but a single linear wash over the whole frame. With no
+  scale in between, the ground, the lights and the cloud read as three flat decks stacked up — every
+  join in the picture happened at either the size of a lattice cell or the size of a window. Half a
+  dozen masses a third of the frame across, living a minute apiece at an alpha you cannot point to,
+  tie them into one atmosphere. They are subject to the peek-a-boos like everything else, because
+  being that large they would otherwise quietly close one — and it would be invisible in review,
+  since nothing about the picture would look wrong, there would simply never be anything underneath.
+  The billows underneath them also went from twenty-two to twenty-nine across a much wider span of
+  size and lifetime, a fifth of them big and slow, chosen by index rather than by a roll so one seed
+  in ten cannot come out with no large masses in it at all.
 - **Filaments are the layer that decides it.** Long, thin, aligned to the flow, bright, and barely
   there. Without a second spatial frequency an order of magnitude finer than the billows carrying
   it, the whole thing reads as smoke from a machine rather than as a fog bank. Near-black strands go
@@ -107,6 +119,46 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   where it belongs to one object with an outline and a face and is unmistakably something happening.
   Losing the full-frame tape effects also took the frame cost from ~95ms to ~6ms software-rasterised
   — they were the entire budget.
+- **The camera is no longer exactly overhead.** Everything that stands up — buildings, trees, rocks,
+  people — displaces **radially from the centre of frame** in proportion to its height, which is what
+  a very long lens looking almost-but-not-quite straight down actually does: the building under the
+  lens shows you its roof and nothing else, and the one at the corner shows you a wall. A single
+  fixed lean direction would have been cheaper and is exactly what makes an isometric mock-up look
+  like a mock-up, because every object in it is viewed from the same impossible place. The scene now
+  has a *principal point*, it is the middle of the frame, and nothing there stands up at all.
+
+  A building is a footprint, four side faces and a roof. All the walls in the town go into **one
+  path** and the roofs are painted over them afterwards — not a trick, just what is true: the top
+  leans away from centre, so the far faces end up underneath the roof polygon and the near ones end
+  up outside it, and painter's order does the hidden-surface work for nothing. Trees get a trunk
+  stroked from foot to crown, rocks and people the same. Cast shadows are thrown the *opposite* way
+  from the lean, which is what makes the lean read as height rather than as everything having been
+  nudged sideways.
+
+  One thing this broke on the way in, worth writing down: the awnings, ridges, parasols and tables a
+  building carries are drawn in its own rotated frame, and that frame has to be translated to where
+  the **roof** ended up, not to where the building stands. Anchored at the footprint they slide off
+  the shopfronts the moment the town is anywhere but the middle of the frame.
+- **The ground stopped being made of rectangles and discs.** Building footprints are four corners
+  each jogged by its own amount, because a town of rectangles is a spreadsheet seen from above.
+  Canopies are four to seven unequal lumps on an ellipse rather than three on a circle — three equal
+  lumps still average to a disc at this size, which is how four hundred trees became a polka dot the
+  first time. And the ground gained three things that are irregular by construction: **rock** in
+  clusters of unequal lumps, allowed near the water where a tree is not; **scrub**, drawn as a spray
+  of short strokes rather than a blob; and **reeds** in stands along the bank, leaning together on a
+  shared gust so a clump moves as a clump.
+
+  Fields are **parcels** now — closed, five-to-seven-sided, no two alike, each a slightly different
+  tone with a hedge on its boundary. They replaced nine long straight lines ruled across the grass at
+  arbitrary angles. A hedge line does say *farmed*, but a straight one bounding nothing is a scratch
+  on the picture, and once the ground had rocks and scrub and reeds on it those nine lines were the
+  only thing left in frame that nothing in nature would have made.
+- **A neon rim, on the edges that catch.** Roof outlines, parcel boundaries, the kerb and the water's
+  edge, in three colours alternating so the town does not hum on one note — all three inside the
+  violet-to-amber span the rest of the palette occupies, because a rim in a hue the scene does not
+  otherwise contain reads as a sticker. It is a *rim*, not an outline: thin, semi-transparent, and
+  only ever on the boundary of something already there, so it reads as an edge catching light rather
+  than a border drawn round a shape. The difference between the two is about thirty percent of alpha.
 - **The town below** (`site/scenes/above-the-fog/town.js`) is a **photo negative**: hues at their
   complements, so the water is the lightest thing on the ground, the roads the darkest, and the
   vegetation violet. A glimpse reads as somewhere that is not quite a place rather than as a place
@@ -293,12 +345,17 @@ and masses that grow, draw out, thin away and are replaced by masses welling up 
   something rather than standing in a field. They are the one thing in the file that is an object
   rather than a light, so they composite normally, under everything additive.
 
-  Each is four marks: a **halo** of near-black, a body, a highlight on the shoulder, and — for a
-  third of them — a carried light, since the people setting the fires ought to have arrived with
-  something burning in hand. The halo is the part that does the work. A person is two pixels across
-  on a ground that runs from 45 to 139, and a single dark dot on it was very nearly invisible; a ring
-  of dark separates the figure from whatever it happens to be standing on, which at this size is the
-  whole difference between a person and a speck of texture. Four fills for the lot of them.
+  A person is a **standing figure**, not a dot: a shadow thrown on the ground away from the lean, a
+  body stroked from the feet up to the head the same way a tree's trunk is, a head at the top, a
+  highlight on it, and for a third of them a carried light — since the people setting the fires ought
+  to have arrived with something burning in hand. Five passes, five fills for the whole crowd,
+  because every pass is one path.
+
+  They lean on the same radial projection the buildings and the trees do, so a figure at the corner
+  of the frame shows you its whole height and one in the middle shows you the top of its head. That
+  is what turns a scatter of marks into people standing in a field — not detail, of which at four
+  pixels there is no room for any, but the fact that they stand *up* and agree with everything around
+  them about which way up is.
 
   And every light is drawn **twice**: once on the ground, under the whole depth of the cloud, where
   it is mostly invisible; and once as the light it throws *into* the fog — wide, faint, last of

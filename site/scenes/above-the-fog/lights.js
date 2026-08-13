@@ -43,6 +43,7 @@ import { curl, hash2, noise2 } from '../../effects/field.js';
 import { chunk, ditherGlow } from '../../effects/pixel.js';
 import { lobe } from '../../effects/volume.js';
 import { WIND, cloudDensity, gustAt } from './fog.js';
+import { leanX, leanY } from './town.js';
 
 /* ------------------------------------------------------------- palette ---- */
 
@@ -74,6 +75,8 @@ const FIGURE = 'rgba(16, 12, 22, 0.94)';
 const FIGURE_LIT = 'rgba(255, 250, 238, 0.92)';
 /** Carried by a third of them. The one warm mark on the ground that is not a fire. */
 const TORCH = 'rgba(255, 168, 58, 0.95)';
+/** How tall a person is, in the units the town's lean is calibrated in. Shorter than a house. */
+const PERSON_LIFT = 0.3;
 
 /* ---------------------------------------------------------------- plan ---- */
 
@@ -351,28 +354,61 @@ export function drawCrowd(ctx, W, H, t, lights) {
     return [x * W, y * H];
   };
 
-  // Four passes and four fills. A person is two pixels across on a ground that runs from 45 to 139,
-  // and a single dark dot on it was very nearly invisible — so each one now gets a **halo** of the
-  // ground's own dark, a body, a highlight on the shoulder and, for a third of them, a carried
-  // light. The halo is the part that does the work: it separates the figure from whatever it happens
-  // to be standing on, which for a mark this small is the whole difference between a person and a
-  // speck of texture.
-  for (const [style, dx, dy, scale, only] of [
-    ['rgba(8, 5, 14, 0.5)', 0, 0, 1.75, null],
-    [FIGURE, 0, 0, 1, null],
-    [FIGURE_LIT, -r * 0.42, -r * 0.42, 0.46, null],
-    [TORCH, r * 0.66, r * 0.5, 0.4, 3],
+  // A person is no longer a dot. Each is a **standing figure**: a shadow thrown on the ground away
+  // from the lean, a body stroked from the feet up to the head the same way a tree's trunk is, a
+  // head at the top, and for a third of them a carried light. Five passes and five fills for the
+  // whole crowd, because every pass is one path.
+  //
+  // The lean is the same radial projection everything else on the ground uses, so a figure at the
+  // corner of the frame shows you its whole height and one in the middle shows you the top of its
+  // head. That is what turns a scatter of marks into people standing in a field — not the detail,
+  // which at four pixels there is no room for, but the fact that they stand *up* and agree with the
+  // buildings and the trees about which way up is.
+  const foot = [];
+  const head = [];
+  for (const p of lights.people) {
+    const [bx, by] = at(p);
+    foot.push(bx, by);
+    head.push(leanX(bx, W, PERSON_LIFT), leanY(by, H, PERSON_LIFT));
+  }
+
+  // Shadows, opposite the lean.
+  ctx.fillStyle = 'rgba(8, 5, 14, 0.46)';
+  ctx.beginPath();
+  for (let i = 0; i < foot.length; i += 2) {
+    const sx = leanX(foot[i], W, -PERSON_LIFT * 0.85);
+    const sy = leanY(foot[i + 1], H, -PERSON_LIFT * 0.85);
+    ctx.moveTo(sx + r * 1.5, sy);
+    ctx.arc(sx, sy, r * 1.5, 0, TAU);
+  }
+  ctx.fill();
+
+  // The body: foot to head, one stroke each, all in one path.
+  ctx.strokeStyle = FIGURE;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = r * 1.15;
+  ctx.beginPath();
+  for (let i = 0; i < foot.length; i += 2) {
+    ctx.moveTo(foot[i], foot[i + 1]);
+    ctx.lineTo(head[i], head[i + 1]);
+  }
+  ctx.stroke();
+
+  // Head, and the highlight on it that carries the read at this size.
+  for (const [style, scale, dx, dy, only] of [
+    [FIGURE, 0.92, 0, 0, null],
+    [FIGURE_LIT, 0.44, -r * 0.3, -r * 0.3, null],
+    [TORCH, 0.42, r * 0.85, r * 0.6, 3],
   ]) {
     ctx.fillStyle = style;
     ctx.beginPath();
     let any = false;
-    for (let i = 0; i < lights.people.length; i += 1) {
+    for (let i = 0; i < head.length; i += 2) {
       // A third of them are carrying something burning. They are the ones setting the fires, so at
       // least some of them ought to have arrived with a light in their hand.
-      if (only !== null && i % only !== 0) continue;
-      const [cx, cy] = at(lights.people[i]);
-      ctx.moveTo(cx + dx + r * scale, cy + dy);
-      ctx.arc(cx + dx, cy + dy, r * scale, 0, TAU);
+      if (only !== null && (i / 2) % only !== 0) continue;
+      ctx.moveTo(head[i] + dx + r * scale, head[i + 1] + dy);
+      ctx.arc(head[i] + dx, head[i + 1] + dy, r * scale, 0, TAU);
       any = true;
     }
     if (any) ctx.fill();
