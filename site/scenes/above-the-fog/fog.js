@@ -91,20 +91,31 @@ export function planFog(rng) {
 
   // Billows: the mass of the fog. Each is born small, swells, and dies, and is reborn somewhere
   // else — which is the difference between fog that billows and fog that merely deforms in place.
-  const billows = Array.from({ length: 22 }, (_, i) => ({
+  //
+  // Twenty-nine of them across a much wider span of size and lifetime than they used to have: the
+  // biggest is now three times the smallest rather than twice, and lives four times as long. A
+  // population all of one scale rolls through as a single texture however many of it there is, and
+  // what makes weather read as weather is a few slow enormous masses with a great deal of small fast
+  // stuff turning over inside and around them.
+  const billows = Array.from({ length: 29 }, (_, i) => {
+    // A fifth of them are the big slow ones. Chosen by index rather than by a roll so the mix is
+    // fixed — left to chance, one seed in ten gets a sky with no large masses in it at all.
+    const grand = i % 5 === 0;
+    return {
     id: i * 3.71 + salt,
-    life: rng.range(13, 27),
+    life: grand ? rng.range(34, 62) : rng.range(11, 26),
     phase: rng.next(),
     tone: Math.floor(rng.range(0, BODY.length)),
-    alpha: rng.range(0.15, 0.30),
-    size: rng.range(0.085, 0.185),
-    squash: rng.range(0.48, 0.84),
+    alpha: grand ? rng.range(0.11, 0.2) : rng.range(0.15, 0.30),
+    size: grand ? rng.range(0.2, 0.33) : rng.range(0.07, 0.17),
+    squash: rng.range(0.42, 0.88),
     // Rather more than half catch the light. A crest is the same mass drawn again, offset, so this
     // is a flag on the billow and not a deck of its own — the highlight is always *on* something.
     lit: rng.next() < 0.75,
     crestTone: Math.floor(rng.range(0, CREST.length)),
     crestAlpha: rng.range(0.15, 0.30),
-  }));
+    };
+  });
 
   // Wisps: the fine frequency. Long, thin, aligned to the flow, and much brighter than they are
   // big. Without a second scale an order of magnitude finer than the billows, the whole thing reads
@@ -133,6 +144,24 @@ export function planFog(rng) {
     squash: rng.range(0.16, 0.36),
   }));
 
+  // Haze: enormous, almost invisible, very slow masses rolling across the whole frame.
+  //
+  // These exist to fill a hole in the *scale* of the thing. Below them the fog runs from
+  // cell-sized lobes down to filaments; above them there was nothing but a single linear wash over
+  // the entire frame. With no frequency in between, the ground, the lights and the cloud read as
+  // three flat decks stacked up — every join in the picture happened at either the size of a lattice
+  // cell or the size of the window. A handful of masses half the frame across, at an alpha you
+  // cannot point to, is what ties them into one atmosphere.
+  const drifts = Array.from({ length: 6 }, (_, i) => ({
+    id: i * 11.9 + salt * 4.7,
+    life: rng.range(48, 96),
+    phase: rng.next(),
+    tone: Math.floor(rng.range(0, 3)),
+    alpha: rng.range(0.045, 0.085),
+    size: rng.range(0.3, 0.52),
+    squash: rng.range(0.42, 0.86),
+  }));
+
   // The peek-a-boos. Evenly spread around one shared period; only the duty cycle varies, which
   // breaks the rhythm without ever letting two of them line up.
   const windows = Array.from({ length: 7 }, (_, i) => ({
@@ -141,7 +170,7 @@ export function planFog(rng) {
     duty: rng.range(0.26, 0.36),
   }));
 
-  return { salt, billows, wisps, streaks, windows };
+  return { salt, billows, wisps, streaks, drifts, windows };
 }
 
 /* ------------------------------------------------------- time and chance ---- */
@@ -309,6 +338,9 @@ export function drawFog(ctx, W, H, t, fog) {
   const wins = openWindows(fog, t, W, H);
 
   wash(ctx, W, H, t);
+  // Between the whole-frame wash and the cell-sized lattice, and drawn before both of them have
+  // anything on top: the frequency that keeps the picture from being three flat decks.
+  haze(ctx, W, H, S, t, fog, wins);
   curtain(ctx, W, H, S, t, fog, wins);
   // The apparition goes in *early* — under the billows, the crests, the filaments and the dark
   // strands, all of which then pass in front of it. Drawn late it was a sprite on the weather;
@@ -335,6 +367,33 @@ function wash(ctx, W, H, t) {
   g.addColorStop(1, `rgba(74, 80, 85, ${(0.35 - swing * 0.04).toFixed(4)})`);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
+}
+
+/**
+ * Haze: a handful of enormous, very slow, almost invisible masses rolling across the frame.
+ *
+ * They are subject to the windows like everything else, so they cannot quietly close a peek-a-boo —
+ * which they otherwise would, being half the frame wide, and it would be invisible in review because
+ * nothing about the picture would look wrong, there would simply never be anything underneath.
+ */
+function haze(ctx, W, H, S, t, fog, wins) {
+  for (const d of fog.drifts) {
+    const live = incarnate(d, t, W, H);
+    if (live.swell < 0.02) continue;
+    const drift = curl(live.x / S, live.y / S, t * 0.15, 0.7);
+    const x = live.x + drift.x * S * 0.2 * live.u + carried(live, t, S);
+    const y = live.y + drift.y * S * 0.2 * live.u;
+    const major = S * d.size * live.spread;
+    const minor = major * d.squash;
+    const alpha = d.alpha * live.swell * clearance(wins, x, y, major);
+    if (alpha < 0.004) continue;
+    lobe(
+      ctx, x, y, major, minor,
+      Math.atan2(drift.y, drift.x + 1),
+      [SLATE, STONE, ASH][d.tone],
+      clamp(alpha, 0, 1), 0.06, 0.3, d.id + t * 0.12,
+    );
+  }
 }
 
 /**

@@ -88,6 +88,49 @@ const JEWEL = ['#571628', '#122f4d', '#153f38', '#452a06', '#291d52', '#4f1509']
 // disappear into the field, open it and they come back as pale speckle.
 const TREE = ['#8f7aad', '#816da4', '#73609a'];
 const TREE_LIT = '#a794c2';
+const TRUNK = '#241a33';
+
+// The shaded side of everything that stands up. One colour for every wall in the town rather than a
+// shade per roof: from this height a wall is three or four pixels of a face nobody is meant to
+// study, and forty separate darks in it read as noise where one reads as *the side away from the
+// light*.
+const WALL = '#1a1526';
+const CAST = 'rgba(8, 5, 14, 0.3)';
+
+// Rock, reed, scrub. The ground was river, grass, road, roof and canopy and nothing else, which is
+// four hundred identical lollipops on a lawn — the three things here are all irregular by
+// construction and exist to break that up.
+const ROCK = ['#4a4358', '#3b3547', '#5a5168'];
+const REED = '#6a5a34';
+const SCRUB_LEAF = ['#5d4a7e', '#523f70'];
+
+// Neon. Not a colour anything down there *is* — a rim on the edges that catch, which at this size
+// is the only way an outline can carry a hue without becoming a cartoon border. Three, alternating,
+// so the town does not hum on one note; all three sit in the violet-to-amber span the rest of the
+// palette occupies, because a rim in a hue the scene does not otherwise contain reads as a sticker.
+const NEON = ['rgba(255, 62, 154, 0.55)', 'rgba(255, 176, 58, 0.5)', 'rgba(176, 108, 255, 0.5)'];
+const NEON_WATER = 'rgba(255, 152, 64, 0.34)';
+const NEON_ROAD = 'rgba(190, 96, 255, 0.28)';
+
+/* --------------------------------------------------------------- 2.5D ---- */
+
+/**
+ * How far a thing of a given height leans, in the direction it leans.
+ *
+ * The camera is no longer *exactly* overhead. Points displace **radially from the centre of frame**
+ * in proportion to their height, which is what a very long lens looking almost — but not quite —
+ * straight down actually does: the building under the lens shows you its roof and nothing else, and
+ * the one at the corner of the frame shows you a wall. A single fixed lean direction would have been
+ * cheaper and is the thing that makes an isometric mock-up look like a mock-up, because every object
+ * in it is being viewed from the same impossible place.
+ *
+ * The consequence worth knowing: the scene now has a *principal point*, and it is the middle of the
+ * frame. Nothing there stands up at all. That is correct and it is also why the town is never
+ * planned dead-centre.
+ */
+export const LEAN = 0.055;
+export const leanX = (px, W, height) => px + (px - W / 2) * height * LEAN;
+export const leanY = (py, H, height) => py + (py - H / 2) * height * LEAN;
 
 
 /* ---------------------------------------------------------------- plan ---- */
@@ -118,11 +161,23 @@ export function planGround(rng) {
     const at = riverAt(river, along);
     const nx = Math.cos(at.angle + Math.PI / 2);
     const ny = Math.sin(at.angle + Math.PI / 2);
+    // An irregular footprint, as four corners each pushed out by its own amount. A town of
+    // rectangles is a spreadsheet seen from above; the same four fills with the corners jogged is a
+    // town. The jitter is per-corner rather than per-building because a uniformly-scaled rectangle
+    // is still a rectangle.
+    const corner = Array.from({ length: 4 }, (_, i) => ({
+      x: (i === 0 || i === 3 ? -0.5 : 0.5) * w * (0.82 + rng.next() * 0.36),
+      y: (i < 2 ? -0.5 : 0.5) * h * (0.82 + rng.next() * 0.36),
+    }));
     buildings.push({
       x: at.x + nx * offset * side,
       y: at.y + ny * offset * side,
       w,
       h,
+      corner,
+      // How far it stands up, in the units `LEAN` is calibrated in. The shops are a terrace and
+      // therefore all much of a height; the houses behind them are not.
+      lift: rng.range(0.55, 1.15),
       angle: at.angle,
       kind,
       roof,
@@ -176,20 +231,83 @@ export function planGround(rng) {
       r: rng.range(0.006, 0.021),
       tint: Math.floor(rng.range(0, TREE.length)),
       lit: rng.next() < 0.35,
+      lift: rng.range(0.22, 0.5),
+      // How ragged this crown is, and which way it has grown. A canopy is not a circle and four
+      // hundred circles is a polka dot.
+      lumps: 4 + Math.floor(rng.range(0, 3)),
+      sway: rng.range(0, TAU),
     });
   }
 
-  // Field boundaries: a few long soft lines in the grass, which is most of what tells you a green
-  // field from above is farmed rather than wild.
-  const fields = Array.from({ length: 9 }, () => ({
-    x: rng.next(),
-    y: rng.next(),
-    angle: rng.range(0, TAU),
-    len: rng.range(0.12, 0.36),
+  // Parcels: closed, irregular, five-to-seven-sided fields. The lines above say *farmed*; a line is
+  // an edge with nothing on either side of it, and what actually reads as agriculture from the air
+  // is enclosed ground of slightly different tone, in shapes no two of which are alike.
+  const parcels = [];
+  for (let i = 0; i < 40 && parcels.length < 14; i += 1) {
+    const cx = rng.next();
+    const cy = rng.next();
+    if (nearestRiver(river, cx, cy).distance < 0.09) continue;
+    const sides = 5 + Math.floor(rng.range(0, 3));
+    const spin = rng.range(0, TAU);
+    const rx = rng.range(0.05, 0.13);
+    const ry = rx * rng.range(0.55, 1.1);
+    parcels.push({
+      tone: Math.floor(rng.range(0, GRASS.length)),
+      neon: Math.floor(rng.range(0, NEON.length)),
+      points: Array.from({ length: sides }, (_, k) => {
+        const a = spin + (k / sides) * TAU + rng.range(-0.2, 0.2);
+        const wobble = 0.72 + rng.next() * 0.5;
+        return { x: cx + Math.cos(a) * rx * wobble, y: cy + Math.sin(a) * ry * wobble };
+      }),
+    });
+  }
+
+  // Rock, and scrub that is not a tree. Both are clusters of unequal lumps with no symmetry in them
+  // at all, which is the point: they are the ground's irregularity, and everything else on it is
+  // either a rectangle or a disc.
+  const rocks = [];
+  for (let i = 0; i < 160 && rocks.length < 30; i += 1) {
+    const x = rng.next();
+    const y = rng.next();
+    const near = nearestRiver(river, x, y);
+    // Rock likes a riverbank and a hillside, so it is allowed close to the water where a tree is not.
+    if (near.distance > 0.2 && rng.next() < 0.6) continue;
+    rocks.push({
+      x,
+      y,
+      r: rng.range(0.003, 0.010),
+      lumps: 2 + Math.floor(rng.range(0, 3)),
+      tint: Math.floor(rng.range(0, ROCK.length)),
+      lift: rng.range(0.15, 0.4),
+    });
+  }
+
+  const scrub = [];
+  for (let i = 0; i < 240 && scrub.length < 90; i += 1) {
+    const x = rng.next();
+    const y = rng.next();
+    if (nearestRiver(river, x, y).distance < 0.05) continue;
+    if (buildings.some((b) => Math.abs(b.x - x) < b.w && Math.abs(b.y - y) < b.h)) continue;
+    scrub.push({
+      x,
+      y,
+      r: rng.range(0.004, 0.011),
+      tint: Math.floor(rng.range(0, SCRUB_LEAF.length)),
+      spread: rng.range(0, TAU),
+    });
+  }
+
+  // Reeds, in stands along the water. Short strokes leaning together, which is the one texture that
+  // says a bank is soft rather than cut.
+  const reeds = Array.from({ length: 34 }, () => ({
+    along: rng.next(),
+    side: rng.next() < 0.5 ? -1 : 1,
+    count: 5 + Math.floor(rng.range(0, 7)),
+    lean: rng.range(-0.5, 0.5),
+    phase: rng.range(0, 20),
   }));
 
-
-  return { river, buildings, trees, fields, townFrom, townTo, side };
+  return { river, buildings, trees, parcels, rocks, scrub, reeds, townFrom, townTo, side };
 }
 
 /** A point on the river at parameter `u` in 0..1, with the tangent angle and half-width there. */
@@ -234,9 +352,195 @@ export function drawGround(ctx, W, H, t, ground) {
   const S = Math.min(W, H);
   drawVegetation(ctx, W, H, ground);
   drawRiver(ctx, W, H, t, ground.river);
+  drawReeds(ctx, W, H, S, t, ground);
   drawRoads(ctx, W, H, ground);
+  // Rock and scrub go under the trees and the town: they are ground cover, and ground cover drawn
+  // last is litter.
+  drawRocks(ctx, W, H, S, ground.rocks);
+  drawScrub(ctx, W, H, S, t, ground.scrub);
   drawTrees(ctx, W, H, S, ground.trees);
   drawBuildings(ctx, W, H, S, ground.buildings);
+  // Neon last of everything on the ground, so a rim is never buried by the thing standing next to it.
+  drawNeon(ctx, W, H, S, ground);
+}
+
+/** Rock: two or three unequal lumps, leaning the way everything else leans. */
+function drawRocks(ctx, W, H, S, rocks) {
+  const lump = (rock, cx, cy, scale) => {
+    for (let i = 0; i < rock.lumps; i += 1) {
+      const h = hash2(rock.x * 91 + i * 3.7, rock.y * 143 - i * 5.1);
+      const a = hash2(rock.x * 37 - i * 8.3, rock.y * 59 + i * 1.7) * TAU;
+      const d = rock.r * S * h * 0.6;
+      const r = rock.r * S * scale * (0.5 + h * 0.7);
+      ctx.moveTo(cx + Math.cos(a) * d + r, cy + Math.sin(a) * d);
+      ctx.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, r, 0, TAU);
+    }
+  };
+
+  ctx.fillStyle = CAST;
+  ctx.beginPath();
+  for (const rock of rocks) {
+    lump(rock, leanX(rock.x * W, W, -rock.lift), leanY(rock.y * H, H, -rock.lift), 1);
+  }
+  ctx.fill();
+
+  for (let i = 0; i < ROCK.length; i += 1) {
+    ctx.fillStyle = ROCK[i];
+    ctx.beginPath();
+    for (const rock of rocks) {
+      if (rock.tint !== i) continue;
+      lump(rock, leanX(rock.x * W, W, rock.lift), leanY(rock.y * H, H, rock.lift), 1);
+    }
+    ctx.fill();
+  }
+}
+
+/** Scrub: low bushes, drawn as a spray of short strokes rather than as a blob. */
+function drawScrub(ctx, W, H, S, t, scrub) {
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(1, S * 0.0016);
+  for (let i = 0; i < SCRUB_LEAF.length; i += 1) {
+    ctx.strokeStyle = SCRUB_LEAF[i];
+    ctx.beginPath();
+    for (const s of scrub) {
+      if (s.tint !== i) continue;
+      const cx = s.x * W;
+      const cy = s.y * H;
+      const r = s.r * S;
+      for (let k = 0; k < 5; k += 1) {
+        const a = s.spread + k * 1.31 + noise2(s.x * 53 + k, t * 0.08) * 0.5;
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + Math.cos(a) * r * (0.7 + hash2(s.x * 17 + k, s.y * 23) * 0.8),
+          cy + Math.sin(a) * r * (0.7 + hash2(s.y * 19 + k, s.x * 29) * 0.8));
+      }
+    }
+    ctx.stroke();
+  }
+}
+
+/** Reeds: stands of them along the bank, leaning together and shifting on the wind. */
+function drawReeds(ctx, W, H, S, t, ground) {
+  ctx.strokeStyle = REED;
+  ctx.lineWidth = Math.max(1, S * 0.0014);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (const stand of ground.reeds) {
+    const at = riverAt(ground.river, stand.along);
+    const nx = Math.cos(at.angle + Math.PI / 2) * stand.side;
+    const ny = Math.sin(at.angle + Math.PI / 2) * stand.side;
+    // Just outside the water, where reeds live.
+    const bx = (at.x + nx * at.width * 0.78) * W;
+    const by = (at.y + ny * at.width * 0.78) * H;
+    // One shared gust per stand, so a clump moves as a clump.
+    const gust = noise2(stand.phase, t * 0.22) - 0.5;
+    for (let i = 0; i < stand.count; i += 1) {
+      const spread = (i / stand.count - 0.5) * at.width * 1.5;
+      const rx = bx + Math.cos(at.angle) * spread * W;
+      const ry = by + Math.sin(at.angle) * spread * H;
+      const len = S * (0.006 + hash2(stand.phase + i, stand.along) * 0.009);
+      const lean = stand.lean + gust * 0.7 + (hash2(stand.phase * 3 + i, 5) - 0.5) * 0.4;
+      ctx.moveTo(rx, ry);
+      ctx.lineTo(rx + Math.sin(lean) * len, ry - Math.cos(lean) * len);
+    }
+  }
+  ctx.stroke();
+}
+
+/**
+ * The neon rim.
+ *
+ * One pass, at the end, batched by colour — the roofs' edges, the parcels' boundaries, the road's
+ * kerb and the water's edge. It is a *rim*, not an outline: thin, semi-transparent, and only ever on
+ * the boundary of something that is already there, so it reads as an edge catching light rather than
+ * as a border drawn round a shape. An opaque line at full width around every roof is a cartoon, and
+ * the difference between the two is about thirty percent of alpha.
+ */
+function drawNeon(ctx, W, H, S, ground) {
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  // Parcels and roofs, alternating through the three neons so the town does not hum on one note.
+  for (let n = 0; n < NEON.length; n += 1) {
+    ctx.strokeStyle = NEON[n];
+    ctx.lineWidth = Math.max(1, S * 0.0016);
+    ctx.beginPath();
+    for (const parcel of ground.parcels) {
+      if (parcel.neon !== n) continue;
+      parcel.points.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(p.x * W, p.y * H);
+        else ctx.lineTo(p.x * W, p.y * H);
+      });
+      ctx.closePath();
+    }
+    ground.buildings.forEach((b, i) => {
+      if (i % NEON.length !== n) return;
+      roofPath(ctx, b, W, H, b.lift);
+    });
+    ctx.stroke();
+  }
+
+  // The water's edge and the kerb: long, continuous, and fainter than the rest, because a rim that
+  // runs the height of the frame at the strength of a roof's would be the loudest thing down there.
+  ctx.strokeStyle = NEON_WATER;
+  ctx.lineWidth = Math.max(1, S * 0.0022);
+  ctx.beginPath();
+  for (const s of [-1, 1]) {
+    for (let i = 0; i <= 90; i += 1) {
+      const at = riverAt(ground.river, i / 90);
+      const nx = Math.cos(at.angle + Math.PI / 2) * at.width * 0.62 * s;
+      const ny = Math.sin(at.angle + Math.PI / 2) * at.width * 0.62 * s;
+      if (i === 0) ctx.moveTo((at.x + nx) * W, (at.y + ny) * H);
+      else ctx.lineTo((at.x + nx) * W, (at.y + ny) * H);
+    }
+  }
+  ctx.stroke();
+
+  ctx.strokeStyle = NEON_ROAD;
+  ctx.lineWidth = Math.max(1, S * 0.0014);
+  ctx.beginPath();
+  for (let i = 0; i <= 60; i += 1) {
+    const u = lerp(ground.townFrom - 0.07, ground.townTo + 0.07, i / 60);
+    const at = riverAt(ground.river, u);
+    const nx = Math.cos(at.angle + Math.PI / 2) * 0.038 * ground.side;
+    const ny = Math.sin(at.angle + Math.PI / 2) * 0.038 * ground.side;
+    if (i === 0) ctx.moveTo((at.x + nx) * W, (at.y + ny) * H);
+    else ctx.lineTo((at.x + nx) * W, (at.y + ny) * H);
+  }
+  ctx.stroke();
+}
+
+/** A building's four corners in pixels, at a given height. */
+function footprint(b, W, H, lift) {
+  const cos = Math.cos(b.angle);
+  const sin = Math.sin(b.angle);
+  return b.corner.map((c) => {
+    const ox = c.x * W;
+    const oy = c.y * H;
+    const px = b.x * W + (ox * cos - oy * sin);
+    const py = b.y * H + (ox * sin + oy * cos);
+    return { x: leanX(px, W, lift), y: leanY(py, H, lift) };
+  });
+}
+
+/** A building's footprint at a given height, appended to the open path. */
+function roofPath(ctx, b, W, H, lift) {
+  const cos = Math.cos(b.angle);
+  const sin = Math.sin(b.angle);
+  for (let i = 0; i < 4; i += 1) {
+    const c = b.corner[i];
+    // Rotate in *pixel* space. The corners are stored in normalised units whose x and y are scaled
+    // by different numbers, so rotating them before the scale shears every building that is not
+    // axis-aligned — on a wide viewport, badly.
+    const ox = c.x * W;
+    const oy = c.y * H;
+    const px = b.x * W + (ox * cos - oy * sin);
+    const py = b.y * H + (ox * sin + oy * cos);
+    const x = leanX(px, W, lift);
+    const y = leanY(py, H, lift);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
 }
 
 
@@ -278,13 +582,44 @@ function drawVegetation(ctx, W, H, ground) {
     ctx.fill();
   }
 
-  // Field boundaries — hedge lines, darker than anything around them.
+  // Parcels: enclosed ground at a slightly different tone, in irregular five-to-seven-sided shapes.
+  // The hedge lines below say *farmed*, but a line is an edge with nothing either side of it, and
+  // what actually reads as agriculture from the air is fields — no two of them alike.
+  for (let i = 0; i < GRASS.length; i += 1) {
+    let any = false;
+    ctx.beginPath();
+    for (const parcel of ground.parcels) {
+      if (parcel.tone !== i) continue;
+      parcel.points.forEach((p, k) => {
+        if (k === 0) ctx.moveTo(p.x * W, p.y * H);
+        else ctx.lineTo(p.x * W, p.y * H);
+      });
+      ctx.closePath();
+      any = true;
+    }
+    if (!any) continue;
+    ctx.fillStyle = GRASS[i];
+    ctx.fill();
+  }
+
+  // Hedges, on the parcels' own boundaries.
+  //
+  // These used to be nine long straight lines ruled across the grass at arbitrary angles, on the
+  // grounds that a hedge line is what tells you a field is farmed. It is — but a *straight* one,
+  // bounding nothing, is a scratch on the picture, and once the ground had rocks and scrub and
+  // reeds and irregular parcels on it, nine ruled lines were the only thing left in frame that
+  // nothing in nature would have made. A hedge grows where a field ends, so that is where they are
+  // now, and each one closes.
   ctx.strokeStyle = SCRUB;
-  ctx.lineWidth = Math.max(1, Math.min(W, H) * 0.0035);
+  ctx.lineWidth = Math.max(1, Math.min(W, H) * 0.0032);
+  ctx.lineJoin = 'round';
   ctx.beginPath();
-  for (const f of ground.fields) {
-    ctx.moveTo(f.x * W, f.y * H);
-    ctx.lineTo((f.x + Math.cos(f.angle) * f.len) * W, (f.y + Math.sin(f.angle) * f.len) * H);
+  for (const parcel of ground.parcels) {
+    parcel.points.forEach((p, k) => {
+      if (k === 0) ctx.moveTo(p.x * W, p.y * H);
+      else ctx.lineTo(p.x * W, p.y * H);
+    });
+    ctx.closePath();
   }
   ctx.stroke();
 }
@@ -401,35 +736,53 @@ function drawRoads(ctx, W, H, ground) {
  * lot however many lumps each crown has.
  */
 function drawTrees(ctx, W, H, S, trees) {
+  // A crown of four to seven unequal lumps on an ellipse rather than three on a circle, each one's
+  // offset, radius and squash its own. Three equal lumps still average out to a disc at this size,
+  // which is how four hundred trees became a polka dot the first time.
   const crown = (tree, cx, cy, scale) => {
-    for (let i = 0; i < 3; i += 1) {
+    for (let i = 0; i < tree.lumps; i += 1) {
       const h = hash2(tree.x * 137 + i * 4.3, tree.y * 211 - i * 7.1);
-      const a = hash2(tree.x * 53 - i * 9.7, tree.y * 71 + i * 2.9) * TAU;
-      const d = tree.r * S * (0.1 + h * 0.34);
-      const r = tree.r * S * scale * (0.62 + h * 0.46);
-      const x = cx + Math.cos(a) * d;
-      const y = cy + Math.sin(a) * d;
+      const k = hash2(tree.x * 53 - i * 9.7, tree.y * 71 + i * 2.9);
+      const a = tree.sway + (i / tree.lumps) * TAU + (k - 0.5) * 1.4;
+      const d = tree.r * S * (0.14 + h * 0.52);
+      const r = tree.r * S * scale * (0.44 + h * 0.5);
+      // Squashed along its own axis, so no lump is a circle either.
+      const x = cx + Math.cos(a) * d * (0.8 + k * 0.6);
+      const y = cy + Math.sin(a) * d * (0.7 + h * 0.5);
       ctx.moveTo(x + r, y);
       ctx.arc(x, y, r, 0, TAU);
     }
   };
 
-  // Shadows first, all of them, in one path. Inverted, a cast shadow is a *pale* shape beside the
-  // crown rather than a dark one — but the offset is doing the same job it always did, and it is
-  // the offset, not the darkness, that reads as "this thing stands up".
-  ctx.fillStyle = 'rgba(200, 178, 124, 0.4)';
+  // The shadow falls on the *opposite* side from the lean, which is what makes the lean read as
+  // height rather than as everything having been nudged. One path for the lot.
+  ctx.fillStyle = CAST;
   ctx.beginPath();
   for (const tree of trees) {
-    crown(tree, (tree.x + tree.r * 0.4) * W, (tree.y + tree.r * 0.48) * H, 1);
+    crown(tree, leanX(tree.x * W, W, -tree.lift * 0.7), leanY(tree.y * H, H, -tree.lift * 0.7), 0.72);
   }
   ctx.fill();
+
+  // Trunks: one stroke each from the foot to the crown, which is the whole 2.5D trick — you can see
+  // the stem of the tree at the corner of the frame and none of the one under the lens.
+  ctx.strokeStyle = TRUNK;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(1, S * 0.0016);
+  ctx.beginPath();
+  for (const tree of trees) {
+    const bx = tree.x * W;
+    const by = tree.y * H;
+    ctx.moveTo(bx, by);
+    ctx.lineTo(leanX(bx, W, tree.lift), leanY(by, H, tree.lift));
+  }
+  ctx.stroke();
 
   for (let i = 0; i < TREE.length; i += 1) {
     ctx.fillStyle = TREE[i];
     ctx.beginPath();
     for (const tree of trees) {
       if (tree.tint !== i) continue;
-      crown(tree, tree.x * W, tree.y * H, 1);
+      crown(tree, leanX(tree.x * W, W, tree.lift), leanY(tree.y * H, H, tree.lift), 1);
     }
     ctx.fill();
   }
@@ -439,35 +792,67 @@ function drawTrees(ctx, W, H, S, trees) {
   ctx.beginPath();
   for (const tree of trees) {
     if (!tree.lit) continue;
-    crown(tree, (tree.x - tree.r * 0.28) * W, (tree.y - tree.r * 0.32) * H, 0.5);
+    const cx = leanX(tree.x * W, W, tree.lift) - tree.r * 0.28 * W;
+    const cy = leanY(tree.y * H, H, tree.lift) - tree.r * 0.32 * H;
+    crown(tree, cx, cy, 0.46);
   }
   ctx.fill();
 }
 
 /** Roofs, from above, each with the shadow that makes it a building rather than a rectangle. */
 function drawBuildings(ctx, W, H, S, buildings) {
-  const oriented = (b, fn) => {
+  // Everything a building carries on top of its roof — ridge, awning, parasols, tables — is drawn in
+  // the building's own rotated frame, translated to where the *roof* ended up rather than to where
+  // the building stands. Draw it at the footprint instead and the awnings slide off the shopfronts
+  // the moment the town is anywhere but the middle of the frame.
+  const liftedOriented = (b, w, h, fn) => {
     ctx.save();
-    ctx.translate(b.x * W, b.y * H);
+    ctx.translate(leanX(b.x * w, w, b.lift), leanY(b.y * h, h, b.lift));
     ctx.rotate(b.angle);
     fn();
     ctx.restore();
   };
 
-  // Shadows, offset down-right, all in one pass.
-  ctx.fillStyle = WALL_SHADOW;
+  // Cast shadows, thrown the opposite way from the lean, all in one path.
+  ctx.fillStyle = CAST;
+  ctx.beginPath();
+  for (const b of buildings) roofPath(ctx, b, W, H, -b.lift * 0.75);
+  ctx.fill();
+
+  // The walls. Every building's four side faces go into **one path**, and the roofs are painted over
+  // the top of them afterwards — which is not a trick, it is just what is true: the top leans away
+  // from the centre of frame, so the faces on the far side end up underneath the roof polygon and
+  // the ones on the near side end up outside it. Painter's order does the hidden-surface work for
+  // free, and the whole town's walls cost one fill.
+  ctx.fillStyle = WALL;
+  ctx.beginPath();
   for (const b of buildings) {
-    oriented(b, () => {
-      ctx.fillRect(-b.w * W * 0.5 + S * 0.006, -b.h * H * 0.5 + S * 0.007, b.w * W, b.h * H);
-    });
+    const base = footprint(b, W, H, 0);
+    const top = footprint(b, W, H, b.lift);
+    for (let i = 0; i < 4; i += 1) {
+      const j = (i + 1) % 4;
+      ctx.moveTo(base[i].x, base[i].y);
+      ctx.lineTo(base[j].x, base[j].y);
+      ctx.lineTo(top[j].x, top[j].y);
+      ctx.lineTo(top[i].x, top[i].y);
+      ctx.closePath();
+    }
+  }
+  ctx.fill();
+
+  // Roofs. Each is its own fill because each has its own colour, which was true before the buildings
+  // stood up and is still true now.
+  for (const b of buildings) {
+    ctx.fillStyle = b.roof;
+    ctx.beginPath();
+    roofPath(ctx, b, W, H, b.lift);
+    ctx.fill();
   }
 
   for (const b of buildings) {
-    oriented(b, () => {
+    liftedOriented(b, W, H, () => {
       const w = b.w * W;
       const h = b.h * H;
-      ctx.fillStyle = b.roof;
-      ctx.fillRect(-w / 2, -h / 2, w, h);
 
       // A ridge line down the middle of the roof: the single detail that reads as a pitched roof
       // from overhead, and it costs one rectangle. Inverted along with everything else, so the lit

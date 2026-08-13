@@ -20,10 +20,11 @@
 // nothing else does — the *fog* going to pieces in chunks reads as a rendering fault, while one
 // mass doing it reads as something happening.
 //
-// The scene draws top-down and orthographic, so there is no perspective anywhere in it. That is a
-// constraint, not a saving: with no horizon and no parallax, every cue that says "this is a thick
-// moving volume of air" has to come out of the motion itself — shear between layers, light that
-// moves independently of the shape it is on, and masses that grow and die rather than slide.
+// The scene draws straight down, or very nearly: a long lens almost overhead, so the ground has a
+// small radial lean that gives it height and there is no horizon at all. That is a constraint, not a
+// saving: with no horizon and no parallax, every cue that says "this is a thick moving volume of
+// air" has to come out of the motion itself — shear between layers, light that moves independently
+// of the shape it is on, and masses that grow and die rather than slide.
 
 import { createRng } from '../../lib/rng.js';
 import { drawGround, nearestRiver, planGround } from './town.js';
