@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [3.4.0] - 2026-08-14
+## [3.5.0] - 2026-08-14
 
 **"Above the Fog" is finished, and a fourth animation begins.** That is the only thing a MAJOR bump
 means here — see `.claude/CLAUDE.md`.
@@ -249,6 +249,60 @@ storm walks past. One comparison, a whole extra read.
   dust, the kiln works tongs with a tile glowing in their mouth, the glass bench turns a pipe with a
   gather on the end of it, slowly, because glass is slow. The workshops gained pitched roofs,
   chimneys and lit mouths, each breathing on its own rhythm.
+
+### A taller temple, and enough room inside it to build something
+
+Held wide, the height budget ran out after a few storeys of stacked plates. Narrower and taller — a
+pagoda's proportion is three or four times its base width — buys both more storeys *and* more rows
+inside each one, and the rows are what the joinery needs: a storey of six rows can hold a wall, a
+storey of twelve can hold a building.
+
+What that room went on, one row each: the **dougong** drawn as separate brackets rather than one
+bright rule, because the point of the course is that it is many small repeated wooden units and a
+continuous line says *trim* where a row of blocks says *carpentry*; a **balcony** projecting past the
+wall with balusters you can count, so the silhouette has two overhangs of different widths instead of
+one; **corner and intermediate posts** with a beam across their heads, which is the answer to *what
+is it made of*; **lattice windows** where the light comes through the joinery rather than out of a
+hole; **double doors** with a split and a threshold on the ground storey; and a **bell** and a **stone
+guardian**, which are the only two things in the building that are not *of* the building — which is
+exactly why the eye finds them. Posts went from one every three chunks, where a wall becomes a stripe
+pattern, to one every eight, where the panel between them is the thing you see.
+
+### The hands are spirits now
+
+Ordered dither as translucency. Every chunk goes through the same Bayer matrix the sky's ramp uses,
+at a density falling off from the middle of the palm outward: the core is solid, the fingers are half
+there, the wrist barely at all — so the picture behind shows through and the thing reads as
+not-quite-present. It is how a 16-bit machine drew a ghost, for exactly the reason we need it: there
+is no alpha to be had, and a flat silhouette in a pale colour is a *pale hand*, not a spectral one.
+The dither is keyed to the sprite's own grid rather than to screen position, or the hand would slide
+across a fixed screen-door and read as a hole cut in the picture.
+
+They also gained an **aura** one ring outside the silhouette at the density it has just run out of —
+a spirit with a hard edge is a sticker — and a long **streaming tail** whose chunks lag further
+behind the further back they are. And they are spectral blue-white: neither the storm's rose nor the
+building's jade and gold, because a thing lit by nothing has to be its own colour or it reads as a
+chip off whatever it is standing in front of.
+
+### Wind, and things going up the throat
+
+- **A real bulge.** A sine everywhere is a wobble; the read of a bulge is that it is *somewhere in
+  particular*. It is a narrow gaussian in height whose centre climbs the column on its own clock and
+  whose depth comes and goes on a slower, unrelated one, so one swelling travels up and is gone, and
+  another turns up somewhere else later.
+- **The storm has a wind field as well as a body.** Most of what a tornado does, it does to things it
+  never touches, so `vortexAt` now returns both numbers. The temple's damage is measured against the
+  **field**, not the wall — a storm passing near strips it without the column ever crossing it, and
+  the reach now matches the streaks you can see blowing past.
+- **The wind is visible**: streaks orbiting outside the body on the same clock the surface turns on,
+  obeying the same facing rule, lying *along* the circulation so they foreshorten as they come round.
+  Bright, deliberately — wind at the dark end of the ramp is the sky's own value and simply is not
+  there.
+- **The ground is covered in loose things, and they are taken.** Litter is lifted when the field
+  passes over it, wound around the column, carried up and **gone**. Vanishing is the point: debris
+  that orbits for ever is a decoration, and this is the one thing in the scene that is destroyed
+  without anybody rebuilding it. Captured building debris now does the same — up the throat and out
+  of existence — instead of circling until its round ran out.
 
 ### Its chrome and its channel change
 

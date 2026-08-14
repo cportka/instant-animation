@@ -120,10 +120,16 @@ function axisAt(up, t, W) {
  */
 function radiusAt(up, t, S, plan) {
   const flare = plan.base + (plan.mouth - plan.base) * up ** 0.62;
-  // A slow bulge travelling up the funnel, so the profile is never the same twice.
+  // A slow ripple travelling up the funnel, so the profile is never the same twice...
   const swell = 1 + 0.13 * Math.sin(up * 5.2 - t * 0.8) + 0.07 * Math.sin(up * 11 - t * 1.7);
+  // ...and on top of it a real **bulge**: one localised swelling that climbs the column and is gone,
+  // then another somewhere else a while later. A sine everywhere is a wobble — the whole read of a
+  // bulge is that it is *somewhere in particular*, so it is a narrow gaussian in height whose centre
+  // rises with its own clock and whose depth comes and goes on a slower, unrelated one.
+  const at = wrap01(t * 0.11);
+  const bulge = 1 + 0.5 * Math.max(0, Math.sin(t * 0.037 + 0.6)) * Math.exp(-((up - at) ** 2) / 0.012);
   // ...and the storm's own strength on top of that: a rope at 0.73 of its width, a wedge at 1.2.
-  return S * flare * swell * (0.42 + powerAt(t) * 0.78);
+  return S * flare * swell * bulge * (0.42 + powerAt(t) * 0.78);
 }
 
 export function planFunnel(rng) {
@@ -157,7 +163,63 @@ const spinAt = (up) => 1.9 - up * 1.15;
  * which is exactly the thing the funnel knows and nobody else should be re-deriving.
  */
 export function vortexAt(W, H, t, plan, up) {
-  return { cx: axisAt(up, t, W), r: radiusAt(up, t, sizeRef(W, H), plan) };
+  const r = radiusAt(up, t, sizeRef(W, H), plan);
+  // The wind reaches a long way past the wall. A tornado is not a solid object with a clean edge —
+  // most of what it does, it does to things it never touches — so everything that asks about the
+  // storm gets both numbers: `r` is the body, `wind` is the field, and the field is what does damage
+  // at a distance and what drags loose things off the ground and into the column.
+  return { cx: axisAt(up, t, W), r, wind: r * (2.2 + powerAt(t) * 1.4) };
+}
+
+/**
+ * The wind around it — the part of the storm that is not the funnel.
+ *
+ * Drawn as streaks on the *outside* of the body, orbiting the axis on the same clock the surface
+ * turns on, and obeying the same facing rule: the far half of each orbit is behind the column and is
+ * simply not drawn. Long, thin, and following the circulation rather than pointing at it, because
+ * wind that radiates outward reads as an explosion and wind that curves reads as a vortex.
+ *
+ * They fade with distance rather than stopping, which is what tells you the storm has no edge.
+ */
+export function drawWind(ctx, W, H, t, plan) {
+  const S = Math.min(W, H);
+  const px = funnelPixel(S);
+  const topY = H * TOP;
+  const groundY = H * GROUND;
+  const bucket = SPIN.map(() => []);
+
+  for (let i = 0; i < 240; i += 1) {
+    // Each streak climbs on its own clock and wraps — a constant population, and nothing ever pops
+    // because they are all at different heights going at different rates.
+    const rise = 0.05 + hash2(i * 1.7, 3) * 0.3;
+    const up = wrap01(hash2(i * 2.3, 7) + t * rise);
+    const y = groundY - up * (groundY - topY);
+    const { cx, r, wind } = vortexAt(W, H, t, plan, up);
+    // Out in the field, not on the wall. The nearer ones move faster, which is the one cue that says
+    // this is circulation rather than a halo.
+    const out = 1.04 + hash2(i * 3.1, 11) * 0.62;
+    const angle = hash2(i * 5.9, 13) * TAU + turnedBy(t) * SPEED * spinAt(up) * TAU * (1.4 / out);
+    const facing = Math.sin(angle);
+    if (facing < -0.1) continue;
+    const rad = r * out + (wind - r) * ((out - 1.04) / 0.62) * 0.28;
+    const x = cx + Math.cos(angle) * rad;
+    // A streak lies *along* the circulation, so it is wide where the orbit is crossing the frame and
+    // short where it is coming at you — the same foreshortening the funnel's own bands have.
+    const len = Math.max(px, Math.round(Math.abs(facing) * px * (2 + hash2(i * 7.3, 17) * 4)));
+    // Bright, and deliberately so: wind at the dark end of the ramp is the sky's own value and
+    // simply is not there. It is the fastest thing in the frame and it has to look like it.
+    const step = clamp(1 + Math.round((out - 1.04) * 5.2) + Math.round(up * 1.6), 0, SPIN.length - 1);
+    bucket[step].push(x, y, len, px);
+  }
+
+  for (let step = 0; step < SPIN.length; step += 1) {
+    const cells = bucket[step];
+    if (!cells.length) continue;
+    ctx.fillStyle = rgba(SPIN[step], 1);
+    ctx.beginPath();
+    for (let i = 0; i < cells.length; i += 4) chunk(ctx, cells[i], cells[i + 1], cells[i + 2], cells[i + 3], px);
+    ctx.fill();
+  }
 }
 
 export function drawFunnel(ctx, W, H, t, plan) {

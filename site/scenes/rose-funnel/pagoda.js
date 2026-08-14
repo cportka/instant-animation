@@ -35,7 +35,7 @@ import { GOLD, JADE, LAPIS, SPIN } from './palette.js';
 const SHRINK = 0.93;
 const MAX_STOREYS = 9;
 /** Below this a storey has no room for a wall between its two roofs, and stops being a storey. */
-const MIN_ROWS = 6;
+const MIN_ROWS = 9;
 
 /**
  * How far the temple stands off the funnel's axis, as a fraction of the size reference.
@@ -69,15 +69,19 @@ export function pagodaShape(W, H, px, R) {
   // alone is right on a monitor and collapses on a phone, where it would put a sixty-pixel building
   // at the bottom of an eight-hundred-pixel frame — the exact opposite failure to the funnel's, which
   // is why `sizeRef` takes the smaller and this takes the larger. They are not the same question.
-  const half0 = Math.max(px * 3, W * 0.078, Math.min(W, H) * 0.13);
-  const storyH = half0 * 0.76;
+  // Narrower and taller than it was. A pagoda's proportion is roughly three or four times its base
+  // width, and holding it wide meant the height budget ran out after four storeys of stacked plates.
+  // Thinner buys both more storeys *and* more rows inside each one, which is the room the joinery
+  // needs — a storey of six rows can hold a wall, and a storey of twelve can hold a building.
+  const half0 = Math.max(px * 3, W * 0.06, Math.min(W, H) * 0.105);
+  const storyH = half0 * 0.98;
 
   const rows = [];
   let used = 0;
   for (let i = 0; i < MAX_STOREYS; i += 1) {
     const r = Math.round((storyH * SHRINK ** i) / px);
     if (r < MIN_ROWS) break;
-    if (used + r > (column * 0.72) / px) break;
+    if (used + r > (column * 0.84) / px) break;
     rows.push(r);
     used += r;
   }
@@ -96,7 +100,7 @@ export function pagodaShape(W, H, px, R) {
     half0,
     // The spire carries the rest of the column. It is *giant* — the brief says so — and it is what
     // puts the building's one hot accent up where the storm is worst.
-    spireRows: Math.max(6, Math.round((column * 0.14) / px)),
+    spireRows: Math.max(6, Math.round((column * 0.16) / px)),
     bodyRows: used,
   };
 }
@@ -156,7 +160,7 @@ export function drawPagoda(ctx, W, H, t, plan, px, R, cycle, funnel) {
   // flat tone is a wedge. The order matters — a bright bracket course emitted after the wall it sits
   // on would be painted under it and vanish.
   const B = {
-    shadow: [], wallLit: [], wallDark: [], door: [], lamp: [],
+    shadow: [], wallLit: [], wallDark: [], post: [], door: [], lamp: [], stone: [],
     tileDark: [], tile: [], tileLit: [], bracket: [], gilt: [],
   };
   const put = (into, x, y, w, h) => into.push(x, y, w, h);
@@ -183,34 +187,97 @@ export function drawPagoda(ctx, W, H, t, plan, px, R, cycle, funnel) {
     const right = bayAt(bayOf(i, 'eaveR'), cx + dx + eave, t, W, H, funnel, cycle.seed).life;
     const wall = bayAt(bayOf(i, 'wall'), cx + dx, t, W, H, funnel, cycle.seed).life;
 
-    // ---- the body of the storey, top down: shadow, brackets, then wall -------------------------
+    // ---- the body of the storey ----------------------------------------------------------------
+    //
+    // Top down: the shadow under the eave, the bracket course, a projecting balcony, then the wall
+    // with its posts, its beam, and whatever is standing in the dark behind its lattice. Every one of
+    // those is a single row, and the reason the building went from "stacked plates" to something you
+    // can read the construction of is simply that there are now enough rows to spend one on each.
     const bodyRows = storeyRows - roofRows;
     const standing = Math.round(bodyRows * wall);
     if (standing > 0) {
       const bodyTop = top + (storeyRows - standing) * px;
-      // The dark line directly under the eave. It is what separates one storey from the next, and
-      // without it the roofs read as shelves bolted to a single tower.
-      put(B.shadow, cx + dx - half, bodyTop, half * 2, px);
-      // The bracket course — the dougong. One bright row under every eave, and the only rhythm the
-      // eye needs to read "this is built out of repeated wooden units" at seven pixels.
-      if (standing > 2) put(B.bracket, cx + dx - half, bodyTop + px, half * 2, px);
-      const wallTop = bodyTop + Math.min(2, standing - 1) * px;
-      const wallH = bodyTop + standing * px - wallTop;
+      const litLeft = stormX < cx + dx;
+      let row = bodyTop;
+
+      // The dark line directly under the eave. Without it the roofs read as shelves bolted to a tower.
+      put(B.shadow, cx + dx - half, row, half * 2, px);
+      row += px;
+
+      // The dougong — the bracket set. Drawn as *separate* brackets rather than one bright rule,
+      // because the whole point of the course is that it is many small repeated wooden units, and a
+      // continuous line says "trim" where a row of blocks says "carpentry".
+      if (standing > 2) {
+        for (let b = -Math.round(half / px); b <= Math.round(half / px); b += 2) {
+          put(B.bracket, cx + dx + b * px, row, px, px);
+        }
+        row += px;
+      }
+
+      // A balcony, projecting past the wall on both sides: a deck row and a rail above it with gaps
+      // between the balusters. It is the one horizontal that sticks *out* below the eave sticking
+      // out, and having two overhangs of different widths is most of what makes the silhouette read
+      // as a storey rather than as a band.
+      if (standing > 4) {
+        const deck = Math.round((half * 1.16) / px) * px;
+        put(B.wallDark, cx + dx - deck, row + px, deck * 2, px);
+        for (let b = -Math.round(deck / px); b <= Math.round(deck / px); b += 2) {
+          put(B.bracket, cx + dx + b * px, row, px, px);
+        }
+        row += px * 2;
+      }
+
+      const wallH = bodyTop + standing * px - row;
       if (wallH > 0) {
-        // Two faces. The light in this scene is the storm — there is no sun — so the lit side is
-        // simply the side the vortex is on, which means the building re-lights itself as the storm
-        // walks past it. One flat wall would have thrown that away.
-        const litLeft = stormX < cx + dx;
-        put(B.wallLit, cx + dx - half, wallTop, half * (litLeft ? 1.2 : 0.8), wallH);
-        put(B.wallDark, cx + dx + (litLeft ? half * 0.2 : -half * 0.8), wallTop, half * (litLeft ? 0.8 : 1.2), wallH);
-        // A door on the ground storey, windows above it. Dark openings with a lamp burning inside —
-        // the only reason to believe anyone has ever been in here.
-        if (wallH > px * 2) {
-          const openW = Math.max(px, Math.round((half * 0.34) / px) * px);
-          const openH = Math.min(wallH - px, px * (i === 0 ? 4 : 2));
-          const oy = wallTop + wallH - openH;
+        // Two faces. There is no sun in this scene — the vortex is the only light — so the lit side
+        // is whichever side the storm is on, and the building re-lights itself as it walks past.
+        put(B.wallLit, cx + dx - half, row, half * (litLeft ? 1.2 : 0.8), wallH);
+        put(B.wallDark, cx + dx + (litLeft ? half * 0.2 : -half * 0.8), row, half * (litLeft ? 0.8 : 1.2), wallH);
+
+        // The frame it is built out of: corner posts and an intermediate post, and a beam across the
+        // head of them. This is the answer to "what is it made of" — timber, and you can count it.
+        // Two bays either side of centre, never more. At one post every three chunks the wall stops
+        // being a wall with a frame in it and becomes a stripe pattern — the posts have to be far
+        // enough apart that the panel *between* them is the thing you see.
+        const posts = Math.max(1, Math.round(half / (px * 8)));
+        for (let b = -posts; b <= posts; b += 1) {
+          put(B.post, cx + dx + Math.round((b * half) / posts / px) * px, row, px, wallH);
+        }
+        put(B.post, cx + dx - half, row, half * 2, px);
+
+        // ...and what is behind it. The ground storey gets double doors with a visible split; every
+        // storey above gets a lattice window, drawn as alternating chunks over the lamp so the light
+        // comes through the joinery rather than out of a hole.
+        if (wallH > px * 3) {
+          const openW = Math.max(px * 2, Math.round((half * 0.42) / px) * px);
+          const openH = Math.min(wallH - px, px * (i === 0 ? 6 : 4));
+          const oy = row + wallH - openH;
           put(B.door, cx + dx - openW / 2, oy, openW, openH);
           put(B.lamp, cx + dx - openW / 2 + px, oy + px, Math.max(px, openW - px * 2), Math.max(px, openH - px * 2));
+          if (i === 0) {
+            // The split between the two leaves, and a threshold under them.
+            put(B.post, cx + dx - px * 0.5, oy, px, openH);
+            put(B.bracket, cx + dx - openW / 2, oy + openH - px, openW, px);
+          } else {
+            // Lattice: every other column barred, which is what turns a lit rectangle into a window.
+            for (let b = 0; b * px < openW; b += 3) {
+              put(B.post, cx + dx - openW / 2 + b * px, oy, px, openH);
+            }
+            put(B.post, cx + dx - openW / 2, oy + Math.floor(openH / px / 2) * px, openW, px);
+          }
+        }
+
+        // A bell hangs in one storey, and a stone guardian stands in another. They are two chunks
+        // and four chunks respectively, and they are the only things in the building that are not
+        // *of* the building — which is exactly why the eye finds them.
+        if (i === n - 2 && wallH > px * 3) {
+          put(B.gilt, cx + dx - px, row + px, px * 2, px * 2);
+          put(B.bracket, cx + dx - px * 0.5, row + px * 3, px, px);
+        }
+        if (i === 1 && wallH > px * 4) {
+          const gx = cx + dx + (litLeft ? half * 0.55 : -half * 0.55);
+          put(B.stone, gx - px, row + wallH - px * 4, px * 2, px * 4);
+          put(B.stone, gx - px * 1.5, row + wallH - px * 5, px * 3, px);
         }
       }
     }
@@ -270,7 +337,7 @@ export function drawPagoda(ctx, W, H, t, plan, px, R, cycle, funnel) {
 
   const ORDER = [
     ['shadow', SPIN[7]], ['wallDark', LAPIS[6]], ['wallLit', LAPIS[5]],
-    ['door', LAPIS[7]], ['lamp', GOLD[2]],
+    ['door', LAPIS[7]], ['lamp', GOLD[2]], ['post', LAPIS[4]], ['stone', JADE[6]],
     ['tileDark', JADE[5]], ['tile', JADE[3]], ['tileLit', JADE[1]],
     ['bracket', GOLD[3]], ['gilt', GOLD[1]],
   ];
