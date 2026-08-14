@@ -92,6 +92,12 @@ export function create({ width, height, seed, variant = meta.variants[0] }) {
 }
 ```
 
+A scene with compositions also declares **`meta.dissolve`** — how it re-arranges — alongside
+`meta.transition`, which is how you *arrive* at it. They are different events and must look different:
+travelling between animations pushes, re-arranging one dissolves in place. Implement the dissolve in
+`site/effects/dissolves.js` in your scene's own language; `tests/scenes.test.js` fails on a scene that
+has compositions and no dissolve, or names one nobody implements.
+
 Past `id` and `title` a variant is **your** vocabulary — the shell reads those two and forwards the
 whole block to `create()` without looking inside it. Three rules make this work:
 

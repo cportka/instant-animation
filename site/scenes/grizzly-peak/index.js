@@ -39,6 +39,12 @@ export const meta = {
   transition: 'pixel',
   // The nav arrows wear the scene: a stepped sprite in sodium amber, hard shadow, no glow.
   chrome: 'pixel',
+  // ...and so does re-arranging it. Where the channel change is a screen of tiles being rewritten,
+  // the dissolve between this scene's own compositions is the stream losing its keyframe: the
+  // macroblocks it still has get re-used and dragged along by motion vectors with nothing left to
+  // apply them to, smearing in coherent slabs until they give up and the new arrangement is simply
+  // what was underneath all along.
+  dissolve: 'mosh',
   // Pixel art wants one device pixel per drawn pixel. At 2x the chunks are drawn twice as fine and
   // the whole point of the grid — that you can see it — goes away.
   maxDpr: 1,
