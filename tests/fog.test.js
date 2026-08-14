@@ -10,7 +10,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createRng } from '../site/lib/rng.js';
-import { planFog, windowCoverage } from '../site/scenes/above-the-fog/fog.js';
+import {
+  BLACKOUT_GONE,
+  BLACKOUT_PERIOD,
+  BLACKOUT_SPAN,
+  blackoutAt,
+  planFog,
+  windowCoverage,
+} from '../site/scenes/above-the-fog/fog.js';
 import { DURATION, FIGURES, PERIOD, apparitionAt } from '../site/scenes/above-the-fog/apparition.js';
 import { createRecordingContext } from './helpers/recording-context.mjs';
 import * as scene from '../site/scenes/above-the-fog/index.js';
@@ -74,7 +81,14 @@ test('the fog is 95% of the scene, at every viewport, at every moment sampled', 
     const instance = scene.create({ ...viewport, seed: 'above-the-fog' });
     let clearest = 1;
 
+    let measured = 0;
     for (const t of [0, 3.7, 19.2, 41, 64.5, 121.3, 301.5]) {
+      // The blackout is the one deliberate exception to everything below — for a second and a half
+      // once or twice a minute there is no fog at all, on purpose. Skipping those moments by name is
+      // the honest way to write this: the alternative is loosening the bounds until a frame with no
+      // weather in it passes them, and then the assertions no longer say anything.
+      if (blackoutAt(t) > 0) continue;
+      measured += 1;
       const before = recorder.ops.length;
       instance.draw(recorder.ctx, t, 1 / 60);
       const lobes = readLobes(recorder.ops.slice(before));
@@ -107,6 +121,7 @@ test('the fog is 95% of the scene, at every viewport, at every moment sampled', 
     // assertion above is satisfied by fog that never opens at all, and thickening the cloud until
     // the windows stop punching through it is a change that looks like an improvement right up
     // until you notice the scene has nothing underneath it any more. It has happened once already.
+    assert.ok(measured >= 5, `only ${measured} of 7 sample times were outside a blackout`);
     assert.ok(
       clearest < 0.55,
       `${width}x${height}: the clearest point in any frame is still ${(clearest * 100).toFixed(0)}% fogged — the peek-a-boos have closed`,
@@ -174,6 +189,48 @@ test('one apparition shows all four figures, in order, one at a time', () => {
   // Between them the figures use the full depth — the darkest step is what hollows out the
   // reaper's cowl and cuts the eyes and mouth into the happy face, and nothing else supplies it.
   assert.equal(new Set(FIGURES.flatMap((f) => f.level)).size, 3);
+});
+
+test('the fog blacks out completely, briefly, and rarely', () => {
+  // Once or twice a minute the whole layer tears itself apart and is gone for a full second. The
+  // three things worth pinning: that it *fully* clears (a blackout that only thins is not a
+  // blackout), that it is over quickly, and that it is rare enough to stay an event.
+  let gone = 0;
+  let touched = 0;
+  const starts = [];
+  let inside = false;
+  const step = 0.02;
+  for (let t = 0; t < 3600; t += step) {
+    const level = blackoutAt(t);
+    assert.ok(level >= 0 && level <= 1, `blackout level ${level} out of range at t=${t}`);
+    assert.equal(level, blackoutAt(t), 'blackoutAt must be a pure function of time');
+    if (level > 0) {
+      touched += 1;
+      if (!inside) starts.push(t);
+      inside = true;
+    } else {
+      inside = false;
+    }
+    if (level === 1) gone += 1;
+  }
+
+  assert.equal(starts.length, Math.floor(3600 / BLACKOUT_PERIOD), 'one blackout per window, no more and no fewer');
+  // Fully clear for about a second each time, and the whole event a little longer than that.
+  const clearPer = (gone * step) / starts.length;
+  assert.ok(
+    Math.abs(clearPer - BLACKOUT_GONE) < 0.1,
+    `the fog is fully gone for ${clearPer.toFixed(2)}s per blackout, not ${BLACKOUT_GONE}s`,
+  );
+  const spanPer = (touched * step) / starts.length;
+  assert.ok(Math.abs(spanPer - BLACKOUT_SPAN) < 0.15, `a blackout runs ${spanPer.toFixed(2)}s end to end`);
+
+  // Rare: well under one part in fifty of the running time.
+  assert.ok((touched * step) / 3600 < 0.02, 'the blackout is on screen too much to be an event');
+
+  // ...and not on a beat. The gaps between them have to genuinely vary, or it becomes a metronome
+  // you can count down to — the same failure the apparition's schedule is written to avoid.
+  const gaps = starts.slice(1).map((v, i) => v - starts[i]);
+  assert.ok(Math.max(...gaps) - Math.min(...gaps) > 20, `every blackout arrives ${gaps[0].toFixed(0)}s after the last`);
 });
 
 /* ------------------------------------------------------------- helpers ---- */
