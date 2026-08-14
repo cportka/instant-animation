@@ -8,6 +8,73 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
+## [3.0.0] - 2026-08-14
+
+**"Above the Fog" is finished, and a fourth animation begins.** That is the only thing a MAJOR bump
+means here — see `.claude/CLAUDE.md`.
+
+### The fourth animation — "The Rose Funnel"
+
+From *"a pixelated tornado swirling up reds, pinks and purples"*.
+
+Four things in the brief, and only one of them is hard. *Tornado* is a silhouette, *reds, pinks and
+purples* is a palette, *pixelated* is a grid — but **swirling up** is the animation, and it is the
+only part that cannot be faked with a texture. The scene is built around it.
+
+- **You never draw a cylinder, you draw the front of one.** At any height the funnel is a circle
+  seen edge-on, so the surface facing you spans the screen from `cx - r` to `cx + r`. Map a screen
+  column back onto that circle with `asin((x - cx) / r)` and every chunk on screen knows the angle of
+  the piece of funnel it is showing; feed that angle into a repeating colour band and the bands wrap
+  around the shape for free — and because `asin` compresses hard near ±1, they crowd at the
+  silhouette exactly the way markings on a spinning drum do. That one line is what makes a flat stack
+  of rectangles read as something with a *back*.
+- **Rotation is not motion.** Nothing in the funnel translates. The band's phase advances with `t`,
+  so the colours travel around a shape that is standing still — which is what a rotating solid
+  actually looks like. Add a term in *height* to that phase and the bands become a helix: they climb
+  as they turn, and the funnel is swirling **up** rather than merely spinning.
+- **Angular speed rises as the radius falls**, so the narrow end whips round while the mouth barely
+  turns. Getting that the wrong way up is the single most obvious way to make a tornado look like a
+  spinning cone, and it costs one term to get right.
+- **Flared, not conical.** The radius goes as `up ** 0.62` — opening fast just above the ground and
+  then widening slowly, which is the trumpet profile a real one has. A straight cone reads as a party
+  hat, and the entire difference between the two is in that exponent. The axis snakes on two
+  unrelated slow periods, with the top wandering further than the base because the top is in the part
+  of the storm that is actually moving.
+- **A storm to hang from and a horizon to stand on.** A funnel on a flat field is a shape floating in
+  a colour. A wall cloud of counter-rotating lobes above it, rain shafts well behind it, and a dark
+  ground rushing past below — and the same drawing reads as a thing in a place. What sells *contact*
+  is the skirt: a low, wide, churning debris cloud at the foot of it that is **brighter** than the
+  funnel above, because that mess is lit by everything and shaded by nothing.
+- **One ramp, seven steps, and every single thing is drawn out of it** — funnel, storm, ground,
+  debris, lightning. It runs as one line through colour space from a near-white rose down through
+  pink, magenta and violet to a near-black plum, so any two steps beside each other look like the
+  same material at two brightnesses rather than two colours meeting. Three separate hue families
+  would have been three colours sharing a frame; this is one.
+- **No gradients anywhere, and no interpolation between steps.** A ramp read continuously *is* a
+  gradient, and a gradient is the thing pixel art is defined by not having — the bands only read as
+  bands if there is a hard edge between them. Even the sky is an ordered Bayer dither between flat
+  colours, which is how a machine that could not do smooth colour would have had to draw it.
+- **Seven fills for the whole tornado**, however many thousand chunks it is made of: every chunk is
+  bucketed by ramp step and each step issues one path. A fill per chunk is the identical picture at
+  several thousand rasteriser passes a frame.
+
+### Its chrome and its channel change
+
+Both required of a new animation, and both built out of this scene's own primitives.
+
+- **`funnel` chrome** — a chevron cut out of chunk and *banded* rather than solid: two tones from the
+  ramp, hot leading and cool trailing one chunk behind. That is the scene in a glyph, since its
+  subject is a colour band wrapping a shape; a flat silhouette would have said "pixel art" without
+  saying which. It hops on the same beat the pixel chrome does — neither may move by half a pixel.
+- **`funnel` channel change** — the picture caught in the vortex. It shares every primitive with the
+  pixel change and feels like its opposite, and the whole difference is one word: *coherent*. There,
+  each band rolls its own dice and the frame shreds along horizontal lines; here the offset is a
+  smooth function of height and time, so the rows stay in a relationship and the frame reads as being
+  **wound** around a vertical axis rather than torn across. Tearing is a fault; winding is a force.
+  The twist flares around the join — the funnel's own profile applied to the whole frame — the seam
+  wears the ramp wrapped the way the funnel's bands are, and debris orbits the join on an ellipse,
+  with the far half of the ring going down the ramp instead of being drawn in front.
+
 ## [2.0.0] - 2026-08-09
 
 **"Westbound on Grizzly Peak" is finished, and a third animation begins.** That is the only thing a

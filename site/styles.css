@@ -134,6 +134,32 @@ body {
   filter: drop-shadow(0 0 5px rgba(9, 11, 13, 0.9)) drop-shadow(0 1px 2px rgba(9, 11, 13, 0.7));
 }
 
+/* `funnel` — a chevron built out of chunk on the scene's own grid, and *banded* rather than solid:
+   two tones out of the same ramp, the hot one leading and the cool one trailing one chunk behind.
+   That is the whole scene in a glyph — its subject is a colour band wrapping a shape, and a flat
+   silhouette in one colour would have said "pixel art" without saying which. No glow: the scene has
+   no soft edge in it, and the shadow is a hard offset in the ramp's dark end so it reads as another
+   band rather than as lighting. */
+.nav[data-chrome='funnel'] .nav__glyph--funnel {
+  display: block;
+}
+
+.nav[data-chrome='funnel'] {
+  color: #ff9ec8;
+}
+
+.nav__funnel-hot rect {
+  fill: currentColor;
+}
+
+.nav__funnel-cool rect {
+  fill: #ce226e;
+}
+
+.nav__glyph--funnel {
+  filter: drop-shadow(3px 3px 0 rgba(78, 22, 86, 0.95));
+}
+
 /* Two animations on each: the float they always had, which never stops, and `peek`, which runs
    exactly **once**. The chevrons introduce themselves a moment after the page arrives and are then
    never seen again unless you reach for them.
@@ -193,12 +219,16 @@ body {
 
 /* The pixel chrome hops instead of gliding: two states, four pixels apart, no interpolation. A
    sprite that slides smoothly through fractions of a pixel is the one tell that would undo the
-   whole style — only the animation-name list is overridden, so the one-shot peek is untouched. */
-.nav[data-chrome='pixel'].nav--down {
+   whole style — only the animation-name list is overridden, so the one-shot peek is untouched.
+   `funnel` is on a chunk grid for the same reason and hops on the same beat; the two scenes look
+   nothing alike, but neither of them may move by half a pixel. */
+.nav[data-chrome='pixel'].nav--down,
+.nav[data-chrome='funnel'].nav--down {
   animation-name: float-down-pixel, peek;
 }
 
-.nav[data-chrome='pixel'].nav--up {
+.nav[data-chrome='pixel'].nav--up,
+.nav[data-chrome='funnel'].nav--up {
   animation-name: float-up-pixel, peek;
 }
 
