@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [3.5.0] - 2026-08-14
+## [3.6.0] - 2026-08-14
 
 **"Above the Fog" is finished, and a fourth animation begins.** That is the only thing a MAJOR bump
 means here — see `.claude/CLAUDE.md`.
@@ -159,6 +159,17 @@ re-birth."*
   All four share the same seven buckets, so four materials cost exactly what one costs. Spin rates are
   all under about two radians a second — faster and a five-chunk plank moves its own endpoint further
   than a chunk between frames, so the silhouette jumps instead of turning.
+- **Every material shows what it is made of.** A flying piece used to be one solid rectangle, which
+  was defensible while the temple was two values and the forest was lollipops — the law was
+  "silhouette only", and a plank has to obey the same law as everything around it. That law changed:
+  the building shows its joinery and the trees show their tiers, and against that a flat block reads
+  as a hole in the picture shaped like debris. So each material now carries a second and third mark
+  inside its own silhouette, and each mark is the one that names it — **wood** has grain along its
+  length and a pale sawn end, **tile** wears the same lit-ridge-and-shaded-curl chord as the roof it
+  came off, **stone** has a lit face and one broken corner (the corner is what makes it rubble rather
+  than a block), and **glass** has a dark rim with light inside it, which is the one read glass has
+  that nothing else does. The marks travel with the piece's rotation rather than being stamped in
+  screen space, so a plank turning end over end shows its grain foreshortening with it.
 - **A statue does not find something to hit; the thing it hits is launched so as to be there.** A
   detected collision cannot alter a trajectory that is a closed-form function of `t`, and integrating
   one is the stored state the tests exist to forbid — so the meeting is choreographed, solving
@@ -297,7 +308,10 @@ chip off whatever it is standing in front of.
 - **The wind is visible**: streaks orbiting outside the body on the same clock the surface turns on,
   obeying the same facing rule, lying *along* the circulation so they foreshorten as they come round.
   Bright, deliberately — wind at the dark end of the ramp is the sky's own value and simply is not
-  there.
+  there. Each streak is **reeled in as it climbs**, so the wind visibly *feeds* the column instead of
+  decorating it, and its excursion is capped against the frame rather than against the field: `wind`
+  scales with the funnel's own width, so a wedge-phase storm was flinging streaks into the corners,
+  where they stopped reading as air and started reading as confetti.
 - **The ground is covered in loose things, and they are taken.** Litter is lifted when the field
   passes over it, wound around the column, carried up and **gone**. Vanishing is the point: debris
   that orbits for ever is a decoration, and this is the one thing in the scene that is destroyed

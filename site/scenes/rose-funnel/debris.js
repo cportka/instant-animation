@@ -46,6 +46,53 @@ const MAT = {
   stone: { w: 3, h: 3, spin: 0.8, g: 1.5, step: 5, shards: 5, spread: 0.5 },
   glass: { w: 2, h: 2, spin: 1.6, g: 0.85, step: 1, shards: 9, spread: 1.5 },
 };
+
+/**
+ * ...and what each one is *made of*, which is a separate question from what shape it is.
+ *
+ * Every piece used to be one solid rectangle, which was defensible while the temple was two values
+ * and the forest was lollipops — a flying plank has to obey the same law as everything around it, and
+ * the law was "silhouette only". It is not any more. The building shows its joinery, the trees show
+ * their tiers, and against that a flat block reads as a hole in the picture with a piece of debris
+ * shaped like it.
+ *
+ * So each material gets a second and third mark inside its own silhouette, and each mark is the one
+ * that says what it is: **wood** has grain along its length and pale sawn ends; **tile** has a lit
+ * ridge along the top and a dark curl under it, the same three-value chord the roof it came off is
+ * drawn with; **stone** has a lit face and a broken corner; **glass** has a bright core with a dark
+ * rim, because a thing with light *inside* it is the one read glass has that nothing else does.
+ *
+ * The marks travel with the piece's rotation rather than being stamped in screen space, so a plank
+ * turning end over end shows its grain foreshortening with it.
+ */
+function detail(bucket, kind, x, y, w, h, px, turn, step) {
+  const hot = (n) => bucket[clamp(step - n, 0, SPIN.length - 1)];
+  const cold = (n) => bucket[clamp(step + n, 0, SPIN.length - 1)];
+  const face = Math.cos(turn) > 0;
+
+  if (kind === 'wood') {
+    // Grain down the middle, and a pale sawn end on whichever end is coming toward you.
+    if (h > px) hot(1).push(x, y + Math.floor(h / px / 2) * px, w, px);
+    hot(2).push(face ? x + w - px : x, y, px, h);
+    return;
+  }
+  if (kind === 'tile') {
+    // The roof's own chord, on a piece of the roof: lit ridge, body, shaded curl beneath.
+    hot(2).push(x, y, w, px);
+    if (h > px) cold(2).push(x, y + h - px, w, px);
+    return;
+  }
+  if (kind === 'stone') {
+    // A lit face on one side and a broken corner off the other — the corner is what makes it
+    // *rubble* rather than a block, and it is one chunk.
+    hot(1).push(face ? x : x + w - px, y, px, h);
+    cold(2).push(face ? x + w - px : x, y + h - px, px, px);
+    return;
+  }
+  // Glass: a dark rim with light inside it. The only thing in the frame lit from within.
+  cold(2).push(x, y, w, h);
+  if (w > px && h > px) hot(3).push(x + px * 0.5, y + px * 0.5, Math.max(px, w - px), Math.max(px, h - px));
+}
 const KINDS = ['wood', 'tile', 'stone', 'glass'];
 
 /** How long a piece is in the air before the hands have taken it away again. */
@@ -56,7 +103,7 @@ export function planDebris(rng, bayCount) {
   // its bay's round turns over. Nothing is ever created or destroyed, so nothing has to be remembered.
   const seats = [];
   for (let b = 0; b < bayCount; b += 1) {
-    for (let i = 0; i < 9; i += 1) {
+    for (let i = 0; i < 6; i += 1) {
       seats.push({
         bay: b,
         key: seats.length,
@@ -89,7 +136,7 @@ export function planDebris(rng, bayCount) {
 export function planLitter(rng) {
   return {
     seed: rng.range(0, 55),
-    bits: Array.from({ length: 130 }, () => ({
+    bits: Array.from({ length: 100 }, () => ({
       at: rng.next(),
       period: 5 + rng.next() * 7,
       phase: rng.next(),
@@ -238,11 +285,12 @@ export function drawDebris(ctx, W, H, t, plan, cycle, funnel, px, where) {
       const turn = age * mat.spin + roll(2) * 6.28;
       // The silhouette *is* the material: a plank's long axis foreshortens as it turns end over end,
       // and a tile collapses to a line twice a turn. Same two lines of code, different aspect.
-      const w = Math.max(1, Math.round(mat.w * Math.abs(Math.cos(turn))));
-      const h = Math.max(1, Math.round(mat.h + (mat.w - mat.h) * Math.abs(Math.sin(turn))));
-      bucket[step].push(x, y, w * px, h * px);
-      // Glass keeps a lit core — the one place value is allowed to name a material, and it is allowed
-      // only because nothing else in front of the funnel is permitted to be this bright.
+      const w = Math.max(1, Math.round(mat.w * Math.abs(Math.cos(turn)))) * px;
+      const h = Math.max(1, Math.round(mat.h + (mat.w - mat.h) * Math.abs(Math.sin(turn)))) * px;
+      bucket[step].push(x, y, w, h);
+      detail(bucket, seat.kind, x, y, w, h, px, turn, step);
+      // Glass keeps one dazzling chunk on top of all of it — the one place value is allowed to name a
+      // material outright, and only because nothing else in front of the funnel may be this bright.
       if (seat.kind === 'glass') glint.push(x + px * 0.5, y + px * 0.5);
       continue;
     }
