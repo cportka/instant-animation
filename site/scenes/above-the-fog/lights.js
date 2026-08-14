@@ -140,6 +140,15 @@ export function planLights(rng, river, nearestRiver) {
         // Everyone mills about their own spot on their own slow clock.
         phase: rng.range(0, 40),
         drift: rng.range(0.004, 0.011),
+        // A slow circuit of their own patch, each at its own rate and in its own direction. This is
+        // what gives a figure a **velocity** — noise alone jitters a mark about without ever
+        // committing to a direction, which is why the crowd read as vibrating rather than walking.
+        orbit: rng.range(0.013, 0.042),
+        speed: rng.range(0.06, 0.2) * (rng.next() < 0.5 ? -1 : 1),
+        tilt: rng.range(0, TAU),
+        // Paces per second. Fast enough to be a walk, slow enough not to be a scuttle, and different
+        // for everybody so a crowd never falls into step.
+        stride: rng.range(3.4, 5.2),
         group,
         show,
       });
@@ -384,66 +393,98 @@ export function drawCrowd(ctx, W, H, t, lights) {
   if (!lights) return;
   const S = Math.min(W, H);
   const r = Math.max(1.8, S * 0.0052);
-  const live = shellsAt(lights.shows, t);
-  // A crowd with a shell in the air above it backs away from the launch spot. It costs one number
-  // per person and it is the only reason the people read as *doing* something rather than standing
-  // in a field.
-  const firing = [false, false, false];
-  for (const shell of live) firing[shell.show] = true;
 
-  const at = (p) => {
-    // Milling about: two slow noise reads, so nobody walks in a circle or on a straight line.
-    let x = p.x + (noise2(p.phase, t * 0.09) - 0.5) * p.drift * 2;
-    let y = p.y + (noise2(p.phase + 5.7, t * 0.07) - 0.5) * p.drift * 2;
-    if (p.show >= 0 && firing[p.show]) {
+  // How worked up each crowd is: nothing, then rising as a shell climbs, peaking as it goes off, then
+  // draining away. A **smooth envelope**, and that is the whole of the fix — this used to be a
+  // boolean, and the moment a shell appeared every figure at that site jumped a fiftieth of the frame
+  // outward in one frame and jumped back when it died. Ninety people teleporting in unison twice a
+  // minute is not a reaction, it is a glitch that happens to be motivated.
+  const excitement = (tt) => {
+    const e = [0, 0, 0];
+    for (const shell of shellsAt(lights.shows, tt)) {
+      e[shell.show] = Math.max(
+        e[shell.show],
+        smoothstep(0, BURST_AT, shell.u) * (1 - smoothstep(0.55, 1, shell.u)),
+      );
+    }
+    return e;
+  };
+
+  /**
+   * Where a person is at a given moment.
+   *
+   * An ellipse around their own patch at their own rate and in their own direction, plus a slow
+   * wander on noise, plus however far the crowd has backed off from a shell. Because it is a
+   * function of time rather than a jitter, it can be **sampled twice** — and the difference between
+   * the two samples is the direction they are walking, which is what everything else here needs.
+   */
+  const at = (p, tt, excite) => {
+    const loop = tt * p.speed * TAU + p.phase;
+    const ox = Math.cos(loop) * p.orbit;
+    const oy = Math.sin(loop) * p.orbit * 0.7;
+    // The circuit is tilted, so a crowd is not a set of concentric running tracks.
+    let x = p.x + ox * Math.cos(p.tilt) - oy * Math.sin(p.tilt)
+      + (noise2(p.phase, tt * 0.13) - 0.5) * p.drift * 2;
+    let y = p.y + ox * Math.sin(p.tilt) + oy * Math.cos(p.tilt)
+      + (noise2(p.phase + 5.7, tt * 0.11) - 0.5) * p.drift * 2;
+    if (p.show >= 0 && excite[p.show] > 0.001) {
       const show = lights.shows[p.show];
       const dx = x - show.x;
       const dy = y - show.y;
       const d = Math.hypot(dx, dy) || 1;
-      x += (dx / d) * 0.024;
-      y += (dy / d) * 0.024;
+      x += (dx / d) * 0.035 * excite[p.show];
+      y += (dy / d) * 0.035 * excite[p.show];
     }
     return [x * W, y * H];
   };
 
-  // A person is no longer a dot. Each is a **standing figure**: a shadow thrown on the ground away
-  // from the lean, a body stroked from the feet up to the head the same way a tree's trunk is, a
-  // head at the top, and for a third of them a carried light. Five passes and five fills for the
-  // whole crowd, because every pass is one path.
-  //
-  // The lean is the same radial projection everything else on the ground uses, so a figure at the
-  // corner of the frame shows you its whole height and one in the middle shows you the top of its
-  // head. That is what turns a scatter of marks into people standing in a field — not the detail,
-  // which at four pixels there is no room for, but the fact that they stand *up* and agree with the
-  // buildings and the trees about which way up is.
+  const now = excitement(t);
+  const then = excitement(t - 0.2);
+
   const foot = [];
   const head = [];
-  // The unit vector each figure leans along, and the one across it. A person seen from above is
-  // mostly **shoulders**, and shoulders run across the way you are leaning, not along it.
+  // The direction each figure is walking, and the one across it. Shoulders run **across a heading**,
+  // not across the camera's lean: a person walking north-east presents their shoulders to you at that
+  // angle whatever corner of the frame they are in, and getting that one thing right is most of the
+  // difference between a crowd and a field of identical marks.
   const across = [];
+  const gait = [];
   for (const p of lights.people) {
-    const [bx, by] = at(p);
-    const hx = leanX(bx, W, PERSON_LIFT);
-    const hy = leanY(by, H, PERSON_LIFT);
+    const [bx, by] = at(p, t, now);
+    const [px, py] = at(p, t - 0.2, then);
+    let hx = bx - px;
+    let hy = by - py;
+    const speed = Math.hypot(hx, hy);
+    if (speed < 0.0001) { hx = 1; hy = 0; }
+    else { hx /= speed; hy /= speed; }
+    across.push(-hy, hx);
+    // A pace: the body rises and falls and the head rocks a little across the walk. Scaled by how
+    // fast they are actually going, so somebody who has stopped stands still instead of marching on
+    // the spot.
+    // The reference speed is deliberately low: almost everybody who is moving at all gets a full
+    // pace, and only somebody who has genuinely stopped stands still. Scaled off a walking pace
+    // instead, the clamp sat around 0.4 for the whole crowd and the bob came out at a third of a
+    // pixel — present in the arithmetic, invisible on the screen.
+    const pace = Math.sin(t * p.stride + p.phase) * clamp(speed / (S * 0.0007), 0, 1);
+    gait.push(pace);
     foot.push(bx, by);
-    head.push(hx, hy);
-    const dx = hx - bx;
-    const dy = hy - by;
-    const d = Math.hypot(dx, dy) || 1;
-    across.push(-dy / d, dx / d);
+    head.push(
+      leanX(bx, W, PERSON_LIFT * (1 + pace * 0.3)) - hy * pace * r * 0.4,
+      leanY(by, H, PERSON_LIFT * (1 + pace * 0.3)) + hx * pace * r * 0.4,
+    );
   }
 
   // Shadows, opposite the lean, stretched a little across.
-  ctx.fillStyle = 'rgba(4, 6, 16, 0.5)';
+  ctx.fillStyle = 'rgba(2, 3, 10, 0.52)';
   ctx.beginPath();
   for (let i = 0; i < foot.length; i += 2) {
     const sx = leanX(foot[i], W, -PERSON_LIFT * 0.85);
     const sy = leanY(foot[i + 1], H, -PERSON_LIFT * 0.85);
-    for (const s of [-0.45, 0.45]) {
-      const px = sx + across[i] * r * s;
-      const py = sy + across[i + 1] * r * s;
-      ctx.moveTo(px + r * 1.25, py);
-      ctx.arc(px, py, r * 1.25, 0, TAU);
+    for (const side of [-0.45, 0.45]) {
+      const cx = sx + across[i] * r * side;
+      const cy = sy + across[i + 1] * r * side;
+      ctx.moveTo(cx + r * 1.25, cy);
+      ctx.arc(cx, cy, r * 1.25, 0, TAU);
     }
   }
   ctx.fill();
@@ -461,30 +502,34 @@ export function drawCrowd(ctx, W, H, t, lights) {
   }
   ctx.stroke();
 
-  // Shoulders: two overlapping discs set across the lean. Two arcs and no transform, so the whole
+  // Shoulders: two overlapping discs set across the walk. Two arcs and no transform, so the whole
   // crowd's shoulders are still one path — and two discs side by side is the cheapest thing that
-  // reads as *wider than it is deep*, which from directly above is the only thing a body is.
+  // reads as *wider than it is deep*, which from directly above is the only thing a body is. They
+  // rock with the pace, which at four pixels is the difference between walking and sliding.
   ctx.fillStyle = FIGURE;
   ctx.beginPath();
   for (let i = 0; i < head.length; i += 2) {
     const sx = foot[i] + (head[i] - foot[i]) * 0.66;
     const sy = foot[i + 1] + (head[i + 1] - foot[i + 1]) * 0.66;
-    for (const s of [-0.5, 0.5]) {
-      const px = sx + across[i] * r * s;
-      const py = sy + across[i + 1] * r * s;
-      ctx.moveTo(px + r * 0.8, py);
-      ctx.arc(px, py, r * 0.8, 0, TAU);
+    const swing = gait[i / 2] * 0.26;
+    for (const side of [-0.5 + swing, 0.5 + swing]) {
+      const cx = sx + across[i] * r * side;
+      const cy = sy + across[i + 1] * r * side;
+      ctx.moveTo(cx + r * 0.8, cy);
+      ctx.arc(cx, cy, r * 0.8, 0, TAU);
     }
   }
   ctx.fill();
 
   // Head, and the highlight on it that carries the read at this size. The head is *smaller* than the
   // shoulders, which is the detail that makes the silhouette a person rather than a bowling pin —
-  // the same mistake, at a hundredth of the size, that the angel took two goes to stop making.
-  for (const [style, scale, dx, dy, only] of [
+  // the same mistake, at a hundredth of the size, that the angel took two goes to stop making. The
+  // highlight and the carried light are both placed relative to the **walk**, so a torch is out in
+  // front of whoever is holding it rather than pinned to one corner of the screen.
+  for (const [style, scale, ahead, side, only] of [
     [FIGURE, 0.72, 0, 0, null],
-    [FIGURE_LIT, 0.4, -r * 0.22, -r * 0.22, null],
-    [TORCH, 0.4, r * 0.95, r * 0.7, 3],
+    [FIGURE_LIT, 0.4, 0.24, -0.24, null],
+    [TORCH, 0.4, 0.7, 0.75, 3],
   ]) {
     ctx.fillStyle = style;
     ctx.beginPath();
@@ -493,8 +538,10 @@ export function drawCrowd(ctx, W, H, t, lights) {
       // A third of them are carrying something burning. They are the ones setting the fires, so at
       // least some of them ought to have arrived with a light in their hand.
       if (only !== null && (i / 2) % only !== 0) continue;
-      ctx.moveTo(head[i] + dx + r * scale, head[i + 1] + dy);
-      ctx.arc(head[i] + dx, head[i + 1] + dy, r * scale, 0, TAU);
+      const cx = head[i] - across[i + 1] * r * ahead + across[i] * r * side;
+      const cy = head[i + 1] + across[i] * r * ahead + across[i + 1] * r * side;
+      ctx.moveTo(cx + r * scale, cy);
+      ctx.arc(cx, cy, r * scale, 0, TAU);
       any = true;
     }
     if (any) ctx.fill();
