@@ -70,6 +70,45 @@ cut one.
 You get the channel change between scenes for free — it lives in the stage and works on rendered
 pixels, so it never needs anything from the scene.
 
+## Several compositions of one animation
+
+An animation may hold more than one **composition** of itself — the same artwork, arranged a
+different way. A tap on the picture (or `←` / `→`) walks them, so the gallery has two axes and both
+are rings. Declare them in `meta.variants`, and take one in `create()`:
+
+```js
+export const meta = {
+  …,
+  // Index 0 is what the gallery opens on, and what a bare `#<id>` link resolves to. Keeping the
+  // existing composition there is what makes adding one a pure addition.
+  variants: [
+    { id: 'over-the-bay',  title: 'Over the Bay',  road: { vp: { x: 0.28, y: 0.4 }, cliff: true } },
+    { id: 'into-the-dark', title: 'Into the Dark', road: { vp: { x: 0.3,  y: 0.7 }, cliff: false } },
+  ],
+};
+
+export function create({ width, height, seed, variant = meta.variants[0] }) {
+  const road = makeRoad(variant.road);   // …and every draw function takes `road` as a parameter
+}
+```
+
+Past `id` and `title` a variant is **your** vocabulary — the shell reads those two and forwards the
+whole block to `create()` without looking inside it. Three rules make this work:
+
+1. **A composition is data, not a branch.** Turn the block into numbers at build time and hand those
+   to the drawing code. A test fails on `variant.id === …` or `switch (variant)` in a scene: the
+   moment a scene asks which arrangement it is, the two stop being one implementation and become two
+   that share a file, where every change has to be made twice and nothing says when you missed one.
+2. **Index 0 is the default**, so `create()` without a variant draws it, every link already shared
+   still resolves to the picture it did before, and the test suite's scene-shaped callers keep working.
+3. **They must actually differ.** `tests/scenes.test.js` fingerprints each composition and fails if
+   two draw the same picture — a variant block that is read but never acted on fails nothing else,
+   and the tap simply appears broken.
+
+The render tests run over every composition at every viewport, so a second arrangement doubles that
+scene's share of the suite. That is the intended cost: an arrangement nobody looks at is the one that
+rots.
+
 ## The three rules
 
 1. **Nothing but the 2D context.** No `document`, no `window`, no images, no fonts you can't

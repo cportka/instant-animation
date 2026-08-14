@@ -8,10 +8,58 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [3.0.0] - 2026-08-14
+## [3.1.0] - 2026-08-14
 
 **"Above the Fog" is finished, and a fourth animation begins.** That is the only thing a MAJOR bump
 means here — see `.claude/CLAUDE.md`.
+
+### Several compositions of one animation
+
+An animation may now hold more than one *composition* of itself — the same artwork, arranged a
+different way — and a tap on the picture walks them. The gallery has two axes: up and down moves
+between animations, left and right moves between arrangements of the one you are looking at, and both
+are rings.
+
+- **A composition is data, not a branch.** A scene declares `meta.variants`, an ordered list in which
+  index 0 is what the gallery opens on; `create()` receives the whole block and turns it into
+  numbers the drawing code already takes as parameters. There is not one `if` about compositions
+  anywhere in the draw code, and a test forbids one — the moment a scene asks *which* arrangement it
+  is, the two stop being one implementation and become two that share a file, where every future
+  change has to be made twice and nothing tells you when you missed one.
+- **The engine never learns what a composition is.** The stage forwards an opaque value into
+  `create()` and forgets it. A scene having several arrangements is a fact about the *artwork*, and
+  an engine that understood compositions would immediately acquire opinions about how they differ.
+- **Changing one carries the clock.** Both entries are the same artwork at the same instant, so the
+  sky, the stars and every schedule in the scene continue straight through the change instead of
+  snapping back to zero — one picture being re-arranged rather than two pictures. That is legal only
+  because scenes are pure functions of `t`; the determinism rule is what buys the single line.
+- **Tap, swipe and the daylight between them.** A press that stays inside ten pixels and half a
+  second is a tap; one that travels sixty is a swipe; in between is a deliberate dead zone, because
+  re-arranging the picture on an abandoned gesture reads as the page misreading you. The swipe is
+  tested first and returns, so a long drag can never also count as a tap.
+- **A latent bug in the old swipe handler, fixed on the way past.** A press that began on the canvas
+  and lifted over a chevron never delivered a `pointerup`, so the start point survived and the *next*
+  release measured a distance nobody travelled and moved the gallery for no reason. Pointer capture
+  and a `pointercancel` handler close it.
+- **Addresses gained a second half**, and the grammar moved to `lib/gallery.js` where it can be
+  tested without a browser: `#<scene-id>/<composition-id>`, with the first composition writing no
+  suffix at all — so every link already in the world still opens the picture it opened before.
+- **Reachable without a pointer, and announced.** Left and right arrows walk the ring, swallowed only
+  on animations that have one; the live region names the position and the gesture, which is the only
+  way a tap-only affordance is discoverable without sight.
+
+### "Westbound on Grizzly Peak" gets its original composition back
+
+The road out over the bay is still what the scene opens on. Tap it and the vanishing point drops back
+down onto the slope, where this animation started: no bend, no cliff, no rail, a wider road, and the
+frame split cleanly in two — sunset, city and bay above the line, and below it nothing but tarmac and
+lamps running away into the dark. The whole composition is that one horizontal edge, what the car is
+driving *toward* on one side of it and what it is driving *into* on the other, and the bend was what
+dissolved it: a road that leans across the frame has no side to be on.
+
+Every improvement made since — the four-tint stars with their crosses, the five ways a lamp goes out,
+the thicker treeline — belongs to both, because only the road's geometry is a composition and
+everything else is the scene.
 
 ### The fourth animation — "The Rose Funnel"
 

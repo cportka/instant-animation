@@ -90,6 +90,38 @@ test('the canvas and live region carry the description for screen readers', () =
   assert.match(html, /id="live"[^>]*class="sr-only"[^>]*role="status"/);
 });
 
+test('a tap re-composes, a swipe travels, and the gap between them does nothing', () => {
+  const app = read('app.js');
+
+  // The two gestures are told apart by distance, and there is deliberate daylight between them.
+  assert.match(app, /Math\.hypot\(dx, dy\) <= TAP_SLOP/, 'a tap must be bounded by how far it moved');
+  assert.ok(
+    Number(app.match(/const TAP_SLOP = (\d+)/)?.[1]) < Number(app.match(/const SWIPE_THRESHOLD = (\d+)/)?.[1]),
+    'TAP_SLOP must be smaller than SWIPE_THRESHOLD, or every tap is also a swipe',
+  );
+  // The swipe is tested first and returns, so a long vertical drag can never also count as a tap.
+  assert.match(app, /travel\(dy < 0 \? 1 : -1\);\s*\n\s*return;/, 'a swipe must return before the tap check');
+
+  // Pointer capture and cancel, together. A press that starts on the canvas and releases over a
+  // chevron otherwise leaves swipeStart set, and the *next* release travels the gallery for no
+  // reason — an intermittent bug that only ever reproduces on touch.
+  assert.match(app, /setPointerCapture/, 'the canvas must capture the pointer it is tracking');
+  assert.match(app, /'pointercancel'/, 'a cancelled pointer must clear the gesture');
+  assert.match(app, /event\.pointerId !== swipeStart\.id/, 'a second pointer must not finish the first gesture');
+
+  // Both rings share one lock. A tap that interrupts a channel change drops the outgoing scene.
+  assert.match(app, /function recompose\(delta\)/, 'app.js must expose composition cycling');
+  assert.match(app, /if \(locked \|\| !variants \|\| variants\.length < 2\) return;/, 'recompose must respect the lock');
+
+  // A composition of the scene already on screen still has to re-mount, or deep links to one are
+  // dead for anyone who already had the page open.
+  assert.match(app, /next === current && pick === shown/, 'the no-op guard must compare the composition too');
+
+  // And it is reachable without a pointer at all.
+  assert.match(app, /case 'ArrowRight':/, 'compositions need a keyboard route');
+  assert.match(app, /case 'ArrowLeft':/, 'compositions need a keyboard route in both directions');
+});
+
 test('every asset index.html references exists', () => {
   const refs = [...html.matchAll(/(?:src|href)="([^"#]+)"/g)].map((m) => m[1]);
   assert.ok(refs.length >= 3, 'expected index.html to reference its stylesheet, icon and script');

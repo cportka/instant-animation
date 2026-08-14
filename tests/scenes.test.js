@@ -6,6 +6,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { scenes, findScene } from '../site/scenes/index.js';
+import { formatAddress, parseAddress, wrapIndex } from '../site/lib/gallery.js';
 import { TRANSITIONS, channelChange, makeChannelChange } from '../site/effects/transitions.js';
 import { createRng } from '../site/lib/rng.js';
 import { createRecordingContext } from './helpers/recording-context.mjs';
@@ -36,6 +37,107 @@ test('scene metadata is complete', () => {
     if (meta.posterTime !== undefined) {
       assert.ok(Number.isFinite(meta.posterTime) && meta.posterTime >= 0, `${meta.id}: bad posterTime`);
     }
+  }
+});
+
+test('a scene with several compositions declares them properly', () => {
+  for (const { meta } of scenes) {
+    if (meta.variants === undefined) continue;
+    assert.ok(Array.isArray(meta.variants), `${meta.id}: meta.variants must be an array`);
+    // One composition is not a ring, it is a scene — and declaring it invites a tap that does
+    // nothing, which is worse than no affordance at all.
+    assert.ok(meta.variants.length > 1, `${meta.id}: meta.variants needs more than one entry`);
+    for (const variant of meta.variants) {
+      assert.match(variant.id, /^[a-z0-9]+(-[a-z0-9]+)*$/, `${meta.id}: bad variant id "${variant.id}"`);
+      assert.ok(variant.title?.trim(), `${meta.id}/${variant.id}: a composition needs a title`);
+    }
+    const ids = meta.variants.map((v) => v.id);
+    // Variant ids are a public URL surface. Two the same and one of them is unreachable forever.
+    assert.equal(new Set(ids).size, ids.length, `${meta.id}: duplicate variant ids: ${ids.join(', ')}`);
+  }
+});
+
+test('a composition is a lookup, never a fork', () => {
+  // The whole design of the feature in one assertion. A variant is a block of numbers the scene
+  // reads; the moment a scene asks *which* composition it is and branches, the two arrangements stop
+  // being one implementation and start being two that happen to share a file — and every future
+  // change has to be made twice, in a place where nothing will tell you that you missed one.
+  const forks = /\bvariant(?:\.id)?\s*===|switch\s*\(\s*variant/;
+  for (const folder of readdirSync(sceneDir, { withFileTypes: true }).filter((e) => e.isDirectory())) {
+    for (const file of readdirSync(new URL(`${folder.name}/`, new URL('../site/scenes/', import.meta.url)))) {
+      if (!file.endsWith('.js')) continue;
+      const source = readFileSync(
+        new URL(`${folder.name}/${file}`, new URL('../site/scenes/', import.meta.url)),
+        'utf8',
+      );
+      assert.doesNotMatch(
+        source,
+        forks,
+        `${folder.name}/${file} branches on the composition — put the difference in meta.variants instead`,
+      );
+    }
+  }
+});
+
+test('every composition draws a different picture', () => {
+  // The whole promise of the feature. A variant block that the scene reads but never *acts* on
+  // fails nothing else in this suite: it renders, it is deterministic, it survives a resize — and
+  // it puts the identical picture on screen, so the tap appears broken and nothing says why.
+  const viewport = { width: 1200, height: 800 };
+  const shot = (scene, variant) => {
+    const rec = createRecordingContext(viewport);
+    const instance = scene.create({ ...viewport, seed: scene.meta.id, variant });
+    instance.draw(rec.ctx, 6.4, 1 / 60);
+    return rec.fingerprint();
+  };
+
+  for (const scene of scenes) {
+    if (!scene.meta.variants) continue;
+    const shapes = scene.meta.variants.map((variant) => shot(scene, variant));
+    assert.equal(
+      new Set(shapes).size,
+      shapes.length,
+      `${scene.meta.id}: two compositions render identically — the variant is declared but unused`,
+    );
+    // ...and the one the gallery opens on is the first, which is what every existing deep link and
+    // every caller that predates compositions resolves to.
+    assert.equal(
+      shot(scene, undefined),
+      shapes[0],
+      `${scene.meta.id}: create() without a variant must draw meta.variants[0]`,
+    );
+  }
+});
+
+test('the gallery has two axes, and both of them wrap', () => {
+  // Addresses round-trip: whatever `formatAddress` writes, `parseAddress` reads back as the same
+  // place. The bare `#id` form is asserted separately because it is a promise to links already in
+  // the world, not merely an internal consistency property.
+  for (const scene of scenes) {
+    const variants = scene.meta.variants ?? [undefined];
+    for (let i = 0; i < variants.length; i += 1) {
+      const at = parseAddress(formatAddress(scene, i), scenes);
+      assert.equal(scenes[at.index].meta.id, scene.meta.id, `${scene.meta.id}: address lost the scene`);
+      assert.equal(at.variant ?? 0, i, `${scene.meta.id}: address lost composition ${i}`);
+    }
+    assert.equal(formatAddress(scene, 0), `#${scene.meta.id}`, 'the first composition writes a bare id');
+  }
+
+  // Off either end of either ring lands somewhere real.
+  assert.equal(wrapIndex(-1, scenes.length), scenes.length - 1);
+  assert.equal(wrapIndex(scenes.length, scenes.length), 0);
+  const ringed = scenes.find((s) => s.meta.variants);
+  if (ringed) {
+    const n = ringed.meta.variants.length;
+    assert.equal(wrapIndex(-1, n), n - 1, 'walking back off the first composition reaches the last');
+    assert.equal(wrapIndex(n, n), 0, 'walking on off the last composition reaches the first');
+  }
+
+  // An address nobody wrote resolves to the front rather than to a blank page.
+  assert.deepEqual(parseAddress('#no-such-scene', scenes), { index: 0, variant: undefined });
+  assert.deepEqual(parseAddress('', scenes), { index: 0, variant: undefined });
+  if (ringed) {
+    assert.equal(parseAddress(`#${ringed.meta.id}/no-such-composition`, scenes).variant, undefined);
   }
 });
 

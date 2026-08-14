@@ -16,6 +16,16 @@ import { createRng } from '../../lib/rng.js';
 import { TAU, clamp, lerp, smoothstep, wave, wrap01 } from '../../lib/draw.js';
 import { bayerOn, block, chunk, ditherGlow, ditherRamp, hash01, pixelSize, snap } from '../../effects/pixel.js';
 
+/* ------------------------------------------------------------- horizons ---- */
+
+// The frame is cut into bands once, in normalised height, and everything hangs off these. They sit
+// above `meta` because one of the compositions below is defined by where it meets `RIDGE_END`, and
+// a `const` referenced before its declaration is a dead-zone throw at import time rather than a
+// value — which would take the whole gallery down, not just this scene.
+const HORIZON = 0.44; // where the water meets the far shore
+const WATER_END = 0.57; // the near edge of the bay, at the foot of the drop-off
+const RIDGE_END = 0.71; // the bottom of the treed slope, where the roadside starts
+
 export const meta = {
   id: 'grizzly-peak',
   title: 'Westbound on Grizzly Peak',
@@ -32,6 +42,62 @@ export const meta = {
   // Pixel art wants one device pixel per drawn pixel. At 2x the chunks are drawn twice as fine and
   // the whole point of the grid — that you can see it — goes away.
   maxDpr: 1,
+
+  // Two compositions of the same drive, cycled by a tap on the picture.
+  //
+  // **Index 0 is what the gallery lands on**, and what a bare `#grizzly-peak` has always meant — so
+  // this is a pure addition: every link already in the wild still opens the road out over the bay.
+  //
+  // Past `id` and `title`, everything in a variant is this scene's own vocabulary. The shell reads
+  // those two and forwards the whole block to `create()` without looking inside it, which is what
+  // keeps "a scene has several compositions" from becoming an engine concept — the engine only
+  // knows the ring, and the artwork knows what turning it means.
+  variants: [
+    {
+      id: 'over-the-bay',
+      title: 'Over the Bay',
+      // The vanishing point sits *at the waterline*, so the road climbs out of the bottom-right
+      // corner and runs out over the bay, floating in front of the sunset. The one thing in this
+      // scene that is not trying to be plausible — and it is why the cliff exists: a road with
+      // nothing underneath it has to show you the edge it is running along, or it reads as a
+      // mistake rather than as a liberty.
+      road: {
+        vp: { x: 0.28, y: 0.4 },
+        curve: 0.2,
+        edges: { left: -0.12, right: 0.8 },
+        from: 0.4,
+        range: 328,
+        rate: 0.0004,
+        lamps: 12,
+        cliff: true,
+      },
+    },
+    {
+      id: 'into-the-dark',
+      title: 'Into the Dark',
+      // Where this scene started. The vanishing point is down on the slope and the road does not
+      // bend, so the frame splits cleanly in two: sunset, city and bay above the line, and below it
+      // nothing but tarmac and lamps running away into the dark. The whole composition is that one
+      // horizontal edge — what the car is driving *toward* on one side of it, and what it is
+      // driving *into* on the other — and the bend was what dissolved it, because a road that
+      // leans across the frame has no side to be on.
+      //
+      // Wider at the bottom and a shorter lamp track than the bay road: the split only reads if the
+      // lower half is filled, and lamps that arrive rarely leave it empty.
+      road: {
+        vp: { x: 0.3, y: 0.7 },
+        curve: 0,
+        edges: { left: -0.42, right: 0.99 },
+        // The rows start at the roadside rather than at the vanishing point, which is the whole
+        // trick of the split: above this line the road simply does not exist.
+        from: RIDGE_END,
+        range: 190,
+        rate: 0.0016,
+        lamps: 9,
+        cliff: false,
+      },
+    },
+  ],
 };
 
 /* ------------------------------------------------------------- palette ---- */
@@ -61,33 +127,22 @@ const LAMP_EXIT = { from: 0.7, to: 0.97 };
 // picked when the scene is built, so the road has a mix rather than a sequence.
 export const EXIT_KINDS = ['glitch', 'confetti', 'mosh', 'ember', 'bolts'];
 
-/* ------------------------------------------------------------- horizons ---- */
+/* --------------------------------------------------------------- travel ---- */
 
-// The frame is cut into bands once, in normalised height, and everything hangs off these.
-const HORIZON = 0.44; // where the water meets the far shore
-const WATER_END = 0.57; // the near edge of the bay, at the foot of the drop-off
-const RIDGE_END = 0.71; // the bottom of the treed slope, where the roadside starts
-// The road's vanishing point sits *at the waterline*, not on the ground — so the road climbs out
-// of the bottom-right corner and runs out over the bay, floating in front of the sunset. It is
-// the one thing in the scene that is not trying to be plausible.
-const VP = { x: 0.28, y: 0.4 };
-// How far the road bends left on its way out. Quadratic in distance, so it is straight under the
-// car and leans harder the further off it goes — a constant offset would just move the vanishing
-// point, which is a different road, not a curved one.
-const CURVE = 0.2;
-
-// Travel. More sideways than upward — the brief is diagonal, but mostly left.
+// More sideways than upward — the brief is diagonal, but mostly left.
 const SPEED = 46;
 const DRIFT_X = 1;
 const DRIFT_Y = 0.32;
 
-const LAMP_COUNT = 12;
-const LAMP_SPACING = 1 / LAMP_COUNT;
-
 /* ------------------------------------------------------------ the scene ---- */
 
-export function create({ width, height, seed = meta.id }) {
+/**
+ * @param variant  one of `meta.variants`. Defaults to the first, so every caller that predates
+ *                 compositions — and every scene-shaped test — keeps working untouched.
+ */
+export function create({ width, height, seed = meta.id, variant = meta.variants[0] }) {
   const rng = createRng(seed);
+  const road = makeRoad(variant.road);
 
   const stars = Array.from({ length: 260 }, () => ({
     x: rng.next(),
@@ -133,9 +188,10 @@ export function create({ width, height, seed = meta.id }) {
   const nearTrees = makeTrees(23, 0.21);
 
   // The lamps live on one track along the left edge of the road, evenly spaced in *world* distance
-  // — which is what makes them bunch up toward the vanishing point on their own.
-  const lamps = Array.from({ length: LAMP_COUNT }, (_, i) => ({
-    offset: i * LAMP_SPACING,
+  // — which is what makes them bunch up toward the vanishing point on their own. How many, and how
+  // far apart, is the composition's call: the long road out over the bay carries more of them.
+  const lamps = Array.from({ length: road.lamps }, (_, i) => ({
+    offset: i / road.lamps,
     flicker: rng.range(0.7, 1),
     exit: EXIT_KINDS[rng.int(0, EXIT_KINDS.length - 1)],
     phase: rng.range(0, 10),
@@ -166,8 +222,8 @@ export function create({ width, height, seed = meta.id }) {
       // drawn over it they are simply a wall — a canopy anywhere near the middle of frame is wide
       // enough at this scale to erase the road, the lamps and the light on both.
       drawNearTrees(ctx, W, H, t, nearTrees, travel, px);
-      drawRoad(ctx, W, H, t, travel, px);
-      drawLamps(ctx, W, H, t, lamps, travel, px);
+      drawRoad(ctx, W, H, t, travel, px, road);
+      drawLamps(ctx, W, H, t, lamps, travel, px, road);
       drawHood(ctx, W, H, t, px);
       drawScanlines(ctx, W, H, px);
     },
@@ -452,51 +508,77 @@ function drawNearTrees(ctx, W, H, t, trees, travel, px) {
 
 const FOCAL = 9;
 const ROAD_END = 1.06; // where the road's edges leave the bottom of frame
-const EDGE_X = { left: -0.12, right: 0.8 };
 
 /**
- * Screen position of a point on the road at world distance `z` ahead of the car.
+ * Turn a variant's road block into the projection the drawing code actually uses.
  *
- * The projection is `focal / (focal + z)` and nothing else. It matters that this is a divide and
- * not a lerp: with a linear map, things spaced evenly along the road are spaced evenly *on screen*
- * too, which is not perspective at all — the lamps never bunch toward the vanishing point and the
- * centre line never accelerates as it comes at you. One division buys both.
+ * Everything that differs between the two compositions passes through here and comes out as one
+ * object, which is then handed to every function that draws anything on the road. That is the whole
+ * mechanism: there is not one `if (variant …)` anywhere in the draw code, because the variant stops
+ * being a choice the moment the scene is built and becomes a set of numbers like any other. A
+ * composition is data, not a branch.
+ *
+ * `FOCAL` and `ROAD_END` stay out of it: they are the camera, not the composition. Both roads are
+ * seen through the same lens from the same seat — what changes is where the road goes.
  */
-function onRoad(z, W, H, side) {
-  const p = FOCAL / (FOCAL + Math.max(0, z));
-  return { x: edgeAt(p, side) * W, y: (VP.y + (ROAD_END - VP.y) * p) * H, scale: p };
-}
+function makeRoad(cfg) {
+  const { vp, curve, edges } = cfg;
 
-/** The bend, in normalised width. Zero under the car, growing with the square of the distance. */
-const bendAt = (p) => -CURVE * (1 - p) * (1 - p);
+  /** The bend, in normalised width. Zero under the car, growing with the square of the distance. */
+  const bendAt = (p) => -curve * (1 - p) * (1 - p);
 
-/** Normalised x of one road edge at projection factor `p`. */
-function edgeAt(p, side) {
-  const edgeX = side < 0 ? EDGE_X.left : EDGE_X.right;
-  return VP.x + (edgeX - VP.x) * p + bendAt(p);
+  /** Normalised x of one road edge at projection factor `p`. */
+  const edgeAt = (p, side) => vp.x + ((side < 0 ? edges.left : edges.right) - vp.x) * p + bendAt(p);
+
+  return {
+    ...cfg,
+    edgeAt,
+
+    /**
+     * Screen position of a point on the road at world distance `z` ahead of the car.
+     *
+     * The projection is `focal / (focal + z)` and nothing else. It matters that this is a divide and
+     * not a lerp: with a linear map, things spaced evenly along the road are spaced evenly *on
+     * screen* too, which is not perspective at all — the lamps never bunch toward the vanishing
+     * point and the centre line never accelerates as it comes at you. One division buys both.
+     */
+    at(z, W, H, side) {
+      const p = FOCAL / (FOCAL + Math.max(0, z));
+      return { x: edgeAt(p, side) * W, y: (vp.y + (ROAD_END - vp.y) * p) * H, scale: p };
+    },
+
+    /**
+     * The road as rows, from where it begins down to the bottom of frame.
+     *
+     * `from` is the composition's own decision and is not always the vanishing point. Over the bay
+     * the road starts *at* the vanishing point, up on the waterline, and is drawn over the water for
+     * most of its length. Into the dark it starts at the roadside — above that line the road simply
+     * does not exist, and that absence is the split the whole composition is built on.
+     */
+    rows(W, H, px) {
+      const top = H * cfg.from;
+      const out = [];
+      for (let r = 0, n = Math.ceil((H - top) / px) + 2; r < n; r += 1) {
+        const y = top + r * px;
+        const p = (y / H - vp.y) / (ROAD_END - vp.y);
+        if (p > 0) out.push({ y, p, left: edgeAt(p, -1) * W, right: edgeAt(p, 1) * W });
+      }
+      return out;
+    },
+  };
 }
 
 /**
- * How far out the lamp track runs, and how fast it comes at you.
+ * How far out the lamp track runs, and how fast it comes at you — `road.range` and `road.rate`.
  *
  * These two have to move together. A lamp's world distance is `wrap01(offset - travel * rate) *
- * ROAD_RANGE`, so stretching the range alone spaces the lamps further apart *and* speeds them up by
- * exactly the same factor — they arrive just as often and nothing changes. Quartering the rate
- * alongside is what actually makes them rarer: four times the gap, at the same closing speed.
+ * range`, so stretching the range alone spaces the lamps further apart *and* speeds them up by
+ * exactly the same factor — they arrive just as often and nothing changes. Changing the rate
+ * alongside is what actually makes them rarer: a longer gap, at the same closing speed.
  */
-const ROAD_RANGE = 328;
-const LAMP_RATE = 0.0004;
 
-function drawRoad(ctx, W, H, t, travel, px) {
-  // The road starts at the vanishing point now, which is up at the waterline — so it is drawn
-  // over the bay for most of its length and needs its own ground underneath it.
-  const bandTop = H * VP.y;
-  const rows = Math.ceil((H - bandTop) / px) + 2;
-  const rowAt = (r) => {
-    const y = bandTop + r * px;
-    const p = (y / H - VP.y) / (ROAD_END - VP.y);
-    return p <= 0 ? null : { y, p, left: edgeAt(p, -1) * W, right: edgeAt(p, 1) * W };
-  };
+function drawRoad(ctx, W, H, t, travel, px, road) {
+  const rows = road.rows(W, H, px);
 
   // The roadside on the hill side only — beyond the right-hand edge there is nothing to stand on.
   ctx.fillStyle = LAND[2];
@@ -508,50 +590,48 @@ function drawRoad(ctx, W, H, t, travel, px) {
   // face rather than implied by a change of colour: a band of near-black hanging off the edge,
   // deepening as it comes toward you, with the far side of it ragged where the rock breaks up.
   // This is the whole difference between a road with a dark verge and a road on a precipice.
-  ctx.fillStyle = LAND[0];
-  ctx.beginPath();
-  for (let r = 0; r < rows; r += 1) {
-    const row = rowAt(r);
-    if (!row) continue;
-    const depth = row.p * W * 0.17;
-    const ragged = 1 + Math.sin(row.y * 0.09) * 0.12 + Math.sin(row.y * 0.31) * 0.06;
-    chunk(ctx, row.right, row.y, depth * ragged, px, px);
+  //
+  // Only the road that has nowhere to stand needs it. The road on the ground is *on* the slope, and
+  // hanging a precipice off a road that plainly rests on something reads as a hole in the ground.
+  if (road.cliff) {
+    ctx.fillStyle = LAND[0];
+    ctx.beginPath();
+    for (const row of rows) {
+      const depth = row.p * W * 0.17;
+      const ragged = 1 + Math.sin(row.y * 0.09) * 0.12 + Math.sin(row.y * 0.31) * 0.06;
+      chunk(ctx, row.right, row.y, depth * ragged, px, px);
+    }
+    ctx.fill();
   }
-  ctx.fill();
 
   // The wedge itself, row by row. Screen y maps straight back to the projection factor — no
   // inversion needed, because y interpolates between the vanishing point and the bottom edge.
   ctx.fillStyle = '#241f38';
   ctx.beginPath();
-  for (let r = 0; r < rows; r += 1) {
-    const row = rowAt(r);
-    if (row) chunk(ctx, row.left, row.y, row.right - row.left, px, px);
-  }
+  for (const row of rows) chunk(ctx, row.left, row.y, row.right - row.left, px, px);
   ctx.fill();
 
-  // The lip: the last strip of tarmac before the drop. A hard bright line on the very edge is what
-  // the eye reads as "this stops here" — and it is deliberately *cool*, catching sky rather than
-  // lamplight, because in copper it disappeared into the pools the lamps were throwing over it.
-  ctx.fillStyle = '#cfc2f0';
-  ctx.beginPath();
-  for (let r = 0; r < rows; r += 1) {
-    const row = rowAt(r);
-    if (!row) continue;
-    const lip = Math.max(px, row.p * W * 0.012);
-    chunk(ctx, row.right - lip, row.y, lip, px, px);
-  }
-  ctx.fill();
+  if (road.cliff) {
+    // The lip: the last strip of tarmac before the drop. A hard bright line on the very edge is what
+    // the eye reads as "this stops here" — and it is deliberately *cool*, catching sky rather than
+    // lamplight, because in copper it disappeared into the pools the lamps were throwing over it.
+    ctx.fillStyle = '#cfc2f0';
+    ctx.beginPath();
+    for (const row of rows) {
+      const lip = Math.max(px, row.p * W * 0.012);
+      chunk(ctx, row.right - lip, row.y, lip, px, px);
+    }
+    ctx.fill();
 
-  // A second, dimmer line a little way down the face, so the drop has a near edge and a far one
-  // and the eye has something to measure the depth against.
-  ctx.fillStyle = '#3a2f5c';
-  ctx.beginPath();
-  for (let r = 0; r < rows; r += 1) {
-    const row = rowAt(r);
-    if (!row) continue;
-    chunk(ctx, row.right + row.p * W * 0.05, row.y, Math.max(px, row.p * W * 0.02), px, px);
+    // A second, dimmer line a little way down the face, so the drop has a near edge and a far one
+    // and the eye has something to measure the depth against.
+    ctx.fillStyle = '#3a2f5c';
+    ctx.beginPath();
+    for (const row of rows) {
+      chunk(ctx, row.right + row.p * W * 0.05, row.y, Math.max(px, row.p * W * 0.02), px, px);
+    }
+    ctx.fill();
   }
-  ctx.fill();
 
   // Centre line: dashes in world space, so they flow toward you at the right rate. Everything
   // below a minimum scale is dropped — near the vanishing point the perspective divide crushes a
@@ -566,8 +646,8 @@ function drawRoad(ctx, W, H, t, travel, px) {
   ctx.beginPath();
   for (let d = 0; d < DASHES; d += 1) {
     const z = ((d + wrap01(-travel * 0.02)) % DASHES) * GAP;
-    const left = onRoad(z, W, H, -1);
-    const right = onRoad(z, W, H, 1);
+    const left = road.at(z, W, H, -1);
+    const right = road.at(z, W, H, 1);
     const span = right.x - left.x;
     const h = span * 0.03;
     if (h < px * 1.6) continue;
@@ -578,13 +658,10 @@ function drawRoad(ctx, W, H, t, travel, px) {
   // The white line on the hill side.
   ctx.fillStyle = '#c9c2d8';
   ctx.beginPath();
-  for (let r = 0; r < rows; r += 1) {
-    const row = rowAt(r);
-    if (row) chunk(ctx, row.left, row.y, Math.max(px, row.p * W * 0.025), px, px);
-  }
+  for (const row of rows) chunk(ctx, row.left, row.y, Math.max(px, row.p * W * 0.025), px, px);
   ctx.fill();
 
-  drawGuardRail(ctx, W, H, travel, px);
+  if (road.cliff) drawGuardRail(ctx, W, H, travel, px, road);
 }
 
 /**
@@ -594,13 +671,13 @@ function drawRoad(ctx, W, H, t, travel, px) {
  * It does more for the drop than the black face does: a rail is a thing people put where you would
  * otherwise fall, so the eye reads the danger off the object rather than off the shading.
  */
-function drawGuardRail(ctx, W, H, travel, px) {
+function drawGuardRail(ctx, W, H, travel, px, road) {
   const POSTS = 26;
   const GAP = 7;
   const posts = [];
   for (let i = 0; i < POSTS; i += 1) {
     const z = ((i + wrap01(-travel * 0.02)) % POSTS) * GAP;
-    const at = onRoad(z, W, H, 1);
+    const at = road.at(z, W, H, 1);
     if (at.scale < 0.05 || at.scale > 1.02) continue;
     posts.push(at);
   }
@@ -640,7 +717,7 @@ function drawGuardRail(ctx, W, H, travel, px) {
  * on the road under each. They are the only warm thing on this side of the water, and the reason
  * the road is legible at all.
  */
-function drawLamps(ctx, W, H, t, lamps, travel, px) {
+function drawLamps(ctx, W, H, t, lamps, travel, px, road) {
   // On the hill side, not the drop-off side. The bay edge runs off the left of frame within a few
   // poles, so a series planted there is two lamps and then nothing; on the right the line holds
   // all the way from the vanishing point to the bottom corner, which is the whole point of it.
@@ -649,8 +726,8 @@ function drawLamps(ctx, W, H, t, lamps, travel, px) {
     .map((lamp) => {
       // Evenly spaced in world distance, coming toward us; one wraps back to the far end as it
       // passes. The bunching near the vanishing point falls out of the projection for free.
-      const z = wrap01(lamp.offset - travel * LAMP_RATE) * ROAD_RANGE;
-      return { lamp, at: onRoad(z, W, H, 1) };
+      const z = wrap01(lamp.offset - travel * road.rate) * road.range;
+      return { lamp, at: road.at(z, W, H, 1) };
     })
     .filter((p) => p.at.scale > 0.035 && p.at.scale < 1.02)
     .sort((a, b) => a.at.scale - b.at.scale);
