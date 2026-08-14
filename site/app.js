@@ -1,10 +1,14 @@
 // Front-end shell: mount a scene, and otherwise stay invisible.
 //
 // The gallery runs newest at the top to oldest at the bottom, so "next" means down and "previous"
-// means up. Two floating chevrons are the only chrome, and each only exists when there is
-// somewhere to go — with a single animation the page is nothing but the animation.
+// means up — and it is a **loop**: down from the oldest arrives back at the newest, up from the
+// newest arrives at the oldest. Two floating chevrons are the only chrome and both are always live,
+// because on a ring every direction goes somewhere. The one exception is a gallery of one, where
+// the page is nothing but the animation and a control that returns you to where you already are is
+// worse than no control at all.
 
 import { scenes, findScene } from './scenes/index.js';
+import { wrapIndex } from './lib/gallery.js';
 import { createStage } from './lib/stage.js';
 
 // One wheel gesture should move one animation, not fifty.
@@ -32,7 +36,7 @@ let wheelTravel = 0;
 /* -------------------------------------------------------------- scene -- */
 
 function show(index, { direction, updateHash = true } = {}) {
-  const next = Math.max(0, Math.min(index, scenes.length - 1));
+  const next = wrapIndex(index, scenes.length);
   if (next === current) return;
   current = next;
 
@@ -44,8 +48,9 @@ function show(index, { direction, updateHash = true } = {}) {
   liveEl.textContent = `${scene.meta.title}: ${scene.meta.prompt}`;
   if (updateHash) history.replaceState(null, '', `#${scene.meta.id}`);
 
-  navUp.hidden = current === 0;
-  navDown.hidden = current === scenes.length - 1;
+  // Both, always — the gallery is a ring. Only a gallery of one has nowhere to go.
+  navUp.hidden = scenes.length < 2;
+  navDown.hidden = scenes.length < 2;
   // The chrome wears the scene. An arrow drawn in one animation's language sitting on top of
   // another reads as a control bolted to the picture rather than as part of it — which is the one
   // thing this page is trying not to be. Scenes that say nothing get the original chevron.
@@ -55,9 +60,8 @@ function show(index, { direction, updateHash = true } = {}) {
 }
 
 function travel(delta) {
-  if (locked) return;
-  const next = current + delta;
-  if (next < 0 || next > scenes.length - 1) return;
+  if (locked || scenes.length < 2) return;
+  const next = wrapIndex(current + delta, scenes.length);
 
   locked = true;
   window.clearTimeout(lockTimer);

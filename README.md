@@ -6,14 +6,16 @@ An instant animation generator. Animate anything you can describe.
 
 Describe something. It becomes a hand-drawn canvas animation and joins the gallery. There is no
 text on the site — the animation *is* the page. The only chrome is a soft chevron floating at each
-edge, and each one exists only when there is somewhere to go.
+edge, and both are always live: the gallery is a **loop**.
 
 ## The gallery
 
-Newest at the top, oldest at the bottom. **Down** goes further back in time, **up** returns toward
-the present — by clicking a chevron, scrolling, pressing space or the arrow keys, or swiping.
-Moving between animations plays a channel change: the two scenes push past each other while the
-picture tears itself apart, then settles.
+Newest at the top, oldest at the bottom, and **it wraps** — down from the oldest arrives back at the
+newest, up from the newest arrives at the oldest. So **down** goes further back in time and **up**
+returns toward the present, and neither ever runs out: by clicking a chevron, scrolling, pressing
+space or the arrow keys, or swiping. Moving between animations plays a channel change — the two
+scenes push past each other while the picture tears itself apart, then settles — and the change is
+always the one belonging to the animation you are arriving *at*, including on the wrap.
 
 | Animation | From the description |
 | --- | --- |
@@ -37,6 +39,7 @@ site/
                       and the channel change between scenes
     rng.js            seeded randomness — scenes never call Math.random()
     draw.js           shared geometry and colour helpers
+    gallery.js        the ring: which scene an index lands on when you walk off the end
 
   effects/            shared animation code — nothing but looks
     vhs.js            tracking bands, shred, chroma split, stuck macroblocks, tape dropouts

@@ -12,6 +12,9 @@ const read = (name) => readFileSync(join(siteDir, name), 'utf8');
 
 const html = read('index.html');
 
+const { scenes } = await import('../site/scenes/index.js');
+const { wrapIndex } = await import('../site/lib/gallery.js');
+
 test('index.html exists and names the app', () => {
   assert.match(html, /<title>[^<]*Instant Animation[^<]*<\/title>/);
   assert.match(html, /<canvas[^>]+id="stage"/);
@@ -31,13 +34,55 @@ test('nothing is written on the page', () => {
   assert.equal(withoutHidden, '', `visible text found in index.html: ${JSON.stringify(withoutHidden)}`);
 });
 
-test('navigation is two chevrons, hidden until there is somewhere to go', () => {
+test('navigation is two chevrons, hidden until app.js decides otherwise', () => {
   for (const id of ['nav-up', 'nav-down']) {
     const button = html.match(new RegExp(`<button[^>]*id="${id}"[^>]*>`))?.[0];
     assert.ok(button, `missing ${id} button`);
     assert.match(button, /aria-label="/, `${id} needs an accessible name — it has no text`);
     assert.match(button, /\bhidden\b/, `${id} must start hidden and be revealed by app.js`);
   }
+});
+
+test('the gallery is a ring: every index lands on a real scene', () => {
+  // The navigation wraps, so `show()` and `travel()` are handed out-of-range indices by design —
+  // down from the last scene asks for `scenes.length`, up from the first asks for `-1`. Both have to
+  // come back to something that exists.
+  const count = scenes.length;
+  for (let i = -2 * count - 1; i <= 2 * count + 1; i += 1) {
+    const landed = wrapIndex(i, count);
+    assert.ok(
+      Number.isInteger(landed) && landed >= 0 && landed < count,
+      `wrapIndex(${i}, ${count}) gave ${landed}, which is not a scene`,
+    );
+    assert.ok(scenes[landed], `wrapIndex(${i}, ${count}) points at nothing`);
+  }
+
+  // The two that matter, named: off each end and onto the other.
+  assert.equal(wrapIndex(count, count), 0, 'down from the last animation must reach the first');
+  assert.equal(wrapIndex(-1, count), count - 1, 'up from the first animation must reach the last');
+
+  // JavaScript's remainder keeps the sign of its left operand, so a plain `i % n` sends up-from-the-
+  // first to `scenes[-1]` — undefined, and a blank page. This is the assertion that catches it.
+  assert.equal(wrapIndex(-1, 3), 2);
+  assert.equal(wrapIndex(-4, 3), 2);
+
+  // A gallery of one, and the degenerate case, both land somewhere rather than on NaN.
+  assert.equal(wrapIndex(5, 1), 0);
+  assert.equal(wrapIndex(-5, 1), 0);
+  assert.equal(wrapIndex(3, 0), 0);
+});
+
+test('app.js wraps rather than clamps, and keeps both chevrons live', () => {
+  const app = read('app.js');
+  assert.match(app, /wrapIndex\(index, scenes\.length\)/, 'show() must wrap the index it is given');
+  assert.match(app, /wrapIndex\(current \+ delta, scenes\.length\)/, 'travel() must wrap past the ends');
+  // The old shape — hiding a chevron at each end — is exactly what a ring does not do.
+  assert.doesNotMatch(app, /navUp\.hidden\s*=\s*current === 0/, 'the up chevron must not hide at the top');
+  assert.doesNotMatch(
+    app,
+    /navDown\.hidden\s*=\s*current === scenes\.length - 1/,
+    'the down chevron must not hide at the bottom',
+  );
 });
 
 test('the canvas and live region carry the description for screen readers', () => {
