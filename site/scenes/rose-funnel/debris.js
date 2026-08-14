@@ -28,8 +28,8 @@ import { chunk } from '../../effects/pixel.js';
 import { hash2 } from '../../effects/field.js';
 import { bayAt } from './cycle.js';
 import { vortexAt } from './funnel.js';
-import { GROUND } from './layout.js';
-import { SPIN } from './palette.js';
+import { GROUND, TOP } from './layout.js';
+import { JADE, SPIN } from './palette.js';
 
 /**
  * The four materials. `w`/`h` are in chunks, `spin` in radians a second, `g` in gravities.
@@ -56,7 +56,7 @@ export function planDebris(rng, bayCount) {
   // its bay's round turns over. Nothing is ever created or destroyed, so nothing has to be remembered.
   const seats = [];
   for (let b = 0; b < bayCount; b += 1) {
-    for (let i = 0; i < 6; i += 1) {
+    for (let i = 0; i < 9; i += 1) {
       seats.push({
         bay: b,
         key: seats.length,
@@ -70,6 +70,90 @@ export function planDebris(rng, bayCount) {
     }
   }
   return { seats, seed: rng.range(0, 70) };
+}
+
+/**
+ * Loose things on the ground — leaf litter, twigs, torn-up turf — and what the storm does to them.
+ *
+ * The scene needed far more going *into* the funnel than came off the building, and this is the
+ * cheapest honest way to get it: the ground is covered in small things, the wind field passes over
+ * them, and they are lifted, wound around the column, carried up it and **gone**. Vanishing is the
+ * point. Debris that orbits forever is a decoration; debris that is taken up the throat and stops
+ * existing is what a tornado does, and it is the one moment in this scene where something is
+ * destroyed without anybody rebuilding it.
+ *
+ * Every piece is on its own round, and whether that round *happens* is asked at the round's own
+ * start against where the storm was then — the same latch the temple's bays use, for the same
+ * reason: a piece already climbing must not drop back to the ground because the storm wandered off.
+ */
+export function planLitter(rng) {
+  return {
+    seed: rng.range(0, 55),
+    bits: Array.from({ length: 130 }, () => ({
+      at: rng.next(),
+      period: 5 + rng.next() * 7,
+      phase: rng.next(),
+      out: rng.range(0.7, 1.5),
+      rise: rng.range(0.75, 1.6),
+      kind: rng.next(),
+    })),
+  };
+}
+
+export function drawLitter(ctx, W, H, t, plan, funnel, px) {
+  const groundY = H * GROUND;
+  const topY = H * TOP;
+  const leaf = [];
+  const dust = [];
+
+  for (const bit of plan.bits) {
+    const cycles = t / bit.period + bit.phase;
+    const n = Math.floor(cycles);
+    const began = (n - bit.phase) * bit.period;
+    const u = cycles - n;
+    const x0 = bit.at * W;
+
+    // Was the wind over this patch when this round turned over? If not, the piece simply lies there.
+    const then = vortexAt(W, H, began, funnel, 0);
+    const caught = Math.abs(x0 - then.cx) < then.wind;
+    if (!caught || u < 0.08) {
+      if (u < 0.5) dust.push(x0, groundY + (bit.kind * 3 | 0) * px);
+      continue;
+    }
+
+    // Lifted. It climbs on its own rate and winds around the column as it goes, and the higher it
+    // gets the tighter it is drawn in — which is what makes the path a funnel rather than a helix of
+    // constant width.
+    const climb = Math.min(1, (u - 0.08) / 0.92 * bit.rise);
+    const up = climb;
+    const { cx, r, wind } = vortexAt(W, H, t, funnel, up);
+    const angle = climb * 9 + bit.at * 30;
+    const facing = Math.sin(angle);
+    if (facing < -0.15) continue;
+    const grip = 1 - climb * 0.75;
+    const rad = r * 1.02 + (wind - r) * bit.out * grip * 0.6;
+    const y = groundY - climb * (groundY - topY);
+    // ...and it thins out near the top and is gone. Nothing arrives at the cloud.
+    if (climb > 0.86 && hash2(bit.at * 40, Math.floor(climb * 30)) < (climb - 0.86) * 7) continue;
+    if (climb >= 1) continue;
+    leaf.push(cx + Math.cos(angle) * rad, y, climb);
+  }
+
+  // Two values, because litter is jade — it came off the land, not off the storm — and it cools as it
+  // is carried up and away from the light at the ground.
+  for (const [colour, lo, hi] of [[JADE[4], 0, 0.45], [JADE[5], 0.45, 0.8], [JADE[6], 0.8, 2]]) {
+    ctx.fillStyle = rgba(colour, 1);
+    ctx.beginPath();
+    for (let i = 0; i < leaf.length; i += 3) {
+      if (leaf[i + 2] < lo || leaf[i + 2] >= hi) continue;
+      chunk(ctx, leaf[i], leaf[i + 1], px, px, px);
+    }
+    ctx.fill();
+  }
+  ctx.fillStyle = rgba(JADE[6], 1);
+  ctx.beginPath();
+  for (let i = 0; i < dust.length; i += 2) chunk(ctx, dust[i], dust[i + 1], px, px, px);
+  ctx.fill();
 }
 
 /**
@@ -136,7 +220,11 @@ export function drawDebris(ctx, W, H, t, plan, cycle, funnel, px, where) {
       const facing = Math.sin(spun);
       if (facing < -0.15) continue;
       x = vortex.cx + Math.cos(spun) * vortex.r * (1.05 + roll(6) * 0.5);
-      y -= age * S * 0.06 * grab;
+      // Taken up the throat, and gone. A captured piece used to orbit until its round ran out, which
+      // is a decoration; being carried up and *ceasing to exist* is what the storm actually does with
+      // what it picks up, and it is the only thing in this scene nobody rebuilds.
+      y -= age * S * 0.16 * grab;
+      if (y < H * 0.3 && hash2(seat.key, Math.floor(y / px)) < 0.2) continue;
     }
     if (y > groundY + px * 4) continue;
 

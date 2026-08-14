@@ -19,7 +19,7 @@
 
 import { clamp, rgba, wrap01 } from '../../lib/draw.js';
 import { hash2 } from '../../effects/field.js';
-import { chunk } from '../../effects/pixel.js';
+import { bayerOn, chunk } from '../../effects/pixel.js';
 import { backPixel, GROUND } from './layout.js';
 import { GOLD, JADE, LAPIS, SPIN } from './palette.js';
 
@@ -216,13 +216,37 @@ const POSE = {
   ],
 };
 
-/** Stamp a pose. `flip` mirrors it, so a hand can face the way it is going. */
-function stampHand(body, edge, pose, x, y, px, flip) {
+/**
+ * Stamp a pose — and this is where the hand stops being a hand and becomes a *spirit*.
+ *
+ * The trick is **ordered dither as translucency**. Every chunk is put through the same Bayer matrix
+ * the sky's ramp uses, at a density that falls off from the middle of the palm outward: the core is
+ * solid, the fingers are half there, and the wrist is barely there at all — so the picture behind it
+ * shows through the gaps and the thing reads as not-quite-present. It is how a 16-bit machine drew a
+ * ghost, for the same reason we are doing it: there is no alpha to be had, and a flat silhouette in
+ * a pale colour is a *pale hand*, not a spectral one.
+ *
+ * Keyed on the sprite's own grid rather than on screen position, so the dither pattern travels with
+ * the hand instead of the hand sliding across a fixed screen-door — which would read as a hole cut
+ * in the picture that a hand happens to be behind.
+ */
+function stampHand(body, edge, aura, pose, x, y, px, flip) {
   const rows = POSE[pose];
+  const midC = (rows[0].length - 1) / 2;
+  const midR = 2.5;
   for (let r = 0; r < rows.length; r += 1) {
     for (let c = 0; c < rows[r].length; c += 1) {
       const ch = rows[r][flip ? rows[r].length - 1 - c : c];
-      if (ch === '.') continue;
+      // Solid at the palm, thinning to about a third out at the fingertips and the wrist.
+      const away = Math.hypot((c - midC) / midC, (r - midR) / 3.4);
+      const density = clamp(1.12 - away * 0.62, 0.28, 1);
+      if (ch === '.') {
+        // ...and the aura is the same shape one ring further out, at the density the silhouette has
+        // just run out of. A spirit with a hard edge is a sticker.
+        if (away > 0.8 && away < 1.25 && bayerOn(c, r, 0.34)) aura.push(x + c * px, y + r * px, px, px);
+        continue;
+      }
+      if (!bayerOn(c, r, density)) continue;
       (ch === '+' ? edge : body).push(x + c * px, y + r * px, px, px);
     }
   }
@@ -245,6 +269,7 @@ export function drawHands(ctx, W, H, t, plan, px, places) {
   const groundY = H * GROUND;
   const body = [];
   const edge = [];
+  const aura = [];
   const wisp = [];
   const tool = [];
   const hot = [];
@@ -310,19 +335,24 @@ export function drawHands(ctx, W, H, t, plan, px, places) {
       flip = bench.x < site.x;
     }
 
-    stampHand(body, edge, pose, x, y, px, flip);
-    // The wrist, coming apart. No arm, nothing it could be attached to — disembodied is done by
-    // subtraction, and a wrist that faded out would be a soft edge in a scene that has none.
-    for (let w = 1; w <= 3; w += 1) {
-      if (hash2(hand.key * 3.3 + w, Math.floor(t * 5)) < w * 0.3) continue;
-      wisp.push(x + px * (2 - w * 0.3 * (flip ? -1 : 1)), y + px * (6 + w), px, px);
+    stampHand(body, edge, aura, pose, x, y, px, flip);
+    // The wrist, coming apart into a tail. No arm, nothing it could be attached to — disembodied is
+    // done by subtraction. It is longer than it was and it *drifts*, each chunk further back lagging
+    // further behind the hand's own travel, so the tail streams rather than hanging.
+    for (let w = 1; w <= 7; w += 1) {
+      if (hash2(hand.key * 3.3 + w, Math.floor(t * 4)) < w * 0.11) continue;
+      const sway = Math.sin(t * 1.9 + hand.key * 2.2 - w * 0.7) * px * w * 0.28;
+      wisp.push(x + px * 2 + sway - (flip ? -px : px) * w * 0.16, y + px * (6 + w * 1.1), px, px);
     }
   }
 
   // A spirit is the one thing in this frame lit by nothing, so it does not get the top of the ramp:
   // the two hottest steps belong to the storm's contact core and to lightning, and seven hands
   // wearing them would take the hot end by sheer count.
-  for (const [cells, colour] of [[wisp, LAPIS[3]], [tool, LAPIS[2]], [body, SPIN[3]], [edge, SPIN[1]]]) {
+  // Spectral blue-white, and deliberately neither of the scene's two subjects: not the storm's rose
+  // and not the building's jade or gold. A spirit lit by nothing has to be its own colour or it reads
+  // as a chip off whichever thing it is standing in front of.
+  for (const [cells, colour] of [[aura, LAPIS[2]], [wisp, LAPIS[1]], [tool, LAPIS[3]], [body, LAPIS[0]], [edge, SPIN[0]]]) {
     if (!cells.length) continue;
     ctx.fillStyle = rgba(colour, 1);
     ctx.beginPath();

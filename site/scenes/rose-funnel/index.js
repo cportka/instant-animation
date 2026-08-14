@@ -24,9 +24,9 @@
 // colours, which is how a machine that could not do smooth colour would have had to draw it.
 
 import { createRng } from '../../lib/rng.js';
-import { drawFunnel, funnelPixel, planFunnel, sizeRef } from './funnel.js';
+import { drawFunnel, drawWind, funnelPixel, planFunnel, sizeRef } from './funnel.js';
 import { planCycle } from './cycle.js';
-import { drawDebris, planDebris } from './debris.js';
+import { drawDebris, drawLitter, planDebris, planLitter } from './debris.js';
 import { drawHands, drawWorks, planHands } from './hands.js';
 import { bayPlaces, drawPagoda, planPagoda } from './pagoda.js';
 import { drawLightning, drawSky, planSky } from './sky.js';
@@ -62,6 +62,7 @@ export function create({ width, height, seed = meta.id }) {
   const cycle = planCycle(rng, 9);
   const debris = planDebris(rng, cycle.bays.length);
   const works = planHands(rng);
+  const litter = planLitter(rng);
 
   let W = width;
   let H = height;
@@ -86,6 +87,10 @@ export function create({ width, height, seed = meta.id }) {
       drawWorks(ctx, W, H, t, works, px);
       drawPagoda(ctx, W, H, t, pagoda, px, R, cycle, funnel);
       drawFunnel(ctx, W, H, t, funnel);
+      // The wind is outside the column, so it goes over it — and the ground litter it has picked up
+      // rides the same field, climbing until it is gone.
+      drawWind(ctx, W, H, t, funnel);
+      drawLitter(ctx, W, H, t, litter, funnel, px);
       // Everything that has come off the building, drawn *after* the storm: it is the nearest thing
       // in the frame, and debris hidden behind the tornado that threw it is the one arrangement that
       // makes no sense from any angle.

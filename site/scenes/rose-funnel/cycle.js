@@ -44,7 +44,7 @@ const GONE = 3.2;
  * off, and a building that is periodically perfect is a building on a timer rather than one under
  * siege. With it, something is always missing.
  */
-const BASE = 0.14;
+const BASE = 0.08;
 
 /**
  * The bays: the unit that is struck, falls, and is carried back.
@@ -109,8 +109,11 @@ export function bayAt(bay, x, t, W, H, funnel, seed) {
   // Where the storm was *then*. Sampling it at `t` instead would make destruction a function of
   // where the funnel is now, so the temple would heal the instant it wandered — splinters flying
   // home, the tape running backwards.
-  const { cx, r } = vortexAt(W, H, began, funnel, bay.reach * 0.7);
-  const near = 1 - smoothstep(r * 0.6, r * 2.4, Math.abs(x - cx));
+  const { cx, r, wind } = vortexAt(W, H, began, funnel, bay.reach * 0.7);
+  // Measured against the **wind field**, not the wall. Most of what a tornado does, it does to things
+  // it never touches — so a storm passing near the temple strips it without the column ever crossing
+  // it, and the destruction has a reach that matches the streaks you can see blowing past.
+  const near = 1 - smoothstep(r * 0.5, wind, Math.abs(x - cx));
   const bite = Math.max(BASE, near) * bay.exposure * bay.reach;
   const struck = hash2(bay.key * 3.1 + 0.7, n + seed) < bite;
 
