@@ -21,15 +21,10 @@
 import { TAU, clamp, rgba, wrap01 } from '../../lib/draw.js';
 import { fbm, hash2, noise2 } from '../../effects/field.js';
 import { chunk } from '../../effects/pixel.js';
+import { GROUND, TOP, pixelFor } from './layout.js';
 import { DUST, SPIN } from './palette.js';
 
-/**
- * The chunk size for this scene, off the short edge so the art is the same *coarseness* on a phone
- * as on a monitor. Deliberately about half the resolution of the shared grid: the brief's first word
- * is "pixelated", and at the gallery's usual chunk size that reads as a texture rather than as a
- * decision.
- */
-export const funnelPixel = (S) => Math.max(3, Math.round(S / 132));
+export const funnelPixel = pixelFor;
 
 /**
  * The size the funnel itself is held against — deliberately *not* the short edge.
@@ -42,11 +37,7 @@ export const funnelPixel = (S) => Math.max(3, Math.round(S / 132));
  * on both sides of it — at every shape of frame, which is the thing that actually has to be
  * constant.
  */
-const sizeRef = (W, H) => Math.min(Math.min(W, H), W * 0.72);
-
-/** Where the funnel stands, top and bottom, as fractions of the frame. */
-const TOP = 0.04;
-const GROUND = 0.88;
+export const sizeRef = (W, H) => Math.min(Math.min(W, H), W * 0.72);
 
 /**
  * How many times the colour band wraps around the funnel, and how fast it climbs and turns.
@@ -97,17 +88,11 @@ export function planFunnel(rng) {
   return {
     base: rng.range(0.036, 0.052),
     mouth: rng.range(0.26, 0.34),
-    // Debris: everything it has torn up and is carrying around with it.
-    motes: Array.from({ length: 150 }, () => ({
-      up: rng.next(),
-      angle: rng.range(0, TAU),
-      // Outside the funnel wall by a little or a lot.
-      out: rng.range(1.02, 1.9),
-      rise: rng.range(0.05, 0.22),
-      spin: rng.range(0.5, 1.6),
-      size: rng.next() < 0.7 ? 1 : 2,
-      step: Math.floor(rng.range(0, 4)),
-    })),
+    // The funnel carries no debris of its own any more. It used to have a hundred and fifty motes
+    // orbiting it, and the moment there was a temple underneath being torn apart, they became the
+    // same idea drawn twice — two orbiting populations doing one job, at which point the orbit stops
+    // being legible and becomes a cloud. Everything in the air now came off the building, which is
+    // both cheaper and the only version where the debris *means* something.
     seed: rng.range(0, 50),
   };
 }
@@ -120,6 +105,18 @@ export function planFunnel(rng) {
  * obvious way to make a tornado look like a spinning cone.
  */
 const spinAt = (up) => 1.9 - up * 1.15;
+
+/**
+ * Where the vortex is, and how wide, at a given height and time.
+ *
+ * The one thing anything outside this file is allowed to ask about the funnel. The temple needs it
+ * to know whether the storm was on it when a cycle turned over, and the debris needs it to know
+ * whether a piece flying past gets caught — both of which are questions about where the tornado *is*,
+ * which is exactly the thing the funnel knows and nobody else should be re-deriving.
+ */
+export function vortexAt(W, H, t, plan, up) {
+  return { cx: axisAt(up, t, W), r: radiusAt(up, t, sizeRef(W, H), plan) };
+}
 
 export function drawFunnel(ctx, W, H, t, plan) {
   const S = Math.min(W, H);
@@ -182,44 +179,7 @@ export function drawFunnel(ctx, W, H, t, plan) {
     ctx.fill();
   }
 
-  drawMotes(ctx, W, H, R, t, plan, px, topY, groundY);
   drawSkirt(ctx, W, H, R, t, plan, px, groundY);
-}
-
-/**
- * Debris, orbiting outside the wall.
- *
- * It rises on its own clock and wraps, so the population is constant and nothing ever pops: a mote
- * that reaches the cloud reappears at the ground, and since they are all at different heights and
- * rates there is no moment when the sky refills.
- */
-function drawMotes(ctx, W, H, S, t, plan, px, topY, groundY) {
-  const bucket = SPIN.map(() => []);
-  for (const mote of plan.motes) {
-    const height = wrap01(mote.up + t * mote.rise);
-    const y = groundY - height * (groundY - topY);
-    const cx = axisAt(height, t, W);
-    const r = radiusAt(height, t, S, plan) * mote.out;
-    const angle = mote.angle + t * SPEED * spinAt(height) * TAU * mote.spin;
-    // Only the front half. A mote drawn on the far side would be behind the funnel, and drawing it
-    // in front is the one thing that would collapse the whole depth illusion the body relies on.
-    const facing = Math.sin(angle);
-    if (facing < -0.15) continue;
-    const step = clamp(mote.step + Math.round(height * 2) + (facing < 0.35 ? 2 : 0), 0, SPIN.length - 1);
-    bucket[step].push(cx + Math.cos(angle) * r, y, mote.size);
-  }
-
-  for (let step = 0; step < SPIN.length; step += 1) {
-    const cells = bucket[step];
-    if (!cells.length) continue;
-    ctx.fillStyle = rgba(SPIN[step], 1);
-    ctx.beginPath();
-    for (let i = 0; i < cells.length; i += 3) {
-      const size = px * cells[i + 2];
-      chunk(ctx, cells[i], cells[i + 1], size, size, px);
-    }
-    ctx.fill();
-  }
 }
 
 /**

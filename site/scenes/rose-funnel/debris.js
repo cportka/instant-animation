@@ -1,0 +1,189 @@
+// What comes off the temple, and what happens to it.
+//
+// **Value is already spoken for, so material has to be carried by everything else.** The seven steps
+// of the ramp are not a set of colours in this scene, they are a depth cue: the funnel's band steps
+// down at the silhouette and again with height, and the darkest step is reserved for the building.
+// A plank flying in front of that has to obey the same law or it stops being in the same picture. So
+// the ramp cannot say *wood* or *glass*. There is no hue budget and there is no value budget either.
+//
+// What is left turns out to be enough, because the eye reads material from motion and silhouette
+// long before it reads it from colour. A long thin thing turning end over end is a plank at any
+// brightness. A flat thing that collapses to a line twice a turn and comes back is a tile. A big slow
+// thing is stone. A small fast thing that breaks into a dozen bright specks is glass. So the four
+// materials are separated by **aspect, spin, mass and how each one dies** — four levers that cost
+// nothing and leave the ramp alone to do depth.
+//
+// One consequence is load-bearing: material is not a colour, so material is not a fill. All four drop
+// into the same seven step-buckets, and four materials cost exactly what one costs.
+//
+// And the collisions, which are the same idea again: **a statue does not find something to hit — the
+// thing it hits is launched so as to be there.** A detected collision cannot change a trajectory that
+// is a closed-form function of `t`, and integrating one is exactly the stored state the render tests
+// exist to forbid. So the meeting is choreographed: the statue flies its arc, and its victim is given
+// the launch velocity that puts it in the statue's path at the appointed second. Solving
+// `v = (p1 - p0 - ½gT²) / T` is two lines, it is exact, and it happens every round without fail.
+
+import { clamp, rgba } from '../../lib/draw.js';
+import { chunk } from '../../effects/pixel.js';
+import { hash2 } from '../../effects/field.js';
+import { bayAt } from './cycle.js';
+import { vortexAt } from './funnel.js';
+import { GROUND } from './layout.js';
+import { SPIN } from './palette.js';
+
+/**
+ * The four materials. `w`/`h` are in chunks, `spin` in radians a second, `g` in gravities.
+ *
+ * The spin rates are all under about two radians a second, and that is a hard constraint rather than
+ * a taste: a five-chunk plank at five radians a second moves its own endpoint a chunk and a half
+ * between frames, so the silhouette *jumps* rather than turning, and a three-chunk tile flickering
+ * between one and three chunks wide every other frame is a strobe. Slower also reads heavier, which
+ * is what timber and stone want anyway.
+ */
+const MAT = {
+  wood: { w: 5, h: 1, spin: 1.9, g: 1, step: 4, shards: 3, spread: 0.9 },
+  tile: { w: 3, h: 1, spin: 2.2, g: 1.1, step: 3, shards: 4, spread: 1.2 },
+  stone: { w: 3, h: 3, spin: 0.8, g: 1.5, step: 5, shards: 5, spread: 0.5 },
+  glass: { w: 2, h: 2, spin: 1.6, g: 0.85, step: 1, shards: 9, spread: 1.5 },
+};
+const KINDS = ['wood', 'tile', 'stone', 'glass'];
+
+/** How long a piece is in the air before the hands have taken it away again. */
+const FLIGHT = 4.6;
+
+export function planDebris(rng, bayCount) {
+  // Seats, not particles: a seat is a place a piece comes from, and it throws a fresh one every time
+  // its bay's round turns over. Nothing is ever created or destroyed, so nothing has to be remembered.
+  const seats = [];
+  for (let b = 0; b < bayCount; b += 1) {
+    for (let i = 0; i < 6; i += 1) {
+      seats.push({
+        bay: b,
+        key: seats.length,
+        along: rng.range(-1, 1),
+        // Stone is rare and heavy — a statue is an event, not a texture. Glass is rarer still and is
+        // the only thing in the scene allowed to be dazzling.
+        kind: KINDS[[0, 0, 1, 1, 1, 2, 3][Math.floor(rng.next() * 7)]],
+        lift: rng.range(0.7, 1.5),
+        toss: rng.range(-0.5, 0.9),
+      });
+    }
+  }
+  return { seats, seed: rng.range(0, 70) };
+}
+
+/**
+ * Every piece in the air this frame, bucketed by ramp step.
+ *
+ * `where(bay)` hands back the screen position of a bay on the building, which only the temple knows.
+ */
+export function drawDebris(ctx, W, H, t, plan, cycle, funnel, px, where) {
+  const S = Math.min(W, H);
+  const groundY = H * GROUND;
+  const bucket = SPIN.map(() => []);
+  const glint = [];
+
+  for (const seat of plan.seats) {
+    const bay = cycle.bays[seat.bay];
+    if (!bay) continue;
+    const site = where(bay);
+    if (!site) continue;
+    const state = bayAt(bay, site.x, t, W, H, funnel, cycle.seed);
+    // A piece exists only while its bay is down. Nothing is hidden and nothing pops: a seat whose bay
+    // was not taken this round simply never threw anything.
+    if (!state.struck || state.age > FLIGHT) continue;
+
+    const mat = MAT[seat.kind];
+    const roll = (n) => hash2(seat.key * 1.93 + n * 0.61, state.n * 7.31 + plan.seed);
+    const age = state.age;
+
+    const x0 = site.x + seat.along * site.half;
+    const y0 = site.y;
+    const g = S * 0.36 * mat.g;
+    let vx = (seat.along * 1.4 + (roll(1) - 0.5) * mat.spread) * S * 0.13;
+    let vy = -seat.lift * S * 0.16;
+
+    // A statue is aimed. Its victim — the next seat along, whatever that turns out to be — is given
+    // the velocity that puts it exactly where the statue will be at the appointed second, so the two
+    // meet every round, without a single distance test.
+    const struckAt = 0.42 + roll(4) * 0.5;
+    if (seat.kind !== 'stone') {
+      const boss = plan.seats[(seat.key + 1) % plan.seats.length];
+      if (boss.kind === 'stone' && boss.bay === seat.bay) {
+        const bm = MAT.stone;
+        const bg = S * 0.36 * bm.g;
+        const bx0 = site.x + boss.along * site.half;
+        const bvx = (boss.along * 1.4 + (hash2(boss.key * 1.93 + 0.61, state.n * 7.31 + plan.seed) - 0.5) * bm.spread) * S * 0.13;
+        const bvy = -boss.lift * S * 0.16;
+        const T = struckAt;
+        // Where the statue will be, and the launch that arrives there at the same instant.
+        vx = (bx0 + bvx * T - x0) / T;
+        vy = (y0 + bvy * T + 0.5 * bg * T * T - y0 - 0.5 * g * T * T) / T;
+      }
+    }
+
+    let x = x0 + vx * age;
+    let y = y0 + vy * age + 0.5 * g * age * age;
+
+    // ...and if the vortex reaches it, it stops falling and starts orbiting. Captured pieces obey the
+    // same facing rule the funnel's own surface does: the far half of the orbit is behind the body,
+    // and drawing it in front is the one thing that would collapse the depth the whole scene rests on.
+    const up = clamp((groundY - y) / (groundY - H * 0.04), 0, 1);
+    const vortex = vortexAt(W, H, t, funnel, up);
+    const grab = 1 - clamp(Math.abs(x - vortex.cx) / (vortex.r * 1.5), 0, 1);
+    if (grab > 0.45) {
+      const spun = age * 2.2 + roll(5) * 6.28;
+      const facing = Math.sin(spun);
+      if (facing < -0.15) continue;
+      x = vortex.cx + Math.cos(spun) * vortex.r * (1.05 + roll(6) * 0.5);
+      y -= age * S * 0.06 * grab;
+    }
+    if (y > groundY + px * 4) continue;
+
+    // Whole, or in pieces. A shatter is drawn as shards travelling *outward from where it broke*,
+    // which is the whole difference between shattering and puffing: a puff has no memory of the
+    // direction the thing was going when it stopped.
+    const broken = age > struckAt;
+    const step = clamp(mat.step + (grab > 0.45 ? 1 : 0), 0, SPIN.length - 1);
+
+    if (!broken) {
+      const turn = age * mat.spin + roll(2) * 6.28;
+      // The silhouette *is* the material: a plank's long axis foreshortens as it turns end over end,
+      // and a tile collapses to a line twice a turn. Same two lines of code, different aspect.
+      const w = Math.max(1, Math.round(mat.w * Math.abs(Math.cos(turn))));
+      const h = Math.max(1, Math.round(mat.h + (mat.w - mat.h) * Math.abs(Math.sin(turn))));
+      bucket[step].push(x, y, w * px, h * px);
+      // Glass keeps a lit core — the one place value is allowed to name a material, and it is allowed
+      // only because nothing else in front of the funnel is permitted to be this bright.
+      if (seat.kind === 'glass') glint.push(x + px * 0.5, y + px * 0.5);
+      continue;
+    }
+
+    const since = age - struckAt;
+    const shards = mat.shards + (seat.kind === 'stone' ? 4 : 0);
+    for (let s = 0; s < shards; s += 1) {
+      const a = (s / shards) * 6.28 + roll(7 + s) * 1.2;
+      const speed = S * (0.03 + roll(8 + s) * 0.07);
+      const sx = x + Math.cos(a) * speed * since;
+      const sy = y + Math.sin(a) * speed * since + 0.5 * g * since * since;
+      if (sy > groundY + px * 2) continue;
+      bucket[clamp(step + Math.round(since * 1.6), 0, SPIN.length - 1)].push(sx, sy, px, px);
+    }
+  }
+
+  for (let step = 0; step < SPIN.length; step += 1) {
+    const cells = bucket[step];
+    if (!cells.length) continue;
+    ctx.fillStyle = rgba(SPIN[step], 1);
+    ctx.beginPath();
+    for (let i = 0; i < cells.length; i += 4) chunk(ctx, cells[i], cells[i + 1], cells[i + 2], cells[i + 3], px);
+    ctx.fill();
+  }
+
+  if (glint.length) {
+    ctx.fillStyle = rgba(SPIN[0], 1);
+    ctx.beginPath();
+    for (let i = 0; i < glint.length; i += 2) chunk(ctx, glint[i], glint[i + 1], px, px, px);
+    ctx.fill();
+  }
+}

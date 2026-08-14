@@ -11,15 +11,14 @@
 import { clamp, rgba } from '../../lib/draw.js';
 import { fbm, hash2, noise2 } from '../../effects/field.js';
 import { chunk, ditherRamp } from '../../effects/pixel.js';
+import { CLOUD, GROUND, backPixel } from './layout.js';
 import { EARTH, SKY, SPIN } from './palette.js';
-
-const HORIZON = 0.88;
 
 export function planSky(rng) {
   return {
     // The mesocyclone: the rotating mass the funnel drops out of. Lobes, not one disc — a wall cloud
     // is a pile of things at different heights turning together, and a single ellipse reads as a lid.
-    wall: Array.from({ length: 30 }, () => ({
+    wall: Array.from({ length: 20 }, () => ({
       at: rng.range(-0.75, 0.75),
       lift: rng.range(0, 1),
       size: rng.range(0.09, 0.24),
@@ -30,7 +29,7 @@ export function planSky(rng) {
       phase: rng.range(0, 30),
     })),
     // Rain shafts hanging out of the storm, well behind the funnel.
-    shafts: Array.from({ length: 9 }, () => ({
+    shafts: Array.from({ length: 5 }, () => ({
       x: rng.next(),
       width: rng.range(0.01, 0.05),
       drop: rng.range(0.3, 0.72),
@@ -42,29 +41,33 @@ export function planSky(rng) {
 }
 
 /**
- * Everything behind the funnel is drawn one chunk step coarser than the funnel is.
+ * The background is drawn on two grids, not one, and which thing gets which is a judgement about
+ * what a coarse chunk *does* to it rather than about what it costs.
  *
- * It began as economics and stayed as art. On the fine grid the background cost eight times what the
- * subject cost — a full-frame dithered ramp is twenty-three thousand cells before the storm draws a
- * thing — and at `px * 2` all of it quarters. But it also *reads* better: a coarser chunk is the
- * oldest depth cue in the medium, so the storm sits back behind the funnel instead of competing with
- * it for the same plane, and the sky's dither stops being a fine speckle you have to look past and
- * becomes a texture you can see. Both grids are multiples of the same chunk, so nothing misaligns.
+ * The sky ramp is a smooth field, so its Bayer dither is the only pattern in it — coarsen that and
+ * the checkerboard stops being a texture and becomes the subject, a lattice ruled across the whole
+ * upper frame. It also happens to be the cheapest thing here: a full-frame scan is around 5,800
+ * cells against the storm's own scans, so coarsening it saves under a millisecond and costs the most
+ * of anything.
+ *
+ * The wall cloud, the rain and the ground are the opposite on both counts. They are noise-driven, so
+ * a bigger chunk reads as a bigger billow rather than as a bigger checker, and they are where the
+ * time actually goes — twenty lobes and a two-pass ground scatter, every candidate cell paying for
+ * an `fbm`. Those go a step coarser again, which is where the four milliseconds come from.
  */
-const backPixel = (px) => px * 2;
-
 export function drawSky(ctx, W, H, t, sky, px) {
-  const horizonY = H * HORIZON;
+  const horizonY = H * GROUND;
   const bpx = backPixel(px);
+  const cpx = bpx + px;
 
   // The sky itself: six bands with dithered joins, darkest at the top. The blend is wide — at this
   // chunk size a narrow one puts the whole transition in a row or two and the join reads as a dotted
   // line ruled across the sky rather than as one colour giving way to another.
   ditherRamp(ctx, W, 0, horizonY, SKY, bpx, { blend: 0.9 });
 
-  drawShafts(ctx, W, H, t, sky, bpx, horizonY);
-  drawWall(ctx, W, H, t, sky, bpx);
-  drawGround(ctx, W, H, t, bpx, horizonY);
+  drawShafts(ctx, W, H, t, sky, cpx, horizonY);
+  drawWall(ctx, W, H, t, sky, cpx);
+  drawGround(ctx, W, H, t, cpx, horizonY);
 }
 
 /** Rain, falling in columns a long way behind everything else. */
@@ -96,7 +99,7 @@ function drawShafts(ctx, W, H, t, sky, px, horizonY) {
  */
 function drawWall(ctx, W, H, t, sky, px) {
   ctx.fillStyle = rgba(SPIN[5], 1);
-  ctx.fillRect(0, 0, W, H * 0.09);
+  ctx.fillRect(0, 0, W, H * CLOUD);
 
   const bucket = SPIN.map(() => []);
   for (const lobe of sky.wall) {

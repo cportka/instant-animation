@@ -24,7 +24,11 @@
 // colours, which is how a machine that could not do smooth colour would have had to draw it.
 
 import { createRng } from '../../lib/rng.js';
-import { drawFunnel, funnelPixel, planFunnel } from './funnel.js';
+import { drawFunnel, funnelPixel, planFunnel, sizeRef } from './funnel.js';
+import { planCycle } from './cycle.js';
+import { drawDebris, planDebris } from './debris.js';
+import { drawHands, drawWorks, planHands } from './hands.js';
+import { bayPlaces, drawPagoda, planPagoda } from './pagoda.js';
 import { drawLightning, drawSky, planSky } from './sky.js';
 
 export const meta = {
@@ -50,7 +54,14 @@ export function create({ width, height, seed = meta.id }) {
   const rng = createRng(seed);
   // Sky first, so the storm is the same for a given seed however many motes the funnel asks for.
   const sky = planSky(rng);
+  const pagoda = planPagoda(rng);
   const funnel = planFunnel(rng);
+  // Nine storeys' worth of bays, whatever the frame turns out to hold. The plan cannot depend on the
+  // viewport — a resize must not re-roll which parts of the temple the storm has taken — so it is
+  // built for the most storeys there can ever be and the shorter frames simply use fewer.
+  const cycle = planCycle(rng, 9);
+  const debris = planDebris(rng, cycle.bays.length);
+  const works = planHands(rng);
 
   let W = width;
   let H = height;
@@ -67,7 +78,22 @@ export function create({ width, height, seed = meta.id }) {
       ctx.save();
       const px = funnelPixel(Math.min(W, H));
       drawSky(ctx, W, H, t, sky, px);
+      // Before the funnel, so the storm's flare occludes the spire for free — painter's order does
+      // the hidden-surface work and nothing has to be sorted or clipped.
+      const R = sizeRef(W, H);
+      // The forest and the workshops belong to the ground, so they go down with it — behind the
+      // temple, on the background's coarse grid, where a bigger chunk reads as further away.
+      drawWorks(ctx, W, H, t, works, px);
+      drawPagoda(ctx, W, H, t, pagoda, px, R, cycle, funnel);
       drawFunnel(ctx, W, H, t, funnel);
+      // Everything that has come off the building, drawn *after* the storm: it is the nearest thing
+      // in the frame, and debris hidden behind the tornado that threw it is the one arrangement that
+      // makes no sense from any angle.
+      const places = bayPlaces(W, H, t, pagoda, px, R);
+      drawDebris(ctx, W, H, t, debris, cycle, funnel, px, (bay) => places[cycle.bays.indexOf(bay)]);
+      // ...and the hands last of all, because they are the only thing in the frame that is not being
+      // thrown about by the storm, and they have to be legible against everything that is.
+      drawHands(ctx, W, H, t, works, px, places);
       // Last, and additive: the flash has to sit over the funnel, because a strike behind it would
       // be a light source the subject is blocking, and the subject is the brightest thing here.
       drawLightning(ctx, W, H, t, sky);
