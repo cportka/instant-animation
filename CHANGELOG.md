@@ -201,7 +201,7 @@ grow, draw out, thin away and are replaced by masses welling up through them.
   de-saturated photograph is another de-saturated photograph — everything landed between about 130
   and 210, which is one flat mid-grey wash with a hint of lilac in it, and through a hole the size of
   a fist that is nothing at all. So: **contrast is value** — the ladder runs the whole way, roads
-  near black at about 8 and the river the brightest thing on the ground, because brightness is the
+  near black at about 4 and the river the brightest thing on the ground, because brightness is the
   only thing that survives being seen for a second through a hole. And **off-ness is hue** — the
   complements are taken at real chroma instead of pulled back toward grey, giving blue grass, amber
   water, teal and slate roofs, jewel-toned awnings, and a *dark* glitter crawling downstream on a
@@ -216,8 +216,9 @@ grow, draw out, thin away and are replaced by masses welling up through them.
   within a few levels of the cloud in front of it and dissolved into it, and a peek-a-boo stopped
   looking like a hole. And every light in the scene is additive, so a bright ground is a bright floor
   under the fires and the fireworks and leaves them less room to be brighter than it. The river is a
-  burnt amber at 122 now rather than a cream at 238, the grass runs 70 down to 34, the canopy sits
-  between them, and the awnings and roofs went with them — richer than the pale version and most of
+  burnt amber at 102 now rather than a cream at 238, the grass runs 55 down to 25 at nearly ninety
+  percent saturation — the chroma is what stops that reading as *the lights went out* — the canopy
+  sits between them, and the awnings and roofs went with them — richer than the pale version and most of
   it a hundred levels below where it started. The gap between the brightest grass and the darkest
   canopy is fifteen levels and it is the tightest join in the palette: close it and four hundred
   trees disappear into the field, open it and they come back as pale speckle. The people's pale shoulder highlight carries more of
@@ -410,14 +411,30 @@ grow, draw out, thin away and are replaced by masses welling up through them.
 
   A person is a **head and a pair of shoulders**, which from directly above is all a person is. A
   shadow thrown away from the lean, a torso stroked from the feet up — short, and as wide as it is
-  long, so it is a mass — then shoulders as two overlapping discs set *across* the lean, then a head
-  smaller than the shoulders, a highlight on it, and for a third of them a carried light. Six passes,
-  six fills for the whole crowd, because every pass is one path and two discs side by side is the
-  cheapest thing that reads as wider-than-deep without a transform.
+  long, so it is a mass — then shoulders as two overlapping discs, then a head smaller than the
+  shoulders, a highlight on it, and for a third of them a carried light. Six passes, six fills for the
+  whole crowd, because every pass is one path and two discs side by side is the cheapest thing that
+  reads as wider-than-deep without a transform. Before that it was a full-height stroke a pixel and a
+  half wide with a ball on top, which is a matchstick — and the head being *smaller* than the
+  shoulders is the detail that fixes it, the same mistake at a hundredth of the size that the angel
+  took two goes to stop making.
 
-  Before that it was a full-height stroke a pixel and a half wide with a ball on top, which is a
-  matchstick — and the head being *smaller* than the shoulders is the detail that fixes it. That is
-  the same mistake, at a hundredth of the size, that the angel took two goes to stop making.
+  **They walk.** Each has a slow tilted circuit of their own patch, at their own rate and in their own
+  direction — forty to eighty pixels across, five to ten seconds round — on top of the wander. That is
+  the part that matters: noise alone jitters a mark about without ever committing to a direction,
+  which is why the crowd read as vibrating rather than going anywhere. Because position is now a
+  function of time it can be **sampled twice**, and the difference between the samples is a heading:
+  shoulders run across the **walk** rather than across the camera's lean, so somebody walking
+  north-east presents their shoulders at that angle from any corner of the frame, and the torch is out
+  in front of whoever is carrying it rather than pinned to one corner of the screen. A pace rides on
+  top — the body rises and falls, the shoulders rock, the head rocks against them — scaled by how fast
+  they are actually going, so somebody who has stopped stands still instead of marching on the spot.
+
+  And a crowd with a shell in the air above it backs away on a **smooth envelope** that rises as the
+  shell climbs, peaks at the burst and drains off. That was a boolean: the instant a shell existed,
+  every figure at that site jumped a fiftieth of the frame outward in one frame and jumped back when
+  it died. Ninety people teleporting in unison twice a minute is not a reaction, it is a glitch that
+  happens to be motivated.
 
   They lean on the same radial projection the buildings and the trees do, so a figure at the corner
   of the frame shows you its whole height and one in the middle shows you the top of its head. That
