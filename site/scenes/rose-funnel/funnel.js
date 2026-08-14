@@ -188,27 +188,32 @@ export function drawWind(ctx, W, H, t, plan) {
   const groundY = H * GROUND;
   const bucket = SPIN.map(() => []);
 
-  for (let i = 0; i < 240; i += 1) {
+  for (let i = 0; i < 170; i += 1) {
     // Each streak climbs on its own clock and wraps — a constant population, and nothing ever pops
     // because they are all at different heights going at different rates.
     const rise = 0.05 + hash2(i * 1.7, 3) * 0.3;
     const up = wrap01(hash2(i * 2.3, 7) + t * rise);
     const y = groundY - up * (groundY - topY);
     const { cx, r, wind } = vortexAt(W, H, t, plan, up);
-    // Out in the field, not on the wall. The nearer ones move faster, which is the one cue that says
-    // this is circulation rather than a halo.
-    const out = 1.04 + hash2(i * 3.1, 11) * 0.62;
+    // Out in the field, and **reeled in as it climbs**. A streak starts wide and is drawn toward the
+    // wall on the way up, so the wind visibly *feeds* the column instead of decorating it — and the
+    // excursion is capped against the frame rather than against the field, because `wind` scales with
+    // the funnel's own width and a wedge-phase storm was flinging streaks into the corners, where
+    // they stop reading as air and start reading as confetti.
+    const spread = hash2(i * 3.1, 11);
+    const reel = 1 - up * 0.72;
+    const out = 1.04 + spread * 0.62 * reel;
     const angle = hash2(i * 5.9, 13) * TAU + turnedBy(t) * SPEED * spinAt(up) * TAU * (1.4 / out);
     const facing = Math.sin(angle);
     if (facing < -0.1) continue;
-    const rad = r * out + (wind - r) * ((out - 1.04) / 0.62) * 0.28;
+    const rad = r * 1.04 + Math.min((wind - r) * spread * reel * 0.5, W * 0.13);
     const x = cx + Math.cos(angle) * rad;
     // A streak lies *along* the circulation, so it is wide where the orbit is crossing the frame and
     // short where it is coming at you — the same foreshortening the funnel's own bands have.
     const len = Math.max(px, Math.round(Math.abs(facing) * px * (2 + hash2(i * 7.3, 17) * 4)));
     // Bright, and deliberately so: wind at the dark end of the ramp is the sky's own value and
     // simply is not there. It is the fastest thing in the frame and it has to look like it.
-    const step = clamp(1 + Math.round((out - 1.04) * 5.2) + Math.round(up * 1.6), 0, SPIN.length - 1);
+    const step = clamp(1 + Math.round(spread * 3.4) + Math.round(up * 1.6), 0, SPIN.length - 1);
     bucket[step].push(x, y, len, px);
   }
 
