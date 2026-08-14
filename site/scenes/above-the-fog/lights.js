@@ -50,7 +50,7 @@ import { TAU, clamp, glow, rampAt, rgba, smoothstep, wrap01 } from '../../lib/dr
 import { curl, hash2, noise2 } from '../../effects/field.js';
 import { chunk, ditherGlow } from '../../effects/pixel.js';
 import { lobe } from '../../effects/volume.js';
-import { WIND, cloudDensity, gustAt } from './fog.js';
+import { WIND, blackoutAt, cloudDensity, gustAt } from './fog.js';
 import { leanX, leanY } from './town.js';
 
 /* ------------------------------------------------------------- palette ---- */
@@ -844,6 +844,11 @@ function drawShell(ctx, W, H, S, t, shell, px, strength, veil = null) {
  */
 export function drawLightBloom(ctx, W, H, t, lights) {
   if (!lights) return;
+  // No cloud, no light in the cloud. During a blackout this pass would leave a dozen soft glows and a
+  // set of chunky sparks hanging in clear air with nothing to be inside, which is the one thing that
+  // would give the trick away — the reveal only works if what is revealed is the *bare* ground.
+  const cloud = 1 - blackoutAt(t);
+  if (cloud <= 0.001) return;
   const S = Math.min(W, H);
   const px = burstPixel(S);
   ctx.save();
@@ -865,7 +870,7 @@ export function drawLightBloom(ctx, W, H, t, lights) {
     // A fire at full flare used to throw the largest, brightest coloured mass in the frame — larger
     // and brighter than a shell going off, which puts the hierarchy exactly the wrong way up. A fire
     // is a steady thing you keep noticing; a firework is an event.
-    const power = clamp((0.42 + flare * 0.85) * life * (0.75 + flicker * 0.35), 0, 1);
+    const power = clamp((0.42 + flare * 0.85) * life * (0.75 + flicker * 0.35) * cloud, 0, 1);
     // A soft base, drawn as a **3:1 smear along the wind** at a low alpha. Firelight genuinely does
     // diffuse through cloud, and refusing it any softness at all does not remove the bubble, it just
     // replaces it with a tidy little pile of squares — which is what a tight dither on its own looks
@@ -893,7 +898,7 @@ export function drawLightBloom(ctx, W, H, t, lights) {
   }
 
   for (const shell of shellsAt(lights.shows, t)) {
-    const glare = shellGlare(shell);
+    const glare = shellGlare(shell) * cloud;
     if (glare < 0.01) continue;
     // A soft base underneath, at a **fixed** radius: the moment a size follows a brightness there is
     // a pulsing ball in the frame again, whatever is drawn on top of it.
@@ -907,7 +912,7 @@ export function drawLightBloom(ctx, W, H, t, lights) {
     // drawn twice and the fog would count for nothing; leaving it out altogether is what made a
     // burst a soft smudge, which is what it was. This is the middle, and it is where a firework
     // *inside* weather actually lives — most of it hidden, a scatter of it not.
-    drawShell(ctx, W, H, S, t, shell, px, 0.34, (cx, cy) => cloudDensity(cx, cy, S, t) ** 3.4);
+    drawShell(ctx, W, H, S, t, shell, px, 0.34 * cloud, (cx, cy) => cloudDensity(cx, cy, S, t) ** 3.4);
   }
 
   ctx.restore();

@@ -9,12 +9,20 @@
 //   *change* — masses billow, draw out, thin away and are replaced by masses welling up through
 //   them, so the field is always turning into itself rather than sliding past.
 //
-// Nothing here glitches. There was a whole pass of it once — lobes strobing out, bands of the
-// lattice shoved sideways, the finished frame shredded — and the trouble with all of it is that fog
-// has no detail to corrupt, so damaging it can only ever *remove* it. Fog vanishing in chunks does
-// not read as a fault in the picture, it reads as a fault in the renderer. The glitching moved
-// wholesale into `apparition.js`, where it belongs to one object with an outline and a face, and is
-// unmistakably something happening rather than something broken.
+// The fog does not glitch *continuously*, and that is a decision rather than an omission. There was a
+// whole pass of it once — lobes strobing out, bands of the lattice shoved sideways, the finished
+// frame shredded, all the time — and the trouble is that fog has no detail to corrupt, so damaging
+// it can only ever *remove* it. Fog dissolving in chunks minute after minute does not read as a
+// fault in the picture, it reads as a fault in the renderer. Continuous glitching moved wholesale
+// into `apparition.js`, where it belongs to one object with an outline and a face.
+//
+// What is left of it is the **blackout**, and it works precisely because it is rare. Once or twice a
+// minute the whole layer tears itself apart in bands, blocks of it drop out, and then for one full
+// second there is no fog in the frame at all — the town, the river, the fires and every person on
+// the ground, in the open, with nothing over them — before it comes back the same way it left. The
+// same artefact that reads as a broken renderer at every moment reads as an event at ninety-second
+// intervals, and the thing it reveals is the entire reason the ground is drawn as carefully as it is.
+// See `blackoutAt`.
 //
 // **Coverage is geometric, not lucky.** The base of the fog is a lattice: a jittered grid of lobes,
 // each a good half wider than its cell, so every point in the frame is inside two or three of them
@@ -41,7 +49,7 @@
 // Everything here is a pure function of `t`. See the note at the top of `site/effects/field.js` for
 // why that is a hard requirement and not a preference.
 
-import { TAU, clamp, rampAt, smoothstep, wrap01 } from '../../lib/draw.js';
+import { TAU, clamp, rampAt, rgba, smoothstep, wrap01 } from '../../lib/draw.js';
 import { curl, fbm, flowAngle, hash2 } from '../../effects/field.js';
 import { lobe, vignette } from '../../effects/volume.js';
 import { drawApparition } from './apparition.js';
@@ -335,22 +343,104 @@ function clearance(wins, x, y, R) {
 
 export function drawFog(ctx, W, H, t, fog) {
   const S = Math.min(W, H);
+  const level = blackoutAt(t);
+
+  // Gone. Not thinned, not faded — the whole layer simply is not drawn, and for one second you are
+  // looking straight down at a town nobody was supposed to see.
+  if (level >= 1) return;
+
+  // How violently it is coming apart right now: nothing at either end, everything half-way through
+  // each tear. Held at fifteen frames a second so the shredding steps rather than slides — a smooth
+  // tear is a dissolve, and a dissolve is the one thing this must not look like.
+  const glitch = level > 0
+    ? { level, tear: 4 * level * (1 - level), beat: Math.floor(t * 15) / 15 }
+    : null;
   const wins = openWindows(fog, t, W, H);
 
-  wash(ctx, W, H, t);
+  wash(ctx, W, H, t, 1 - level);
   // Between the whole-frame wash and the cell-sized lattice, and drawn before both of them have
   // anything on top: the frequency that keeps the picture from being three flat decks.
-  haze(ctx, W, H, S, t, fog, wins);
-  curtain(ctx, W, H, S, t, fog, wins);
+  haze(ctx, W, H, S, t, fog, wins, glitch);
+  curtain(ctx, W, H, S, t, fog, wins, glitch);
   // The apparition goes in *early* — under the billows, the crests, the filaments and the dark
   // strands, all of which then pass in front of it. Drawn late it was a sprite on the weather;
   // drawn here it is a thing happening some way down inside a bank of it. It is also dimmed by
   // however thick the fog is directly above it, which is the other half of the same idea.
-  drawApparition(ctx, W, H, t, (x, y) => cloudDensity(x, y, S, t));
-  billows(ctx, W, H, S, t, fog, wins);
-  wisps(ctx, W, H, S, t, fog, wins);
-  erosion(ctx, W, H, S, t, fog, wins);
-  vignette(ctx, W, H, VOID, 0.34);
+  if (!glitch) drawApparition(ctx, W, H, t, (x, y) => cloudDensity(x, y, S, t));
+  billows(ctx, W, H, S, t, fog, wins, glitch);
+  wisps(ctx, W, H, S, t, fog, wins, glitch);
+  erosion(ctx, W, H, S, t, fog, wins, glitch);
+  if (glitch) dropout(ctx, W, H, S, glitch);
+  vignette(ctx, W, H, VOID, 0.34 * (1 - level));
+}
+
+/* ------------------------------------------------------------ blackout ---- */
+
+/** Fully clear air, in seconds. */
+export const BLACKOUT_GONE = 1;
+const TEAR_OUT = 0.3;
+const TEAR_IN = 0.34;
+/** The whole event, tear to tear. */
+export const BLACKOUT_SPAN = TEAR_OUT + BLACKOUT_GONE + TEAR_IN;
+/** The window one blackout is placed somewhere inside. */
+export const BLACKOUT_PERIOD = 96;
+
+/**
+ * How gone the fog is right now: 0 normally, 1 while it is not there at all, and a hard non-linear
+ * ramp through the tear at each end.
+ *
+ * Once or twice a minute the weather stops existing. It shreds into bands, tears sideways, blocks of
+ * it wink out, and then for one full second there is no fog in the frame at all — the town, the
+ * river, the fires and every person on the ground, in the open, with nothing over them. Then it
+ * comes back the same way it left.
+ *
+ * The start slides around inside its window so it never becomes a beat you can count, and the whole
+ * thing is a closed form with no state in it: the latest possible start plus the span still lands
+ * well inside the period, so it cannot straddle a boundary.
+ *
+ * This is the one place the scene's own headline claim — that the fog is 95% of it, always — is
+ * deliberately broken, so `tests/fog.test.js` knows about it by name rather than being quietly
+ * loosened to accommodate it.
+ */
+export function blackoutAt(t) {
+  if (t < 0) return 0;
+  const n = Math.floor(t / BLACKOUT_PERIOD);
+  const start = 0.05 + 0.8 * hash2(n * 5.3 + 2.1, 13.7);
+  const u = (t / BLACKOUT_PERIOD - n - start) * (BLACKOUT_PERIOD / BLACKOUT_SPAN);
+  if (u <= 0 || u >= 1) return 0;
+  const into = u * BLACKOUT_SPAN;
+  if (into < TEAR_OUT) return (into / TEAR_OUT) ** 0.55;
+  if (into < TEAR_OUT + BLACKOUT_GONE) return 1;
+  return (1 - (into - TEAR_OUT - BLACKOUT_GONE) / TEAR_IN) ** 0.55;
+}
+
+/**
+ * Whether one element of the fog survives this instant of the tear, and how far its band has slid.
+ *
+ * Two artefacts, and they are the two a decoder actually produces. A **block** either arrives or it
+ * does not, so an element is drawn whole or not at all rather than faded; and a **band** of the
+ * picture slides sideways as one, so the shift depends only on which horizontal strip a thing is in.
+ * Both are read off a held clock, so they hold for a frame or two and then jump.
+ */
+function shred(glitch, id, y, H) {
+  if (hash2(id * 1.7, glitch.beat) < glitch.level) return null;
+  const band = Math.floor((y / H) * 22);
+  return (hash2(band * 3.9, glitch.beat + 7) - 0.5) * glitch.tear * H * 0.55;
+}
+
+/** Hard bars of flat tone across the frame while it tears. The dropped blocks, made visible. */
+function dropout(ctx, W, H, S, glitch) {
+  const px = Math.max(3, Math.round(S / 90));
+  ctx.save();
+  for (let i = 0; i < 7; i += 1) {
+    const h = hash2(i * 2.3, glitch.beat);
+    if (h > glitch.tear * 0.9) continue;
+    const top = hash2(i * 5.7, glitch.beat + 3) * H;
+    const tall = px * (1 + Math.round(hash2(i * 8.1, glitch.beat + 9) * 4));
+    ctx.fillStyle = rgba([BONE, ASH, SLATE, LINEN][i % 4], 0.14 + h * 0.3);
+    ctx.fillRect(0, Math.round(top / px) * px, W, tall);
+  }
+  ctx.restore();
 }
 
 /**
@@ -358,13 +448,14 @@ export function drawFog(ctx, W, H, t, fog) {
  * there is a cloud in the way. This is the only layer that covers the whole frame unconditionally,
  * and it is why a peek-a-boo arrives as a hazy glimpse rather than as a window cut in a sheet.
  */
-function wash(ctx, W, H, t) {
+function wash(ctx, W, H, t, strength = 1) {
+  if (strength <= 0.001) return;
   const g = ctx.createLinearGradient(0, 0, W * 0.22, H);
   const swing = 0.5 + 0.5 * Math.sin(t * 0.043);
   // The wash breathes, but only a little: it is the one layer that moves the *whole* frame at once.
-  g.addColorStop(0, `rgba(116, 122, 126, ${(0.33 + swing * 0.05).toFixed(4)})`);
-  g.addColorStop(0.55, `rgba(96, 102, 107, ${(0.29 + swing * 0.04).toFixed(4)})`);
-  g.addColorStop(1, `rgba(74, 80, 85, ${(0.35 - swing * 0.04).toFixed(4)})`);
+  g.addColorStop(0, `rgba(116, 122, 126, ${((0.33 + swing * 0.05) * strength).toFixed(4)})`);
+  g.addColorStop(0.55, `rgba(96, 102, 107, ${((0.29 + swing * 0.04) * strength).toFixed(4)})`);
+  g.addColorStop(1, `rgba(74, 80, 85, ${((0.35 - swing * 0.04) * strength).toFixed(4)})`);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 }
@@ -376,7 +467,7 @@ function wash(ctx, W, H, t) {
  * which they otherwise would, being half the frame wide, and it would be invisible in review because
  * nothing about the picture would look wrong, there would simply never be anything underneath.
  */
-function haze(ctx, W, H, S, t, fog, wins) {
+function haze(ctx, W, H, S, t, fog, wins, glitch = null) {
   for (const d of fog.drifts) {
     const live = incarnate(d, t, W, H);
     if (live.swell < 0.02) continue;
@@ -387,8 +478,10 @@ function haze(ctx, W, H, S, t, fog, wins) {
     const minor = major * d.squash;
     const alpha = d.alpha * live.swell * clearance(wins, x, y, major);
     if (alpha < 0.004) continue;
+    let shift = 0;
+    if (glitch) { shift = shred(glitch, d.id, y, H); if (shift === null) continue; }
     lobe(
-      ctx, x, y, major, minor,
+      ctx, x + shift, y, major, minor,
       Math.atan2(drift.y, drift.x + 1),
       [SLATE, STONE, ASH][d.tone],
       clamp(alpha, 0, 1), 0.06, 0.3, d.id + t * 0.12,
@@ -407,7 +500,7 @@ function haze(ctx, W, H, S, t, fog, wins) {
  * index is offset by however many whole cells have passed, so a cell that wraps off the right edge
  * is the same cell arriving on the left, not a new one popping into existence.
  */
-function curtain(ctx, W, H, S, t, fog, wins) {
+function curtain(ctx, W, H, S, t, fog, wins, glitch = null) {
   const cell = Math.hypot(W, H) * 0.058;
   const shift = (windAt(t) * S * WIND) / cell;
   const base = Math.floor(shift);
@@ -469,10 +562,12 @@ function curtain(ctx, W, H, S, t, fog, wins) {
 
       const alpha = (0.82 + r3 * 0.18) * breath * clearance(wins, x, y, major);
       if (alpha < 0.01) continue;
+      let shift = 0;
+      if (glitch) { shift = shred(glitch, col * 31.7 + row * 7.3, y, H); if (shift === null) continue; }
 
       lobe(
         ctx,
-        x,
+        x + shift,
         y,
         major,
         minor,
@@ -497,7 +592,7 @@ function curtain(ctx, W, H, S, t, fog, wins) {
  * not decoration: a near-white lobe composited normally over grey lands at grey plus a bit, and the
  * top of the ramp is simply never reached. `lighter` climbs to white and stays there.
  */
-function billows(ctx, W, H, S, t, fog, wins) {
+function billows(ctx, W, H, S, t, fog, wins, glitch = null) {
   const lit = [];
 
   for (const b of fog.billows) {
@@ -518,11 +613,13 @@ function billows(ctx, W, H, S, t, fog, wins) {
     const angle = Math.atan2(vy, vx);
     const alpha = b.alpha * live.swell * clearance(wins, x, y, major);
     if (alpha < 0.008) continue;
+    let shift = 0;
+    if (glitch) { shift = shred(glitch, b.id, y, H); if (shift === null) continue; }
 
     const phase = b.id + live.n * 3.1 + t * 0.42 * live.unrest;
-    cluster(ctx, x, y, major, minor, angle, b.id + live.n, BODY[b.tone], alpha, 0.2, phase);
+    cluster(ctx, x + shift, y, major, minor, angle, b.id + live.n, BODY[b.tone], alpha, 0.2, phase);
     const top = 0.12 + 0.88 * smoothstep(0.38, 0.72, bankAt(x, y, S, t));
-    if (b.lit) lit.push({ b, x, y, major, minor, angle, live, phase, top });
+    if (b.lit) lit.push({ b, x: x + shift, y, major, minor, angle, live, phase, top });
   }
 
   if (!lit.length) return;
@@ -586,7 +683,7 @@ function cluster(ctx, x, y, major, minor, angle, seed, colour, alpha, core, phas
  * the life while the minor barely moves — so it stretches into a thread and thins to nothing while
  * the next one is already welling up through where it was.
  */
-function wisps(ctx, W, H, S, t, fog, wins) {
+function wisps(ctx, W, H, S, t, fog, wins, glitch = null) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   for (const w of fog.wisps) {
@@ -610,10 +707,12 @@ function wisps(ctx, W, H, S, t, fog, wins) {
     const alpha =
       w.alpha * live.swell * smoothstep(0.3, 0.66, bankAt(x, y, S, t)) * clearance(wins, x, y, major);
     if (alpha < 0.006) continue;
+    let shift = 0;
+    if (glitch) { shift = shred(glitch, w.id, y, H); if (shift === null) continue; }
 
     lobe(
       ctx,
-      x,
+      x + shift,
       y,
       major,
       minor,
@@ -631,7 +730,7 @@ function wisps(ctx, W, H, S, t, fog, wins) {
 }
 
 /** Near-black strands drawn over the light, so the crests come apart instead of staying smooth. */
-function erosion(ctx, W, H, S, t, fog, wins) {
+function erosion(ctx, W, H, S, t, fog, wins, glitch = null) {
   for (const s of fog.streaks) {
     const live = incarnate(s, t, W, H);
     if (live.swell < 0.04) continue;
@@ -647,10 +746,12 @@ function erosion(ctx, W, H, S, t, fog, wins) {
       s.alpha * live.swell * (0.25 + 0.75 * smoothstep(0.34, 0.68, bankAt(x, y, S, t)))
       * clearance(wins, x, y, major);
     if (alpha < 0.006) continue;
+    let shift = 0;
+    if (glitch) { shift = shred(glitch, s.id, y, H); if (shift === null) continue; }
 
     lobe(
       ctx,
-      x,
+      x + shift,
       y,
       major,
       major * s.squash * (1.15 - 0.4 * live.u),

@@ -73,6 +73,34 @@ grow, draw out, thin away and are replaced by masses welling up through them.
   The billows underneath them also went from twenty-two to twenty-nine across a much wider span of
   size and lifetime, a fifth of them big and slow, chosen by index rather than by a roll so one seed
   in ten cannot come out with no large masses in it at all.
+- **The blackout.** Once or twice a minute the weather stops existing. The whole layer tears itself
+  apart in bands, blocks of it drop out, and then for **one full second there is no fog in the frame
+  at all** — the town, the river, the fires and every person on the ground, in the open, with nothing
+  over them — before it comes back the same way it left.
+
+  Two artefacts do the tearing, and they are the two a decoder actually produces. A **block** either
+  arrives or it does not, so an element of the fog is drawn whole or not at all rather than faded out;
+  and a **band** of the picture slides sideways as one, so the shift depends only on which horizontal
+  strip a thing is in. Both are read off a held fifteen-frame clock so the shredding steps rather than
+  slides — a smooth tear is a dissolve, and a dissolve is the one thing this must not look like. Hard
+  bars of flat tone cross the frame on top, which is the dropped blocks made visible.
+
+  It works precisely *because* it is rare, and that is the whole argument the rest of this file used
+  to make in the other direction: fog has no detail to corrupt, so damaging it can only ever remove
+  it, and fog dissolving in chunks minute after minute reads as a broken renderer rather than as
+  weather. The same artefact at ninety-second intervals reads as an **event** — and what it reveals is
+  the entire reason the ground below is drawn as carefully as it is.
+
+  The light-in-the-cloud pass is gated on it too. Left running, a blackout would leave a dozen soft
+  glows and a set of chunky sparks hanging in clear air with nothing to be inside, which is the one
+  thing that would give it away: the reveal only works if what is revealed is the *bare* ground.
+
+  This is the one place the scene's headline claim — that the fog is 95% of it, always — is
+  deliberately broken, so `tests/fog.test.js` skips blackout moments **by name** and asserts the
+  schedule separately: one per window, fully clear for about a second, under one part in fifty of the
+  running time, and gaps that genuinely vary so it never becomes a metronome. The alternative was
+  loosening the coverage bounds until a frame with no weather in it passed them, at which point the
+  assertions stop saying anything.
 - **Filaments are the layer that decides it.** Long, thin, aligned to the flow, bright, and barely
   there. Without a second spatial frequency an order of magnitude finer than the billows carrying
   it, the whole thing reads as smoke from a machine rather than as a fog bank. Near-black strands go
