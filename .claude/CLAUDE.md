@@ -174,10 +174,12 @@ catch yourself about to write the word "tag" in a message to the owner, don't.
 
 - **MAJOR means "an animation is finished."** Versioning still follows SemVer mechanically, but
   the MAJOR bump has one meaning here and only one: **it marks the animation being worked on as
-  done, and the next one beginning.** Nothing else earns a MAJOR — not a rewrite, not a breaking
-  change to the scene contract, not a recomposition however drastic. While an animation is still
-  being worked on, changes to it are MINOR (a new capability) or PATCH (a fix). The version source
-  of truth is `package.json`, mirrored in `CHANGELOG.md` and the README `**Version:**` line —
+  done, and the next one beginning.** The rule runs both ways. **Always:** every new animation cuts
+  a MAJOR, however small the scene turns out to be — starting one is by definition finishing the
+  last. **Only:** nothing else earns a MAJOR — not a rewrite, not a breaking change to the scene
+  contract, not a recomposition however drastic. While an animation is still being worked on,
+  changes to it are MINOR (a new capability) or PATCH (a fix). The version source of truth is
+  `package.json`, mirrored in `CHANGELOG.md` and the README `**Version:**` line —
   `tests/run-tests.sh` fails if they drift.
 
   The ledger, so the rule stays concrete:
@@ -186,9 +188,11 @@ catch yourself about to write the word "tag" in a message to the owner, don't.
   | --- | --- | --- |
   | `1.0.0` | Asleep Among the Stars | Westbound on Grizzly Peak |
   | `2.0.0` | Westbound on Grizzly Peak | Above the Fog |
+  | `3.0.0` | Above the Fog | The Rose Funnel |
 
   Add a row when you cut one. If you are about to bump MAJOR and cannot fill in both columns, it
-  is not a MAJOR.
+  is not a MAJOR. If you are starting a new animation and are *not* about to bump MAJOR, you have
+  missed one.
 
 - **A new animation brings its own chrome and its own way of being arrived at.** Every MAJOR — which
   here means exactly "a new animation begins" — must also land these two, and they are not optional

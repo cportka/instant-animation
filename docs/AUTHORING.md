@@ -61,10 +61,11 @@ one being left — the transition's job is to introduce the next animation. Both
 `tests/scenes.test.js` fails on a scene that declares neither or names one nobody implements, and
 the silent default is the VHS tape change, which belongs to one animation and is wrong for the rest.
 
-A new animation is also the moment — the *only* moment — to cut a **MAJOR** version. In this repo
-that bump means one thing: the previous animation is finished and this one has begun. Nothing else
-earns it, however large the change. `.claude/CLAUDE.md` keeps the ledger of which version finished
-which animation; add a row when you cut one.
+A new animation is also the moment to cut a **MAJOR** version — *always* that, and *only* that. In
+this repo the bump means one thing: the previous animation is finished and this one has begun. Every
+new animation earns one, however small it is; nothing else earns one, however large it is.
+`.claude/CLAUDE.md` keeps the ledger of which version finished which animation; add a row when you
+cut one.
 
 You get the channel change between scenes for free — it lives in the stage and works on rendered
 pixels, so it never needs anything from the scene.

@@ -12,16 +12,16 @@
 // animation, not to eulogise the last one.
 //
 // Each one is built out of that scene's own primitives, so they cannot drift apart from the scene
-// they belong to: the tape change is the tape artefacts, the pixel change is the pixel grid, and
-// the vapour change is the soft lobes fog is made of.
+// they belong to: the tape change is the tape artefacts, the pixel and funnel changes are the pixel
+// grid, and the vapour change is the soft lobes fog is made of.
 
-import { clamp } from '../lib/draw.js';
+import { TAU, clamp } from '../lib/draw.js';
 import { chromaSplit, deviceScale, makeTearBands, seam, tearBands } from './vhs.js';
 import { bayerOn, block, chunk, hash01, pixelSize, snap } from './pixel.js';
 import { lobe } from './volume.js';
 
 /** Every change a scene may ask for by name. `meta.transition` must be one of these. */
-export const TRANSITIONS = ['tape', 'pixel', 'vapour'];
+export const TRANSITIONS = ['tape', 'pixel', 'vapour', 'funnel'];
 
 /** Everything the changes need decided once. The stage owns one of these for the whole gallery. */
 export function makeChannelChange(rng) {
@@ -53,6 +53,7 @@ export function channelChange(kind, ctx, W, H, t, violence, seamY, change, tape 
   if (violence <= 0) return;
   if (kind === 'pixel') pixelChange(ctx, W, H, t, violence, seamY, tape);
   else if (kind === 'vapour') vapourChange(ctx, W, H, t, violence, seamY, change);
+  else if (kind === 'funnel') funnelChange(ctx, W, H, t, violence, seamY, tape);
   else tapeChange(ctx, W, H, t, violence, seamY, change, tape);
 }
 
@@ -132,6 +133,100 @@ function pixelChange(ctx, W, H, t, violence, seamY, tape) {
         if (bayerOn(c, -r, density)) chunk(ctx, c * px, bar - (r + 2) * px, px, px, px);
       }
     }
+    ctx.fill();
+  }
+}
+
+/* ---------------------------------------------------------------- funnel ---- */
+
+// The scene's ramp, hottest first — the same seven steps `rose-funnel/palette.js` draws everything
+// out of, and the only colours this change is allowed to introduce.
+const SPIN = ['#ffe8f4', '#ff9ec8', '#f65492', '#ce226e', '#8c1c74', '#4e1656', '#260e30'];
+
+/**
+ * *The Rose Funnel*: the picture is caught in the vortex.
+ *
+ * It shares every primitive with the pixel change and feels like the opposite of it, and the whole
+ * difference is one word: **coherent**. There, each band rolls its own dice and the frame shreds
+ * along horizontal lines. Here the offset is a smooth function of height and time, so the rows stay
+ * in a relationship with one another and the frame reads as being *wound* around a vertical axis
+ * instead of torn across. Tearing is a fault; winding is a force, and this scene is about a force.
+ *
+ * The twist also flares — strongest at the join and tapering away from it — which is the funnel's
+ * own profile applied to the whole frame rather than to a column of chunks.
+ */
+function funnelChange(ctx, W, H, t, violence, seamY, tape) {
+  const px = pixelSize(W, H);
+  const scale = deviceScale(ctx, W, H);
+  const source = tape ? tape.source : ctx.canvas;
+  const bandHeight = px * 5;
+  const rows = Math.ceil(H / bandHeight);
+  // A held clock, so the wind-up advances on a beat like everything else drawn on this grid.
+  const beat = Math.floor(t * 12) / 12;
+  const bar = snap(seamY, px);
+
+  for (let i = 0; i < rows; i += 1) {
+    const top = i * bandHeight;
+    const height = Math.min(bandHeight, H - top);
+    if (height < 1) continue;
+    // The helix: a turn and a bit down the frame, climbing with time.
+    const turn = Math.sin((top / H) * TAU * 1.35 - beat * 2.4);
+    // Flared around the join. At the seam the frame is inside the mouth of the funnel; further off
+    // it is caught in the outer circulation rather than left alone — the seam crosses the frame
+    // during the move, so a falloff tight enough to leave most rows untouched means most of the
+    // change is a bar sliding past a still picture.
+    const grip = 1 - clamp(Math.abs(top - seamY) / (H * 0.85), 0, 1);
+    const dx = snap(turn * W * 0.55 * violence * (0.45 + grip * 0.55), px);
+    if (dx === 0) continue;
+    ctx.drawImage(
+      source,
+      0,
+      Math.round(top * scale.sy),
+      Math.max(1, Math.round(W * scale.sx)),
+      Math.max(1, Math.round(height * scale.sy)),
+      dx,
+      top,
+      W,
+      height,
+    );
+  }
+
+  // The join wears the ramp, wrapped. Which step a column shows is a function of its position and
+  // the clock, exactly the way the funnel's bands are — so the seam is a slice of the thing you are
+  // arriving at rather than a bar drawn over it. Dithered falloff on both sides, never a gradient.
+  const cols = Math.ceil(W / px) + 1;
+  const depth = Math.max(1, Math.round(3 + violence * 11));
+  const bucket = SPIN.map(() => []);
+  for (let c = 0; c < cols; c += 1) {
+    for (let r = -depth; r <= depth; r += 1) {
+      const away = Math.abs(r) / depth;
+      if (!bayerOn(c, r, (1 - away) * violence)) continue;
+      const band = ((c * px) / W) * 1.6 + r * 0.06 + beat * 0.7;
+      const step = Math.floor((band - Math.floor(band)) * SPIN.length);
+      bucket[clamp(step + Math.round(away * 2.5), 0, SPIN.length - 1)].push(c * px, bar + r * px);
+    }
+  }
+
+  // Debris, orbiting the join on an ellipse — a ring seen edge-on, which is the same read the
+  // funnel's body is built on. The far half goes down the ramp instead of being drawn in front,
+  // because a mote that ignores which side of the ring it is on flattens the whole thing.
+  for (let i = 0; i < 110; i += 1) {
+    const angle = hash01(i * 2.3) * TAU + beat * (1.4 + hash01(i * 5.1) * 1.2);
+    const radius = (0.08 + hash01(i * 7.1) * 0.55) * W * violence;
+    const facing = Math.sin(angle);
+    const step = clamp(1 + Math.round(hash01(i * 3.3) * 2) + (facing < 0 ? 3 : 0), 0, SPIN.length - 1);
+    bucket[step].push(
+      snap(W * 0.5 + Math.cos(angle) * radius, px),
+      snap(bar + facing * radius * 0.3, px),
+    );
+  }
+
+  for (let step = 0; step < SPIN.length; step += 1) {
+    const cells = bucket[step];
+    if (!cells.length) continue;
+    ctx.fillStyle = SPIN[step];
+    ctx.beginPath();
+    for (let i = 0; i < cells.length; i += 2) chunk(ctx, cells[i], cells[i + 1], px, px, px);
     ctx.fill();
   }
 }

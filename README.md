@@ -2,7 +2,7 @@
 
 An instant animation generator. Animate anything you can describe.
 
-**Version:** 2.0.0 · **Live:** https://cportka.github.io/instant-animation/
+**Version:** 3.0.0 · **Live:** https://cportka.github.io/instant-animation/
 
 Describe something. It becomes a hand-drawn canvas animation and joins the gallery. There is no
 text on the site — the animation *is* the page. The only chrome is a soft chevron floating at each
@@ -19,6 +19,7 @@ always the one belonging to the animation you are arriving *at*, including on th
 
 | Animation | From the description |
 | --- | --- |
+| **The Rose Funnel** | *a pixelated tornado swirling up reds, pinks and purples* |
 | **Above the Fog** | *an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and changing into each other, over a lazy winding river and a riverside town in reversed colour — people down there setting fires and letting off fireworks that burst amongst the fog as stylised orange and red fractal pixel art, and every few minutes one cloud pixelates into an angel, then a grim reaper, then a giant happy face* |
 | **Westbound on Grizzly Peak** | *2.5D 16-bit from the perspective of a car travelling diagonally up and to the left, a series of copper bronze street lamps, a cliff drop-off overlooking the bay, trees, and a fiery sunset in a night sky* |
 | **Asleep Among the Stars** | *a bed floating in space with someone snuggled under the covers peacefully sleeping while the bed gently floats amongst the stars* |
@@ -96,10 +97,11 @@ each scene reads best, the chevrons stop bobbing, and the channel change is skip
 
 SemVer, with two repo-specific rules:
 
-- A **MAJOR** bump marks an animation being *finished* and the next one starting — that, and
-  nothing else. `1.0.0` finished *Asleep Among the Stars* and started *Westbound on Grizzly Peak*;
-  `2.0.0` finished that one and started *Above the Fog*. If a bump can't name both, it isn't a
-  MAJOR.
+- A **MAJOR** bump marks an animation being *finished* and the next one starting — always that, and
+  only that. Every new animation cuts one, however small; nothing else cuts one, however large.
+  `1.0.0` finished *Asleep Among the Stars* and started *Westbound on Grizzly Peak*; `2.0.0`
+  finished that one and started *Above the Fog*; `3.0.0` finished that one and started *The Rose
+  Funnel*. If a bump can't name both, it isn't a MAJOR.
 - **Changes fold into the current version** rather than minting a new number each round, so
   `CHANGELOG.md` describes what the project *is* rather than logging every intermediate state it
   passed through. A new section opens when an animation is finished, not on any other signal —
