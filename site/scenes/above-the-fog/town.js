@@ -7,7 +7,7 @@
 // than in hue.
 //
 // **The palette is reversed** — the hues are complements, so the water is the *lightest* thing on
-// the ground and the roads the darkest, and the vegetation is lilac rather than green. A glimpse of
+// the ground and the roads the darkest, and the vegetation is blue rather than green. A glimpse of
 // it reads as a photographic negative, something that is not quite a place, rather than as a place
 // lit differently.
 //
@@ -16,16 +16,25 @@
 // the ground came up as one flat mid-grey wash with faint lilac in it, and through a hole the size
 // of a fist that is nothing at all. Two things changed.
 //
-// **Contrast is value.** The ladder runs the whole way — roads near black at about 14, the river the
-// brightest thing on the ground at about 139 — because the only thing that survives being seen for a
+// **Contrast is value.** The ladder runs the whole way — roads near black at about 12, the river the
+// brightest thing on the ground at about 134 — because the only thing that survives being seen for a
 // second through a hole is the difference between light and dark. Everything that was
 // distinguishable by brightness before still is; there is just far more room between the rungs.
 //
 // **Off-ness is hue.** The complements are taken at real chroma instead of being pulled back to
-// grey — violet grass, amber water, teal roofs, a *dark* glint crawling on a bright river. What
-// keeps it from looking like a cartoon is that none of it is allowed to be **lit**: every colour
-// here is pigment, sitting still. The neon in `lights.js` is the only thing in the frame that emits,
-// and it stays the only thing.
+// grey — deep blue ground, amber water, a *dark* glint crawling on a bright river. What keeps it
+// from looking like a cartoon is that none of it is allowed to be **lit**: every colour here is
+// pigment, sitting still. The fires and the fireworks in `lights.js` are the only things in the
+// frame that emit, and they stay the only ones.
+//
+// **The scheme is one cool family against one warm axis.** Everything growing or built is blue —
+// four steps of it in the grass, a lighter blue in the canopy, blue-grey in the rock and the roofs
+// — and the two things that are *not* are the river and the roads, which run amber and a warm
+// near-black. That is what a peek-a-boo needs: a field of one hue with a seam of its opposite
+// running through it, so the river reads as the river the instant it appears rather than as a
+// lighter bit of ground. The ground was violet through several rounds and violet is the wrong
+// choice here for a reason that only shows next to everything else — it sits half-way between the
+// blue of the weather and the warm of the fire, so it argued with both.
 //
 // **And the whole ladder sits low.** The first pass at this took the values *up* as it took the
 // chroma up — grass in the 130s to 200s, a near-white river, pale lilac trees — which is the wrong
@@ -33,9 +42,9 @@
 // nothing to be seen *against*: the river came within a few levels of the cloud in front of it and
 // simply dissolved into it. And every light in the scene is additive, so a bright ground is a bright
 // floor under the fires and the fireworks, and they had less room to be brighter than it. Deep
-// violet grass under a burnt amber river, all of it richer than the pale version and most of it a
+// blue grass under a burnt amber river, all of it richer than the pale version and most of it a
 // hundred levels below where it started, gives the peek-a-boos something to be a hole *in* and the
-// neon somewhere to burn.
+// fires somewhere to burn.
 
 import { TAU, clamp, lerp } from '../../lib/draw.js';
 import { fbm, hash2, noise2 } from '../../effects/field.js';
@@ -46,71 +55,80 @@ import { fbm, hash2, noise2 } from '../../effects/field.js';
 // legible as an inversion. The number after each is its rough luminance — the ladder is the point,
 // so it is written down where it can be checked rather than trusted.
 
-// Grass, at four steps that are genuinely four steps apart: deep violet, 87 down to 45.
-const GRASS = ['#6b4b96', '#5a3d86', '#4a3075', '#3a2463'];
+// Grass, at four steps that are genuinely four steps apart: deep blue, 79 down to 42.
+const GRASS = ['#2d5290', '#25457e', '#1d386b', '#152b58'];
 // Hedge lines between the fields — and *darker than the grass*, which is what a hedge from above
 // actually is. It was paler than everything it crossed and read as a scratch.
-const SCRUB = '#241247';
-// The river. Deep water was the darkest thing in the world, so inverted it is the brightest thing on
-// the ground — but "brightest on the ground" is a burnt amber at 139, not the cream at 238 it began
-// as. Against a bright cloud, a near-white river is not a river, it is a gap in the fog.
-const WATER_DEEP = '#b8863a';
-const WATER = '#9c6c2c';
+const SCRUB = '#101f3a';
+// The river, and the warm half of the whole scheme. Deep water was the darkest thing in the world,
+// so inverted it is the brightest thing on the ground — a burnt amber at 134, not the cream at 238
+// it began as, because against a bright cloud a near-white river is not a river, it is a gap in the
+// fog. It is also the only large warm mass down there, which is what makes the blue read as blue.
+const WATER_DEEP = '#b58038';
+const WATER = '#996a2a';
 // The crawl of light on the surface, which inverts to a crawl of *dark*. Keeping that honest is the
 // single oddest thing in the frame and worth all of the rest: a black glitter running downstream.
-const WATER_LIT = '#452d0c';
-const BANK = '#2b2340';
+const WATER_LIT = '#3f2a0a';
+const BANK = '#1b2a44';
 // Tarmac was pale, so the roads are the near-black in this picture — the one hard value in a scene
-// with no hard edges, and the thing a peek-a-boo lands on and immediately reads as a town.
-const ROAD = '#141b21';
-const ROAD_EDGE = '#07090c';
-// Roofs, spread from a muted slate down to a deep teal tile, so a cluster of buildings is a cluster
-// of *different* buildings rather than one mass with lines on it. Slate stays the lightest thing in
-// the town because a roof catching the sky is the one place a brighter value belongs.
-const ROOF_SLATE = '#6d8079';
-const ROOF_TILE = '#173d52';
-const ROOF_LEAD = '#42474f';
+// with no hard edges, and the thing a peek-a-boo lands on and immediately reads as a town. Warm
+// near-black rather than the cold grey-teal they were: at this value the hue barely registers as a
+// hue, but a cold grey sitting in a blue field is the one neutral that reads as *dirty*, and it
+// was the thing in frame that looked like a mistake.
+const ROAD = '#231810';
+const ROAD_EDGE = '#100b07';
+// Roofs, spread from a blue-grey slate down to a deep teal tile, so a cluster of buildings is a
+// cluster of *different* buildings rather than one mass with lines on it. Slate stays the lightest
+// thing in the town because a roof catching the sky is the one place a brighter value belongs.
+const ROOF_SLATE = '#67809a';
+const ROOF_TILE = '#15384f';
+const ROOF_LEAD = '#3a4250';
 // The one place the inversion is felt as more than a colour swap: a shadow becomes a *highlight*, so
 // the side of a roof that was dark now flares. Amber rather than white, so it belongs to the river's
 // half of the palette instead of being the one uncoloured thing in frame.
 const WALL_SHADOW = 'rgba(214, 190, 132, 0.5)';
-const CAFE_ROOF = '#0f4a5c';
-const RESTAURANT_ROOF = '#3f2a58';
+const CAFE_ROOF = '#0d4c66';
+const RESTAURANT_ROOF = '#2b3d70';
 // Twelve shops, twelve awnings, at jewel chroma. These used to be pulled most of the way to grey on
 // the grounds that four saturated pixels would be the only saturated thing in frame — but they are
 // four *dark* pixels, and dark saturated pigment reads as an awning. Nothing here is bright enough
 // to be mistaken for something burning, which was the actual risk.
-const JEWEL = ['#571628', '#122f4d', '#153f38', '#452a06', '#291d52', '#4f1509'];
+const JEWEL = ['#5c1a30', '#123a63', '#12463f', '#5a3a0c', '#1e2a6b', '#5a1a12'];
 
 // Canopy, sitting above the grass in value and below the river — so a wood reads as a wood against
 // the field it stands in, which is the only job these have. The gap to the brightest grass is
-// fifteen levels and it is the tightest join in the palette: close it and four hundred trees
+// seventeen levels and it is the tightest join in the palette: close it and four hundred trees
 // disappear into the field, open it and they come back as pale speckle.
-const TREE = ['#8f7aad', '#816da4', '#73609a'];
-const TREE_LIT = '#a794c2';
-const TRUNK = '#241a33';
+const TREE = ['#5580ba', '#4a73ac', '#3f669e'];
+const TREE_LIT = '#5f88bd';
+const TRUNK = '#141d2e';
 
 // The shaded side of everything that stands up. One colour for every wall in the town rather than a
 // shade per roof: from this height a wall is three or four pixels of a face nobody is meant to
 // study, and forty separate darks in it read as noise where one reads as *the side away from the
 // light*.
-const WALL = '#1a1526';
-const CAST = 'rgba(8, 5, 14, 0.3)';
+const WALL = '#0f1526';
+const CAST = 'rgba(4, 8, 20, 0.3)';
 
 // Rock, reed, scrub. The ground was river, grass, road, roof and canopy and nothing else, which is
 // four hundred identical lollipops on a lawn — the three things here are all irregular by
 // construction and exist to break that up.
-const ROCK = ['#4a4358', '#3b3547', '#5a5168'];
-const REED = '#6a5a34';
-const SCRUB_LEAF = ['#5d4a7e', '#523f70'];
+const ROCK = ['#3d4759', '#2f3849', '#4a5468'];
+const REED = '#6d5a2e';
+const SCRUB_LEAF = ['#345c94', '#2b4d80'];
 
-// Neon. Not a colour anything down there *is* — a rim on the edges that catch, which at this size
-// is the only way an outline can carry a hue without becoming a cartoon border. Three, alternating,
-// so the town does not hum on one note; all three sit in the violet-to-amber span the rest of the
-// palette occupies, because a rim in a hue the scene does not otherwise contain reads as a sticker.
-const NEON = ['rgba(255, 62, 154, 0.55)', 'rgba(255, 176, 58, 0.5)', 'rgba(176, 108, 255, 0.5)'];
-const NEON_WATER = 'rgba(255, 152, 64, 0.34)';
-const NEON_ROAD = 'rgba(190, 96, 255, 0.28)';
+// Neon, and it is **blue** — azure, periwinkle and a cyan-teal, alternating so the town does not hum
+// on one note. Not a colour anything down there *is*: a rim on the edges that catch, which at this
+// size is the only way an outline can carry a hue without becoming a cartoon border.
+//
+// Blue neon on a blue ground sounds like it should vanish and does the opposite, because the rim is
+// far more *saturated* and slightly brighter than anything it sits on — it reads as the same
+// material lit rather than as a different object outlined, which is exactly what neon is. The one
+// exception is the waterline, which takes an amber rim: the river is the warm axis of the scheme and
+// a cold rim on it would cut it out of the picture it belongs to.
+const NEON = ['rgba(64, 196, 255, 0.55)', 'rgba(120, 160, 255, 0.5)', 'rgba(56, 240, 226, 0.42)'];
+const NEON_WATER = 'rgba(255, 170, 76, 0.32)';
+const NEON_ROAD = 'rgba(72, 186, 255, 0.28)';
 
 /* --------------------------------------------------------------- 2.5D ---- */
 
@@ -867,14 +885,14 @@ function drawBuildings(ctx, W, H, S, buildings) {
         ctx.fillStyle = b.awning;
         ctx.fillRect(-w / 2, h / 2, w, Math.max(1.5, h * 0.3));
         if (b.lamp) {
-          ctx.fillStyle = 'rgba(12, 24, 54, 0.7)';
+          ctx.fillStyle = 'rgba(8, 20, 48, 0.72)';
           ctx.fillRect(-w * 0.1, h / 2 + h * 0.34, Math.max(1.5, w * 0.2), Math.max(1.5, h * 0.16));
         }
       }
 
       if (b.kind === 'cafe') {
         // Parasols on the forecourt. Circles, from above, in a rough arc.
-        ctx.fillStyle = '#0d121b';
+        ctx.fillStyle = '#0a1220';
         ctx.beginPath();
         for (let i = 0; i < b.parasols; i += 1) {
           const px = lerp(-w * 0.45, w * 0.45, i / (b.parasols - 1));
@@ -888,7 +906,7 @@ function drawBuildings(ctx, W, H, S, buildings) {
 
       if (b.kind === 'restaurant') {
         // A terrace: a paler slab with tables on it.
-        ctx.fillStyle = 'rgba(10, 13, 22, 0.6)';
+        ctx.fillStyle = 'rgba(6, 11, 22, 0.6)';
         ctx.fillRect(-w * 0.55, h / 2, w * 1.1, h * 0.5);
         ctx.fillStyle = '#bda878';
         ctx.beginPath();

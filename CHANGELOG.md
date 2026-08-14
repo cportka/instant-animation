@@ -153,19 +153,37 @@ grow, draw out, thin away and are replaced by masses welling up through them.
   arbitrary angles. A hedge line does say *farmed*, but a straight one bounding nothing is a scratch
   on the picture, and once the ground had rocks and scrub and reeds on it those nine lines were the
   only thing left in frame that nothing in nature would have made.
-- **A neon rim, on the edges that catch.** Roof outlines, parcel boundaries, the kerb and the water's
-  edge, in three colours alternating so the town does not hum on one note — all three inside the
-  violet-to-amber span the rest of the palette occupies, because a rim in a hue the scene does not
-  otherwise contain reads as a sticker. It is a *rim*, not an outline: thin, semi-transparent, and
-  only ever on the boundary of something already there, so it reads as an edge catching light rather
-  than a border drawn round a shape. The difference between the two is about thirty percent of alpha.
+- **A neon rim, on the edges that catch.** Roof outlines, parcel boundaries and the kerb in three
+  blues — azure, periwinkle, cyan-teal — alternating so the town does not hum on one note, and the
+  water's edge in amber because the river is the warm axis of the scheme and a cold rim would cut it
+  out of the picture it belongs to. It is a *rim*, not an outline: thin, semi-transparent, and only
+  ever on the boundary of something already there, so it reads as an edge catching light rather than
+  a border drawn round a shape. The difference between the two is about thirty percent of alpha.
 - **The town below** (`site/scenes/above-the-fog/town.js`) is a **photo negative**: hues at their
   complements, so the water is the lightest thing on the ground, the roads the darkest, and the
-  vegetation violet. A glimpse reads as somewhere that is not quite a place rather than as a place
+  vegetation blue. A glimpse reads as somewhere that is not quite a place rather than as a place
   lit differently, and the value *structure* survives the flip intact — everything that was
   distinguishable by brightness still is, just the other way up. It is built out of **value**, not
   detail, because it is only ever glimpsed: drop a gap anywhere and the shapes have to read in the
   second before it closes.
+
+  **The scheme is one cool family against one warm axis.** Everything growing or built is blue — four
+  steps of it in the grass, a lighter blue in the canopy, blue-grey in the rock and the roofs, and a
+  blue neon rim on the edges that catch — and the two things that are *not* are the river and the
+  roads, which run amber and a warm near-black. That is what a peek-a-boo needs: a field of one hue
+  with a seam of its opposite through it, so the river reads as the river the instant it appears
+  rather than as a lighter bit of ground.
+
+  The ground was **violet** for several rounds, and violet is the wrong choice here for a reason that
+  only shows up once everything else is in place: it sits half-way between the blue of the weather
+  and the warm of the fire, so it argued with both. The roads went with it — they were a cold
+  grey-teal, and at that value a hue barely registers as a hue, but a cold grey sitting in a coloured
+  field is the one neutral that reads as *dirty*. Warm near-black instead, on the river's side of the
+  scheme. And the neon went blue: azure, periwinkle and a cyan-teal. Blue neon on blue ground sounds
+  like it should vanish and does the opposite, because a rim far more saturated and slightly brighter
+  than what it sits on reads as *the same material lit* rather than as a different object outlined,
+  which is exactly what neon is. The waterline keeps an amber rim, because the river is the warm axis
+  and a cold rim would cut it out of the picture it belongs to.
 
   It is deliberately **not** a literal `255 - c` inversion any more, and it was. The negative of a
   de-saturated photograph is another de-saturated photograph — everything landed between about 130
@@ -173,7 +191,7 @@ grow, draw out, thin away and are replaced by masses welling up through them.
   a fist that is nothing at all. So: **contrast is value** — the ladder runs the whole way, roads
   near black at about 14 and the river the brightest thing on the ground, because brightness is the
   only thing that survives being seen for a second through a hole. And **off-ness is hue** — the
-  complements are taken at real chroma instead of pulled back toward grey, giving violet grass, amber
+  complements are taken at real chroma instead of pulled back toward grey, giving blue grass, amber
   water, teal and slate roofs, jewel-toned awnings, and a *dark* glitter crawling downstream on a
   bright river. What stops it becoming a cartoon is that none of it is allowed to be **lit**: every
   colour down there is pigment, sitting still, and the neon in `lights.js` stays the only thing in
@@ -329,8 +347,19 @@ grow, draw out, thin away and are replaced by masses welling up through them.
   mass in the frame, which puts the hierarchy the wrong way up. A fire is a steady thing you keep
   noticing; a firework is an event.
 
+  **A flame is a tapering stack of rows** — widest at the base, narrowing as it goes, leaning a little
+  further downwind with every row, hottest at the bottom and cooling to red at the tip, rebuilt on the
+  same held twelve-frame clock the soft lobes under it run on so both halves of a fire gutter together
+  instead of beating against each other. Three to five fills each. It is drawn a second time over the
+  fog with the cloud eating chunks, exactly as a burst is, because a fire seen through weather should
+  come apart the way a firework does or the two stop looking like they are in the same air. Before
+  this the fires were soft lobes with a scatter of dithered specks over them, and the specks were what
+  you actually saw: three or four loose pixels with no shape at all, indistinguishable from the
+  burnt-out tail of a firework. The lean is kept small — a flame that leans a full chunk per row is a
+  flame lying on its side, and twelve of those read as streaks.
+
   A fire's light in the cloud is a **3:1 smear along the wind at a very low alpha, with dithered
-  chunks laid down it** — not the soft round mass it was. Firelight genuinely does diffuse through
+  smoke above it** — not the soft round mass it was. Firelight genuinely does diffuse through
   cloud, so refusing it any softness at all does not remove the bubble; tried on its own, a tight
   dither is a tidy little pile of squares. What made the old one a bubble was that it was round,
   bright, blue-green and on screen continuously. Long, warm, faint and leaning is a different object,
@@ -345,11 +374,16 @@ grow, draw out, thin away and are replaced by masses welling up through them.
   something rather than standing in a field. They are the one thing in the file that is an object
   rather than a light, so they composite normally, under everything additive.
 
-  A person is a **standing figure**, not a dot: a shadow thrown on the ground away from the lean, a
-  body stroked from the feet up to the head the same way a tree's trunk is, a head at the top, a
-  highlight on it, and for a third of them a carried light — since the people setting the fires ought
-  to have arrived with something burning in hand. Five passes, five fills for the whole crowd,
-  because every pass is one path.
+  A person is a **head and a pair of shoulders**, which from directly above is all a person is. A
+  shadow thrown away from the lean, a torso stroked from the feet up — short, and as wide as it is
+  long, so it is a mass — then shoulders as two overlapping discs set *across* the lean, then a head
+  smaller than the shoulders, a highlight on it, and for a third of them a carried light. Six passes,
+  six fills for the whole crowd, because every pass is one path and two discs side by side is the
+  cheapest thing that reads as wider-than-deep without a transform.
+
+  Before that it was a full-height stroke a pixel and a half wide with a ball on top, which is a
+  matchstick — and the head being *smaller* than the shoulders is the detail that fixes it. That is
+  the same mistake, at a hundredth of the size, that the angel took two goes to stop making.
 
   They lean on the same radial projection the buildings and the trees do, so a figure at the corner
   of the frame shows you its whole height and one in the middle shows you the top of its head. That

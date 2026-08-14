@@ -366,39 +366,73 @@ export function drawCrowd(ctx, W, H, t, lights) {
   // buildings and the trees about which way up is.
   const foot = [];
   const head = [];
+  // The unit vector each figure leans along, and the one across it. A person seen from above is
+  // mostly **shoulders**, and shoulders run across the way you are leaning, not along it.
+  const across = [];
   for (const p of lights.people) {
     const [bx, by] = at(p);
+    const hx = leanX(bx, W, PERSON_LIFT);
+    const hy = leanY(by, H, PERSON_LIFT);
     foot.push(bx, by);
-    head.push(leanX(bx, W, PERSON_LIFT), leanY(by, H, PERSON_LIFT));
+    head.push(hx, hy);
+    const dx = hx - bx;
+    const dy = hy - by;
+    const d = Math.hypot(dx, dy) || 1;
+    across.push(-dy / d, dx / d);
   }
 
-  // Shadows, opposite the lean.
-  ctx.fillStyle = 'rgba(8, 5, 14, 0.46)';
+  // Shadows, opposite the lean, stretched a little across.
+  ctx.fillStyle = 'rgba(4, 6, 16, 0.5)';
   ctx.beginPath();
   for (let i = 0; i < foot.length; i += 2) {
     const sx = leanX(foot[i], W, -PERSON_LIFT * 0.85);
     const sy = leanY(foot[i + 1], H, -PERSON_LIFT * 0.85);
-    ctx.moveTo(sx + r * 1.5, sy);
-    ctx.arc(sx, sy, r * 1.5, 0, TAU);
+    for (const s of [-0.45, 0.45]) {
+      const px = sx + across[i] * r * s;
+      const py = sy + across[i + 1] * r * s;
+      ctx.moveTo(px + r * 1.25, py);
+      ctx.arc(px, py, r * 1.25, 0, TAU);
+    }
   }
   ctx.fill();
 
-  // The body: foot to head, one stroke each, all in one path.
+  // The torso: foot to shoulder, short and **thick** — as wide as it is long, so it is a mass and
+  // not a line. This was a full-height stroke a pixel and a half wide, which is a matchstick, and
+  // putting a ball on top of a matchstick gets you a matchstick with a ball on top.
   ctx.strokeStyle = FIGURE;
   ctx.lineCap = 'round';
-  ctx.lineWidth = r * 1.15;
+  ctx.lineWidth = r * 1.5;
   ctx.beginPath();
   for (let i = 0; i < foot.length; i += 2) {
     ctx.moveTo(foot[i], foot[i + 1]);
-    ctx.lineTo(head[i], head[i + 1]);
+    ctx.lineTo(foot[i] + (head[i] - foot[i]) * 0.62, foot[i + 1] + (head[i + 1] - foot[i + 1]) * 0.62);
   }
   ctx.stroke();
 
-  // Head, and the highlight on it that carries the read at this size.
+  // Shoulders: two overlapping discs set across the lean. Two arcs and no transform, so the whole
+  // crowd's shoulders are still one path — and two discs side by side is the cheapest thing that
+  // reads as *wider than it is deep*, which from directly above is the only thing a body is.
+  ctx.fillStyle = FIGURE;
+  ctx.beginPath();
+  for (let i = 0; i < head.length; i += 2) {
+    const sx = foot[i] + (head[i] - foot[i]) * 0.66;
+    const sy = foot[i + 1] + (head[i + 1] - foot[i + 1]) * 0.66;
+    for (const s of [-0.5, 0.5]) {
+      const px = sx + across[i] * r * s;
+      const py = sy + across[i + 1] * r * s;
+      ctx.moveTo(px + r * 0.8, py);
+      ctx.arc(px, py, r * 0.8, 0, TAU);
+    }
+  }
+  ctx.fill();
+
+  // Head, and the highlight on it that carries the read at this size. The head is *smaller* than the
+  // shoulders, which is the detail that makes the silhouette a person rather than a bowling pin —
+  // the same mistake, at a hundredth of the size, that the angel took two goes to stop making.
   for (const [style, scale, dx, dy, only] of [
-    [FIGURE, 0.92, 0, 0, null],
-    [FIGURE_LIT, 0.44, -r * 0.3, -r * 0.3, null],
-    [TORCH, 0.42, r * 0.85, r * 0.6, 3],
+    [FIGURE, 0.72, 0, 0, null],
+    [FIGURE_LIT, 0.4, -r * 0.22, -r * 0.22, null],
+    [TORCH, 0.4, r * 0.95, r * 0.7, 3],
   ]) {
     ctx.fillStyle = style;
     ctx.beginPath();
@@ -491,6 +525,9 @@ function drawFire(ctx, W, H, S, t, fire, life) {
     wind.angle, core, clamp((0.5 + flare * 0.35) * life, 0, 1), 0.34, 0,
   );
 
+  // The flame itself, in chunks, on the same grid the fireworks use.
+  drawFlame(ctx, S, t, fire, x, y, r, wind, flare, life, burstPixel(S), 1, null);
+
   // Embers, only while it is up. They go where the air goes, which from here is sideways.
   if (flare > 0.12) {
     ctx.strokeStyle = rgba(core, clamp(flare * 0.5 * life, 0, 1));
@@ -508,6 +545,59 @@ function drawFire(ctx, W, H, S, t, fire, life) {
     }
     ctx.stroke();
   }
+}
+
+/**
+ * A fire's flame, as pixel art.
+ *
+ * The fires were soft lobes with a scatter of dithered specks over them, and the specks were what
+ * you actually saw — a fire read as three or four loose pixels with no shape to them at all, which
+ * is why they were indistinguishable from the burnt-out tail of a firework.
+ *
+ * A flame is a **tapering stack of rows**, widest at the base and narrowing as it goes, leaning
+ * downwind further with every row, hottest at the bottom and cooling to red at the tip. Rebuilt on a
+ * held clock at twelve frames a second so it gutters rather than eases — the same clock the soft
+ * lobes underneath already run on, so the two halves of a fire flicker together instead of beating
+ * against each other. Batched one path per ramp step, so a whole flame is five fills at most and
+ * usually three.
+ */
+function drawFlame(ctx, S, t, fire, x, y, r, wind, flare, life, px, strength, veil) {
+  const beat = Math.floor(t * 12) / 12;
+  // Between three and seven rows tall, by how hard it is burning.
+  const rows = Math.max(3, Math.round((r / px) * (1.6 + flare * 1.4) * life));
+  const wide = Math.max(1, Math.round((r / px) * 0.85));
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  for (let step = 0; step < TRAIL; step += 1) {
+    let any = false;
+    ctx.beginPath();
+    for (let k = 0; k < rows; k += 1) {
+      const up = k / rows;
+      // Cooling upward, and the whole flame cools as it dies back.
+      if (Math.min(TRAIL - 1, Math.round(up * (TRAIL - 1) + (1 - life) * 1.5)) !== step) continue;
+      // Narrowing, with a chunk of jitter per row so no two rows agree and the edge is ragged.
+      const jitter = hash2(fire.phase + k * 3.7, beat);
+      const half = Math.max(0, Math.round(wide * (1 - up * 0.85) * (0.6 + jitter * 0.7)));
+      // Leaning further downwind the higher it goes: the tip of a flame is downwind of its base. Only
+      // a little, though — a flame that leans a full chunk per row is a flame lying on its side, and
+      // twelve of those read as streaks rather than as fires.
+      const lean = k * px * (0.16 + gustAt(t) * 0.22);
+      const cx = x + wind.x * lean + (hash2(fire.phase + k * 1.9, beat + 5) - 0.5) * px;
+      const cy = y + wind.y * lean - k * px * 0.12;
+      for (let c = -half; c <= half; c += 1) {
+        const bx = cx + wind.y * c * px;
+        const by = cy - wind.x * c * px;
+        if (veil && hash2(bx * 0.021, by * 0.019) > veil(bx, by)) continue;
+        chunk(ctx, bx - px / 2, by - px / 2, px, px, px);
+        any = true;
+      }
+    }
+    if (!any) continue;
+    ctx.fillStyle = rgba(EMBER[step], clamp((0.95 - step * 0.05) * strength, 0, 1));
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 /**
@@ -680,16 +770,19 @@ export function drawLightBloom(ctx, W, H, t, lights) {
       r * (5.2 + flare * 4) * (0.85 + flicker * 0.3), r * (1.7 + flare * 1.3) * (0.85 + flicker * 0.3),
       wind.angle, body, clamp(power * 0.13, 0, 1), 0.08, 0.4, fire.phase + t * 0.5,
     );
-    // ...and chunks in it, so the plume has the same grain as everything else that burns.
-    for (let i = 0; i < 2; i += 1) {
-      const reach = r * (1.1 + i * 2.2) * (1 + flare * 0.7);
-      ditherGlow(
-        ctx,
-        fire.x * W + wind.x * reach, fire.y * H + wind.y * reach,
-        r * (1.5 - i * 0.4) * (1 + flare * 0.5),
-        rgba(body, 0.5), power * (0.8 - i * 0.3), px, 1, 2.6,
-      );
-    }
+    // Smoke above it, dithered.
+    ditherGlow(
+      ctx,
+      fire.x * W + wind.x * r * 2.4, fire.y * H + wind.y * r * 2.4,
+      r * 1.4 * (1 + flare * 0.5), rgba(body, 0.5), power * 0.55, px, 1, 2.6,
+    );
+    // ...and the flame again, chunk for chunk, with the cloud eating whichever chunks have a bank in
+    // front of them — exactly as a burst is treated. A fire seen through weather should come apart
+    // the same way a firework does, or the two of them stop looking like they are in the same air.
+    drawFlame(
+      ctx, S, t, fire, fire.x * W, fire.y * H, r,
+      wind, flare, life, px, 0.4, (cx, cy) => cloudDensity(cx, cy, S, t) ** 3.4,
+    );
   }
 
   for (const shell of shellsAt(lights.shows, t)) {
