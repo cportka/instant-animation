@@ -185,30 +185,60 @@ test('the arrows wear whichever scene is mounted', async () => {
   assert.match(app, /dataset\.chrome\s*=\s*scene\.meta\.chrome\s*\|\|\s*'neon'/, 'app.js must apply the scene chrome with a fallback');
 });
 
-test('the chevrons are invisible until they peek, once every ten seconds', () => {
+test('the chevrons flash once on arrival and never again', () => {
   const css = read('styles.css');
 
   // Invisible at rest: the animation is the page, and a control parked on top of it is chrome.
   const base = css.slice(css.indexOf('\n.nav {'), css.indexOf('.nav[hidden]'));
-  assert.match(base, /opacity:\s*0\s*;/, '.nav must sit at zero opacity between peeks');
+  assert.match(base, /opacity:\s*0\s*;/, '.nav must sit at zero opacity once it has introduced itself');
 
   for (const rule of ['.nav--down', '.nav--up']) {
     const block = css.slice(css.indexOf(rule), css.indexOf('}', css.indexOf(rule)));
-    assert.match(block, /peek\s+10s/, `${rule} must run the peek cycle on a ten-second period`);
+    const peek = block.match(/peek\s+([\d.]+)s[^,;]*/)?.[0];
+    assert.ok(peek, `${rule} must run the peek animation`);
+    // The whole point: it runs a fixed number of times, and that number is one. A control that
+    // resurfaces on a timer is a control that keeps interrupting.
+    assert.doesNotMatch(peek, /infinite/, `${rule} must not repeat its peek forever`);
+    assert.match(peek, /\s1$/, `${rule} must run the peek exactly once`);
   }
 
-  // Visible for about a second in the middle of the cycle, with a fade either side. Percentages
-  // are of ten seconds, so the held span is (last full - first full) / 10.
+  // Held visible for about a second, with a fade either side. Percentages are of the peek's own
+  // duration, which is read out of the rule rather than assumed.
+  const seconds = Number(css.match(/peek\s+([\d.]+)s/)[1]);
   const peek = css.slice(css.indexOf('@keyframes peek'));
-  const stops = [...peek.slice(0, peek.indexOf('\n}')).matchAll(/([\d.]+)%/g)].map((m) => Number(m[1]));
-  const opaque = [...peek.slice(0, peek.indexOf('\n}')).matchAll(/([\d.]+)%,?\s*\n\s*([\d.]+)%\s*\{\s*opacity:\s*var\(--nav-idle\)/g)];
-  assert.ok(opaque.length === 1, 'expected exactly one held-visible span in the peek cycle');
-  const held = (Number(opaque[0][2]) - Number(opaque[0][1])) / 100 * 10;
-  assert.ok(held > 0.8 && held < 1.3, `chevrons hold visible for ${held.toFixed(2)}s, expected ~1s`);
-  assert.ok(Math.max(...stops) === 100 && Math.min(...stops) === 0, 'peek must cover the whole cycle');
+  const body = peek.slice(0, peek.indexOf('\n}'));
+  const stops = [...body.matchAll(/([\d.]+)%/g)].map((m) => Number(m[1]));
+  const opaque = [...body.matchAll(/([\d.]+)%,?\s*\n\s*([\d.]+)%\s*\{\s*opacity:\s*var\(--nav-idle\)/g)];
+  assert.ok(opaque.length === 1, 'expected exactly one held-visible span in the peek');
+  const held = ((Number(opaque[0][2]) - Number(opaque[0][1])) / 100) * seconds;
+  assert.ok(held > 0.8 && held < 1.5, `chevrons hold visible for ${held.toFixed(2)}s, expected ~1s`);
+  assert.ok(Math.max(...stops) === 100 && Math.min(...stops) === 0, 'peek must cover its whole timeline');
+  // It has to be over quickly — this is an introduction, not an interlude.
+  assert.ok(seconds <= 4, `the peek runs for ${seconds}s; it should be done with well inside four`);
 
-  // Hover and focus have to override the cycle, or the control only answers on its own schedule.
+  // Hover and focus have to override it, or the control is unreachable for the rest of the visit.
   const hoverAt = css.indexOf('.nav:hover');
   const reach = css.slice(hoverAt, css.indexOf('}', hoverAt));
   assert.match(reach, /animation:\s*none/, 'hover/focus must cancel the peek so the opacity below wins');
+
+  // Every per-scene chrome override must keep `peek` in the same slot of the animation-name list.
+  // Reorder it and the browser matches animations by position, restarts it, and the chevrons flash
+  // again on every scene change — which is the exact behaviour this test exists to prevent.
+  for (const [, names] of css.matchAll(/animation-name:\s*([^;]+);/g)) {
+    const list = names.split(',').map((n) => n.trim());
+    assert.equal(list[1], 'peek', `animation-name "${names.trim()}" must keep peek second`);
+  }
+
+  // ...and any override that restates `animation-duration` must give the peek the same length as the
+  // base rule. It is a positional list, so the second value *is* the peek's duration — this is how a
+  // one-second introduction silently became four and a half, and on the chrome the first scene wears,
+  // which meant the correct timing was the one nobody ever saw.
+  for (const [, durations] of css.matchAll(/animation-duration:\s*([^;]+);/g)) {
+    const list = durations.split(',').map((d) => d.trim());
+    assert.equal(
+      list[1],
+      `${seconds}s`,
+      `animation-duration "${durations.trim()}" gives the peek ${list[1]}, not the base rule's ${seconds}s`,
+    );
+  }
 });

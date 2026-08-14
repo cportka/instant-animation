@@ -856,12 +856,24 @@ when there is somewhere to go — so a single-animation gallery is nothing but t
   arrival like any other, so it plays the **incoming** scene's own channel change — verified by
   driving the built page in a browser, not by reading the code.
 
-And they are **invisible almost all of the time**: every ten seconds they fade up, hold for a
-second, and fade away again. A control parked permanently on top of the picture is chrome however
-soft it is, and the page's one rule is that the animation *is* the page. Reaching for one — hover
-or keyboard focus — cancels the cycle and brings it back immediately, because a control that only
-answers on its own schedule is a puzzle rather than an interface. Under `prefers-reduced-motion`
-they simply stay visible and still.
+And they are **invisible except once, on arrival**: a second or so after the page loads they fade
+up, hold for a beat, and are then never seen again unless you reach for them. A control parked
+permanently on top of the picture is chrome however soft it is, and the page's one rule is that the
+animation *is* the page — but a control that resurfaces every ten seconds *forever*, which is what
+this used to do, is worse in a different way. It is a blink you cannot help tracking, and once you
+know the gallery is there you do not need reminding of it. Hover and keyboard focus cancel the
+animation and bring the chevron straight back, which is what makes once enough. Under
+`prefers-reduced-motion` they simply stay visible and still.
+
+Two things about it are worth knowing, because both were wrong first. The `peek` animation has to
+stay in the **same slot of the `animation-name` list** in every per-scene chrome override, because
+the browser matches animations by position: move it and it restarts, and the chevrons flash again on
+every scene change. And any override that restates `animation-duration` has to restate the peek's
+duration too, for the same positional reason — one of them still carried the `10s` from when the
+peek was a repeating cycle, which stretched a one-second introduction into four and a half. It was
+on the vapour chrome, which is what the *first* scene wears, so the correct timing was the one
+nobody ever saw. Both are asserted now, and the fix was found by sampling the computed opacity in a
+real browser twice a second rather than by reading the stylesheet.
 
 **The arrows wear whichever scene is mounted** (`meta.chrome`). Each button carries every glyph the
 gallery knows how to draw and shows the one the scene asks for: *Asleep Among the Stars* gets the

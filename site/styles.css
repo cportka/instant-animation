@@ -46,7 +46,7 @@ body {
   background: none;
   color: #d8c6ff;
   /* Out of sight by default. The animation is the page; a control parked permanently on top of it
-     is chrome, however soft. `peek` below brings them back for a second at a time. */
+     is chrome, however soft. `peek` below shows them once, on arrival, and never again. */
   opacity: 0;
   cursor: pointer;
   transition: opacity 300ms ease, transform 300ms ease;
@@ -134,16 +134,22 @@ body {
   filter: drop-shadow(0 0 5px rgba(9, 11, 13, 0.9)) drop-shadow(0 1px 2px rgba(9, 11, 13, 0.7));
 }
 
-/* Two animations on each: the float they always had, and the ten-second peek. Both chevrons share
-   one `peek` timeline so they surface together rather than taking turns. */
+/* Two animations on each: the float they always had, which never stops, and `peek`, which runs
+   exactly **once**. The chevrons introduce themselves a moment after the page arrives and are then
+   never seen again unless you reach for them.
+
+   A control that reappears on a timer is a control that keeps interrupting. The animation is the
+   page; something surfacing out of it every ten seconds, forever, is a blink you cannot help
+   tracking — and once you know the gallery is there you do not need reminding of it. Hover, focus
+   and the keyboard all still reach them, which is what makes once enough. */
 .nav--down {
   bottom: calc(1.75rem + env(safe-area-inset-bottom, 0px));
-  animation: float-down 3.4s ease-in-out infinite, peek 10s ease-in-out infinite;
+  animation: float-down 3.4s ease-in-out infinite, peek 3s ease-in-out 1;
 }
 
 .nav--up {
   top: calc(1.75rem + env(safe-area-inset-top, 0px));
-  animation: float-up 3.4s ease-in-out infinite, peek 10s ease-in-out infinite;
+  animation: float-up 3.4s ease-in-out infinite, peek 3s ease-in-out 1;
 }
 
 /* Reaching for one always brings it back, whatever the cycle is doing — an invisible control that
@@ -187,7 +193,7 @@ body {
 
 /* The pixel chrome hops instead of gliding: two states, four pixels apart, no interpolation. A
    sprite that slides smoothly through fractions of a pixel is the one tell that would undo the
-   whole style — only the animation-name list is overridden, so the peek cycle carries on. */
+   whole style — only the animation-name list is overridden, so the one-shot peek is untouched. */
 .nav[data-chrome='pixel'].nav--down {
   animation-name: float-down-pixel, peek;
 }
@@ -218,17 +224,20 @@ body {
   }
 }
 
-/* The vapour chrome drifts rather than bobs: sideways as much as up, and slow enough to be the
-   same wind the fog is in. Only the names and the float's duration are overridden, so the peek
-   cycle keeps its ten seconds. */
+/* The vapour chrome drifts rather than bobs: sideways as much as up, and slow enough to be the same
+   wind the fog is in. It has to restate `peek`'s duration alongside its own, because
+   `animation-duration` is a list matched by position — give it one value and the peek inherits the
+   float's timing. That is exactly how a one-second introduction became a four-and-a-half-second one:
+   the second slot still said 10s from when the peek was a repeating cycle, and since this is the
+   chrome the first scene wears, it was the only timing anybody ever saw. */
 .nav[data-chrome='vapour'].nav--down {
   animation-name: drift-down-vapour, peek;
-  animation-duration: 7.6s, 10s;
+  animation-duration: 7.6s, 3s;
 }
 
 .nav[data-chrome='vapour'].nav--up {
   animation-name: drift-up-vapour, peek;
-  animation-duration: 7.6s, 10s;
+  animation-duration: 7.6s, 3s;
 }
 
 @keyframes drift-down-vapour {
@@ -254,16 +263,18 @@ body {
 /* Hidden for most of ten seconds, then up for one. The fades either side are a third of a second
    each — long enough not to blink, short enough that the second at full strength is the part you
    notice. Percentages are of the 10s cycle: 8.0s dark, in by 8.35s, held to 9.35s, gone by 9.7s. */
+/* One flash, on arrival. Percentages are of three seconds: invisible for a quarter of a second, up
+   over the next third, held for a little over a second, then gone for good. */
 @keyframes peek {
   0%,
-  80% {
+  8% {
     opacity: 0;
   }
-  83.5%,
-  93.5% {
+  20%,
+  58% {
     opacity: var(--nav-idle);
   }
-  97%,
+  82%,
   100% {
     opacity: 0;
   }
