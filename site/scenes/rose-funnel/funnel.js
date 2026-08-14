@@ -55,6 +55,45 @@ const RISE = 2.2;
 const SPEED = 0.36;
 
 /**
+ * The storm's own weather — how hard it is blowing, and where it is standing.
+ *
+ * A tornado that holds one width, one speed and one place is a decoration. This one has a life: it
+ * swells into a wedge and thins back to a rope, whips and slackens, and **walks across the frame**,
+ * so it comes down on the temple, grinds at it, and drags away again. None of that is scripted —
+ * every one of them is a sum of slow sines on unrelated periods, so the storm never repeats and
+ * never arrives anywhere on a schedule you can feel.
+ *
+ * The march is the one that matters most, because everything else in the scene reads it. The temple's
+ * bays ask where the storm was when their round turned over, so a storm that is *here* takes the
+ * eaves off and a storm that has walked away takes almost nothing — the destruction rate is not a
+ * constant with a wobble on it, it is the weather.
+ */
+const GUSTS = [
+  { amp: 0.6, rate: 0.053, phase: 0 },
+  { amp: 0.4, rate: 0.023, phase: 1.1 },
+];
+const CALM = 0.7;
+const GUST = 0.3;
+
+/** 0.4 in the lulls, 1 at its worst. Never zero: a vortex that stops is a column of dust. */
+const powerAt = (t) => CALM + GUST * GUSTS.reduce((sum, g) => sum + g.amp * Math.sin(t * g.rate + g.phase), 0);
+
+/**
+ * ...and the angle it has turned through by `t`, which is the **integral** of that speed and not the
+ * speed multiplied by the clock.
+ *
+ * `t * powerAt(t)` looks like the same quantity and is not: differentiate it and there is a
+ * `t * dpower/dt` term that grows without bound, so the vortex visibly runs *backwards* every time
+ * the wind eases. The closed form below is exact, costs the same two cosines, and turns one way
+ * forever because `powerAt` never reaches zero.
+ */
+const turnedBy = (t) => CALM * t
+  - GUST * GUSTS.reduce((sum, g) => sum + (g.amp / g.rate) * Math.cos(t * g.rate + g.phase), 0);
+
+/** Where the storm is standing, -1 to 1 across the frame. Long, unrelated periods; no schedule. */
+const marchAt = (t) => Math.sin(t * 0.041) * 0.62 + Math.sin(t * 0.017 + 2.3) * 0.38;
+
+/**
  * The funnel's axis at a given height — it snakes.
  *
  * A tornado that stands upright is a traffic cone. The axis leans, and the lean *itself* drifts on
@@ -67,7 +106,9 @@ const SPEED = 0.36;
 function axisAt(up, t, W) {
   const lean = Math.sin(t * 0.19) * 0.5 + Math.sin(t * 0.073 + 1.9) * 0.5;
   const snake = noise2(up * 2.4, t * 0.28) - 0.5;
-  return W * (0.5 + lean * 0.07 * up ** 1.4 + snake * 0.11 * up ** 0.8 + Math.sin(t * 0.11) * 0.012);
+  // The march moves the whole storm; the lean and the snake bend it about wherever that has put it.
+  return W * (0.5 + marchAt(t) * 0.3
+    + lean * 0.07 * up ** 1.4 + snake * 0.11 * up ** 0.8 + Math.sin(t * 0.11) * 0.012);
 }
 
 /**
@@ -81,7 +122,8 @@ function radiusAt(up, t, S, plan) {
   const flare = plan.base + (plan.mouth - plan.base) * up ** 0.62;
   // A slow bulge travelling up the funnel, so the profile is never the same twice.
   const swell = 1 + 0.13 * Math.sin(up * 5.2 - t * 0.8) + 0.07 * Math.sin(up * 11 - t * 1.7);
-  return S * flare * swell;
+  // ...and the storm's own strength on top of that: a rope at 0.73 of its width, a wedge at 1.2.
+  return S * flare * swell * (0.42 + powerAt(t) * 0.78);
 }
 
 export function planFunnel(rng) {
@@ -142,7 +184,7 @@ export function drawFunnel(ctx, W, H, t, plan) {
     const r = radiusAt(up, t, R, plan);
     const cols = Math.max(1, Math.round(r / px));
     // The whole column of the funnel turns, and lower rows turn faster.
-    const turn = t * SPEED * spinAt(up);
+    const turn = turnedBy(t) * SPEED * spinAt(up);
 
     for (let c = -cols; c <= cols; c += 1) {
       const u = c / cols;

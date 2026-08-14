@@ -12,7 +12,7 @@ import { clamp, rgba } from '../../lib/draw.js';
 import { fbm, hash2, noise2 } from '../../effects/field.js';
 import { chunk, ditherRamp } from '../../effects/pixel.js';
 import { CLOUD, GROUND, backPixel } from './layout.js';
-import { EARTH, SKY, SPIN } from './palette.js';
+import { EARTH, JADE, LAPIS, SKY, SPIN } from './palette.js';
 
 export function planSky(rng) {
   return {
@@ -26,6 +26,9 @@ export function planSky(rng) {
       // Steps 3–5, never the last: the near-black is the ground's colour and the sky's, and a cloud
       // wearing it is a hole in the frame rather than a mass in it.
       step: 3 + Math.floor(rng.range(0, 3)),
+      // Half the wall cloud is lit by the storm and half is the night behind it. Two ramps in one
+      // mass is what turns a row of lumps into weather with a far side.
+      cold: rng.next() < 0.45,
       phase: rng.range(0, 30),
     })),
     // Rain shafts hanging out of the storm, well behind the funnel.
@@ -98,10 +101,11 @@ function drawShafts(ctx, W, H, t, sky, px, horizonY) {
  * between two of them. The roof is the mass; the lobes are its underside.
  */
 function drawWall(ctx, W, H, t, sky, px) {
-  ctx.fillStyle = rgba(SPIN[5], 1);
+  ctx.fillStyle = rgba(LAPIS[6], 1);
   ctx.fillRect(0, 0, W, H * CLOUD);
 
   const bucket = SPIN.map(() => []);
+  const cold = SPIN.map(() => []);
   for (const lobe of sky.wall) {
     const angle = t * 0.16 * lobe.spin + lobe.phase;
     const cx = W * (0.5 + lobe.at * 0.55) + Math.cos(angle) * W * 0.05;
@@ -118,18 +122,20 @@ function drawWall(ctx, W, H, t, sky, px) {
         // falls off, the colour does not.
         const churn = fbm(c * 0.26 + lobe.phase, r * 0.38 - t * 0.25, 2);
         if (churn < d * 0.9) continue;
-        bucket[clamp(lobe.step + Math.round(d * 1.6), 0, SPIN.length - 1)].push(cx + c * px, cy + r * px);
+        const step = clamp(lobe.step + Math.round(d * 1.6), 0, SPIN.length - 1);
+        (lobe.cold ? cold : bucket)[step].push(cx + c * px, cy + r * px);
       }
     }
   }
 
-  for (let step = 0; step < SPIN.length; step += 1) {
-    const cells = bucket[step];
-    if (!cells.length) continue;
-    ctx.fillStyle = rgba(SPIN[step], 1);
-    ctx.beginPath();
-    for (let i = 0; i < cells.length; i += 2) chunk(ctx, cells[i], cells[i + 1], px, px, px);
-    ctx.fill();
+  for (const [ramp, cells] of [[LAPIS, cold], [SPIN, bucket]]) {
+    for (let step = 0; step < cells.length; step += 1) {
+      if (!cells[step].length) continue;
+      ctx.fillStyle = rgba(ramp[Math.min(step, ramp.length - 1)], 1);
+      ctx.beginPath();
+      for (let i = 0; i < cells[step].length; i += 2) chunk(ctx, cells[step][i], cells[step][i + 1], px, px, px);
+      ctx.fill();
+    }
   }
 }
 
@@ -142,8 +148,8 @@ function drawGround(ctx, W, H, t, px, horizonY) {
   // rushing past. It is the only thing telling you the camera is not standing still.
   const cols = Math.ceil(W / px) + 1;
   const rows = Math.ceil((H - horizonY) / px);
-  for (let i = 0; i < 2; i += 1) {
-    ctx.fillStyle = EARTH[i];
+  for (let i = 0; i < 3; i += 1) {
+    ctx.fillStyle = i === 2 ? rgba(JADE[6], 1) : EARTH[i];
     ctx.beginPath();
     for (let r = 0; r < rows; r += 1) {
       // Nearer rows scroll faster, which is the cheapest parallax there is.
@@ -153,7 +159,7 @@ function drawGround(ctx, W, H, t, px, horizonY) {
         // patches. Sampled per chunk, the same noise gives every cell an independent value and the
         // result is television snow — which is a texture, but not a landscape.
         const n = fbm(c * 0.22 + t * speed * 0.12, r * 0.35 + i * 9.1, 2);
-        if (Math.floor(n * 2.999) !== i) continue;
+        if (Math.floor(n * 3.999) !== i) continue;
         chunk(ctx, c * px, horizonY + r * px, px, px, px);
       }
     }
