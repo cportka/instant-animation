@@ -47,7 +47,7 @@ let wheelTravel = 0;
 
 /* -------------------------------------------------------------- scene -- */
 
-function show(index, { direction, updateHash = true, variant } = {}) {
+function show(index, { direction, updateHash = true, variant, dissolving = false } = {}) {
   const next = wrapIndex(index, scenes.length);
   const scene = scenes[next];
   const variants = scene.meta.variants;
@@ -82,7 +82,11 @@ function show(index, { direction, updateHash = true, variant } = {}) {
   // thing this page is trying not to be. Scenes that say nothing get the original chevron.
   for (const nav of [navUp, navDown]) nav.dataset.chrome = scene.meta.chrome || 'neon';
 
-  stage.mount(scene, { direction, variant: variants?.[pick] });
+  // Moving between animations pushes; moving between compositions of one dissolves in place. They
+  // are different events and they have to look different — a push says "you have travelled" about a
+  // picture that has not moved anywhere.
+  if (dissolving) stage.recompose(scene, variants?.[pick]);
+  else stage.mount(scene, { direction, variant: variants?.[pick] });
 }
 
 /** Hold off further input until the channel change has finished, so it can't be cut in half. */
@@ -103,9 +107,9 @@ function travel(delta) {
 /**
  * Walk the compositions of the animation already on screen — the second ring, inside the first.
  *
- * It shares the gallery's lock rather than getting a shorter one of its own. A composition change is
- * a channel change like any other, and letting a tap interrupt one mid-flight drops the outgoing
- * scene and produces a visible jump; a second of not being able to tap is the cheaper of the two.
+ * It shares the gallery's lock rather than getting a shorter one of its own: letting a tap land
+ * mid-change drops whatever is in flight and produces a visible jump, and a second of not being able
+ * to tap is the cheaper of the two.
  */
 const hasCompositions = () => (scenes[current]?.meta.variants?.length ?? 0) > 1;
 
@@ -113,7 +117,7 @@ function recompose(delta) {
   const variants = scenes[current]?.meta.variants;
   if (locked || !variants || variants.length < 2) return;
   lock();
-  show(current, { direction: delta > 0 ? 'down' : 'up', variant: shown + delta });
+  show(current, { variant: shown + delta, dissolving: true });
 }
 
 /* -------------------------------------------------------------- input -- */

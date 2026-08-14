@@ -2,7 +2,7 @@
 
 An instant animation generator. Animate anything you can describe.
 
-**Version:** 3.2.0 · **Live:** https://cportka.github.io/instant-animation/
+**Version:** 3.3.0 · **Live:** https://cportka.github.io/instant-animation/
 
 Describe something. It becomes a hand-drawn canvas animation and joins the gallery. There is no
 text on the site — the animation *is* the page. The only chrome is a soft chevron floating at each
@@ -20,8 +20,10 @@ always the one belonging to the animation you are arriving *at*, including on th
 **Tap the picture** and some animations re-arrange themselves. An animation may hold more than one
 *composition* of itself — the same artwork, put together a different way — so the gallery has two
 axes, and both are rings: up and down moves between animations, left and right (or a tap) moves
-between arrangements of the one you are looking at. The clock carries across, so what you see is one
-picture being re-composed rather than two pictures. Compositions have their own addresses —
+between arrangements of the one you are looking at. It **dissolves in place** rather than pushing —
+travelling between animations is going somewhere, re-arranging one is not — and the dissolve wears the
+scene the same way the channel change does. The clock carries across, so what you see is one picture
+being re-composed rather than two pictures. Compositions have their own addresses —
 `#grizzly-peak/into-the-dark` — and the first one writes no suffix, so every link keeps its meaning.
 
 | Animation | From the description |
@@ -56,6 +58,8 @@ site/
     pixel.js          the 16-bit grid: chunking, ordered Bayer dither, dithered glow
     field.js          noise and divergence-free flow, all pure functions of position and time
     volume.js         the soft volumetric lobe that fog, smoke and haze are built from
+    transitions.js    the channel change between animations, one per scene
+    dissolves.js      the dissolve between compositions of one animation, one per scene
 
   scenes/index.js     the registry, newest first
   scenes/<id>/        one folder per animation; its name is the scene id, index.js is

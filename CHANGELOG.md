@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [3.2.0] - 2026-08-14
+## [3.3.0] - 2026-08-14
 
 **"Above the Fog" is finished, and a fourth animation begins.** That is the only thing a MAJOR bump
 means here — see `.claude/CLAUDE.md`.
@@ -44,6 +44,23 @@ are rings.
 - **Addresses gained a second half**, and the grammar moved to `lib/gallery.js` where it can be
   tested without a browser: `#<scene-id>/<composition-id>`, with the first composition writing no
   suffix at all — so every link already in the world still opens the picture it opened before.
+- **A composition change dissolves; it does not travel.** Moving between animations is a channel
+  change — two scenes pushed past each other and you arrive somewhere else. Moving between
+  arrangements of one animation is not going anywhere, so pushing it past a near-copy of itself says
+  *you have travelled* about a picture that has not moved. It now dissolves in place, and the style
+  belongs to the scene the same way the channel change does (`meta.dissolve`).
+- **The mechanism is that the outgoing arrangement is frozen once, and then rots.** The stage captures
+  the last frame into a scratch layer at the moment the change starts and never captures again, so a
+  dissolve costs *one* scene draw a frame where the channel change costs two — and what persists is a
+  genuinely stale photograph rather than a second live scene fading out, which would keep moving and
+  read as a cross-fade between two things instead of one of them going off.
+- **Grizzly Peak re-arranges by losing its keyframe.** An 8-bit datamosh: the macroblocks the decoder
+  still has get re-used and dragged along by motion vectors with nothing left to apply them to,
+  smearing in coherent slabs and stretching along the drift, until they give up and the new
+  arrangement is simply what was underneath. The two behaviours are **persistence** and **drift**, and
+  neither is re-rolled per frame — a block that is stale stays stale and travels in one direction for
+  as long as it lasts. Re-rolling either gives television static, which is a different artefact from a
+  different decade.
 - **Reachable without a pointer, and announced.** Left and right arrows walk the ring, swallowed only
   on animations that have one; the live region names the position and the gesture, which is the only
   way a tap-only affordance is discoverable without sight.

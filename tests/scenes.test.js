@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { scenes, findScene } from '../site/scenes/index.js';
 import { formatAddress, parseAddress, wrapIndex } from '../site/lib/gallery.js';
 import { TRANSITIONS, channelChange, makeChannelChange } from '../site/effects/transitions.js';
+import { DISSOLVES, dissolve } from '../site/effects/dissolves.js';
 import { createRng } from '../site/lib/rng.js';
 import { createRecordingContext } from './helpers/recording-context.mjs';
 
@@ -55,6 +56,52 @@ test('a scene with several compositions declares them properly', () => {
     // Variant ids are a public URL surface. Two the same and one of them is unreachable forever.
     assert.equal(new Set(ids).size, ids.length, `${meta.id}: duplicate variant ids: ${ids.join(', ')}`);
   }
+});
+
+test('a scene with compositions brings its own way of re-arranging', () => {
+  // The second change in the gallery, and it wears the scene for the same reason the first does. A
+  // scene that declares compositions but no dissolve would re-arrange itself with nothing at all —
+  // an instant cut, which is the one thing that reads as a bug rather than as an effect.
+  for (const { meta } of scenes) {
+    if (!meta.variants) continue;
+    assert.ok(meta.dissolve, `${meta.id}: has compositions but no meta.dissolve`);
+    assert.ok(DISSOLVES.includes(meta.dissolve), `${meta.id}: dissolve "${meta.dissolve}" is not implemented`);
+  }
+});
+
+test('every dissolve rots, cleanly and the same way twice', () => {
+  // A stand-in scratch layer: the dissolve reads the frozen frame and must not care that it is a
+  // stub, because in Node there is no canvas to have frozen.
+  const stale = { width: 1280, height: 720 };
+  const tape = { of: () => stale, source: stale, capture() {} };
+  const run = (kind, progress) => {
+    const rec = createRecordingContext({ width: 1280, height: 720 });
+    dissolve(kind, rec.ctx, 1280, 720, progress, 4.5, tape);
+    return rec;
+  };
+
+  const shapes = new Map();
+  for (const kind of DISSOLVES) {
+    const rec = run(kind, 0.5);
+    assert.ok(rec.ops.length > 40, `${kind} barely drew anything (${rec.ops.length} ops)`);
+    rec.assertClean(`dissolve ${kind}`);
+    assert.equal(rec.depth, 0, `${kind}: unbalanced save/restore`);
+    assert.deepEqual(run(kind, 0.5).ops, rec.ops, `${kind} is not deterministic`);
+
+    // Bounded at both ends. At zero the old arrangement is simply still on screen and the stage has
+    // not swapped yet; at one it is gone, and a dissolve still stamping anything at one is a
+    // permanent overlay that never lifts.
+    assert.equal(run(kind, 0).ops.length, 0, `${kind} draws before it has begun`);
+    assert.equal(run(kind, 1).ops.length, 0, `${kind} is still drawing once it is over`);
+
+    // ...and it thins as it goes: later is always fewer surviving blocks than earlier, which is what
+    // makes it a dissolve rather than a shuffle.
+    const early = run(kind, 0.25).ops.length;
+    const late = run(kind, 0.8).ops.length;
+    assert.ok(late < early, `${kind} does not thin out (${early} → ${late})`);
+    shapes.set(kind, rec.ops.join('|'));
+  }
+  assert.equal(new Set(shapes.values()).size, DISSOLVES.length, 'two dissolves draw identically');
 });
 
 test('a composition is a lookup, never a fork', () => {

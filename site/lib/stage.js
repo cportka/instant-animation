@@ -12,6 +12,7 @@
 import { smoothstep } from './draw.js';
 import { createTape } from '../effects/vhs.js';
 import { channelChange, makeChannelChange } from '../effects/transitions.js';
+import { dissolve } from '../effects/dissolves.js';
 import { createRng } from './rng.js';
 
 // Past 2x the extra pixels cost far more than they show. A scene can ask for less via
@@ -19,6 +20,9 @@ import { createRng } from './rng.js';
 // saves is the difference between 60fps and a slideshow on modest hardware.
 const MAX_DPR = 2;
 const TRANSITION_SECONDS = 0.95;
+// Shorter than a channel change, because nothing is travelling. A composition change is one picture
+// re-arranging, and a long one starts to feel like an interruption rather than a rearrangement.
+const DISSOLVE_SECONDS = 0.8;
 // Below this the picture is mush; better to drop frames than to keep shrinking.
 const MIN_QUALITY = 0.4;
 
@@ -37,6 +41,7 @@ export function createStage(canvas, options = {}) {
   let outgoing = null; // the scene being pushed off screen, during a transition
   let transition = 0; // 0 → 1
   let direction = 1; // +1 when travelling down the gallery, -1 when travelling up
+  let melt = 0; // 0 when idle, else 0 → 1 as the frozen composition rots away
 
   let pixelCap = MAX_DPR;
   // Render scale backs off when the machine can't keep up. A full-screen effects pipeline is
@@ -94,6 +99,15 @@ export function createStage(canvas, options = {}) {
 
     if (!outgoing) {
       paint(current, 0, dt);
+      // ...and if a composition is coming apart, the frozen one is stamped back over the top of it in
+      // whatever blocks have not yet given up. Only the new arrangement is ever *drawn* — the old one
+      // is a photograph — so a dissolve costs one scene draw a frame where the channel change costs
+      // two, and the stale picture is genuinely stale rather than a second live scene fading out.
+      if (melt > 0) {
+        ctx.save();
+        dissolve(current.module.meta.dissolve, ctx, width, height, smoothstep(0, 1, melt), current.elapsed, tape);
+        ctx.restore();
+      }
       return;
     }
 
@@ -133,6 +147,10 @@ export function createStage(canvas, options = {}) {
     if (dt > 0) adaptQuality(dt);
 
     if (current) current.elapsed += dt;
+    if (melt > 0) {
+      melt += dt / DISSOLVE_SECONDS;
+      if (melt >= 1) melt = 0;
+    }
     if (outgoing) {
       outgoing.elapsed += dt;
       transition += dt / TRANSITION_SECONDS;
@@ -248,6 +266,42 @@ export function createStage(canvas, options = {}) {
       outgoing = null;
       transition = 0;
     }
+    melt = 0;
+    current = next;
+
+    if (reduced) {
+      stop();
+      renderFrame(0);
+    } else {
+      renderFrame(0);
+      start();
+    }
+    return current.instance;
+  }
+
+  /**
+   * Swap to another composition of the animation already mounted, dissolving in place.
+   *
+   * The clock carries across — both are the same artwork at the same instant — and the frame that is
+   * on screen right now is frozen into a scratch layer *before* the swap, which is the whole trick:
+   * what rots away over the next second is a photograph of the arrangement you were looking at, and
+   * nothing has to keep drawing it.
+   */
+  function recompose(module, variant) {
+    pixelCap = Math.min(module.meta.maxDpr ?? MAX_DPR, MAX_DPR);
+    measure();
+    const reduced = prefersReducedMotion();
+    const next = build(module, variant);
+    if (current && !reduced) next.elapsed = current.elapsed;
+
+    if (current && !reduced && tape && module.meta.dissolve) {
+      tape.capture(ctx, 'stale');
+      melt = 0.0001;
+    } else {
+      melt = 0;
+    }
+    outgoing = null;
+    transition = 0;
     current = next;
 
     if (reduced) {
@@ -279,6 +333,7 @@ export function createStage(canvas, options = {}) {
 
   return {
     mount,
+    recompose,
     destroy,
     resize,
     get scene() {
