@@ -16,8 +16,8 @@
 // the ground came up as one flat mid-grey wash with faint lilac in it, and through a hole the size
 // of a fist that is nothing at all. Two things changed.
 //
-// **Contrast is value.** The ladder runs the whole way — roads near black at about 12, the river the
-// brightest thing on the ground at about 134 — because the only thing that survives being seen for a
+// **Contrast is value.** The ladder runs the whole way — roads near black at about 8, the river the
+// brightest thing on the ground at about 122 — because the only thing that survives being seen for a
 // second through a hole is the difference between light and dark. Everything that was
 // distinguishable by brightness before still is; there is just far more room between the rungs.
 //
@@ -55,67 +55,67 @@ import { fbm, hash2, noise2 } from '../../effects/field.js';
 // legible as an inversion. The number after each is its rough luminance — the ladder is the point,
 // so it is written down where it can be checked rather than trusted.
 
-// Grass, at four steps that are genuinely four steps apart: deep blue, 79 down to 42.
-const GRASS = ['#2d5290', '#25457e', '#1d386b', '#152b58'];
+// Grass, at four steps that are genuinely four steps apart: deep blue, 70 down to 34.
+const GRASS = ['#1e4a95', '#183c7e', '#132f68', '#0e2352'];
 // Hedge lines between the fields — and *darker than the grass*, which is what a hedge from above
 // actually is. It was paler than everything it crossed and read as a scratch.
-const SCRUB = '#101f3a';
+const SCRUB = '#0a1730';
 // The river, and the warm half of the whole scheme. Deep water was the darkest thing in the world,
-// so inverted it is the brightest thing on the ground — a burnt amber at 134, not the cream at 238
+// so inverted it is the brightest thing on the ground — a burnt amber at 122, not the cream at 238
 // it began as, because against a bright cloud a near-white river is not a river, it is a gap in the
 // fog. It is also the only large warm mass down there, which is what makes the blue read as blue.
-const WATER_DEEP = '#b58038';
-const WATER = '#996a2a';
+const WATER_DEEP = '#a8742e';
+const WATER = '#8c5c20';
 // The crawl of light on the surface, which inverts to a crawl of *dark*. Keeping that honest is the
 // single oddest thing in the frame and worth all of the rest: a black glitter running downstream.
-const WATER_LIT = '#3f2a0a';
-const BANK = '#1b2a44';
+const WATER_LIT = '#332106';
+const BANK = '#132038';
 // Tarmac was pale, so the roads are the near-black in this picture — the one hard value in a scene
 // with no hard edges, and the thing a peek-a-boo lands on and immediately reads as a town. Warm
 // near-black rather than the cold grey-teal they were: at this value the hue barely registers as a
 // hue, but a cold grey sitting in a blue field is the one neutral that reads as *dirty*, and it
 // was the thing in frame that looked like a mistake.
-const ROAD = '#231810';
-const ROAD_EDGE = '#100b07';
+const ROAD = '#1a1109';
+const ROAD_EDGE = '#0a0604';
 // Roofs, spread from a blue-grey slate down to a deep teal tile, so a cluster of buildings is a
 // cluster of *different* buildings rather than one mass with lines on it. Slate stays the lightest
 // thing in the town because a roof catching the sky is the one place a brighter value belongs.
-const ROOF_SLATE = '#67809a';
-const ROOF_TILE = '#15384f';
-const ROOF_LEAD = '#3a4250';
+const ROOF_SLATE = '#5a7492';
+const ROOF_TILE = '#0f2f45';
+const ROOF_LEAD = '#2f3745';
 // The one place the inversion is felt as more than a colour swap: a shadow becomes a *highlight*, so
 // the side of a roof that was dark now flares. Amber rather than white, so it belongs to the river's
 // half of the palette instead of being the one uncoloured thing in frame.
-const WALL_SHADOW = 'rgba(214, 190, 132, 0.5)';
-const CAFE_ROOF = '#0d4c66';
-const RESTAURANT_ROOF = '#2b3d70';
+const WALL_SHADOW = 'rgba(196, 170, 112, 0.5)';
+const CAFE_ROOF = '#08405c';
+const RESTAURANT_ROOF = '#1f3266';
 // Twelve shops, twelve awnings, at jewel chroma. These used to be pulled most of the way to grey on
 // the grounds that four saturated pixels would be the only saturated thing in frame — but they are
 // four *dark* pixels, and dark saturated pigment reads as an awning. Nothing here is bright enough
 // to be mistaken for something burning, which was the actual risk.
-const JEWEL = ['#5c1a30', '#123a63', '#12463f', '#5a3a0c', '#1e2a6b', '#5a1a12'];
+const JEWEL = ['#520f26', '#0d3059', '#0c3a34', '#523205', '#161f60', '#521108'];
 
 // Canopy, sitting above the grass in value and below the river — so a wood reads as a wood against
 // the field it stands in, which is the only job these have. The gap to the brightest grass is
 // seventeen levels and it is the tightest join in the palette: close it and four hundred trees
 // disappear into the field, open it and they come back as pale speckle.
-const TREE = ['#5580ba', '#4a73ac', '#3f669e'];
-const TREE_LIT = '#5f88bd';
-const TRUNK = '#141d2e';
+const TREE = ['#4179c0', '#3769ae', '#2d5b9c'];
+const TREE_LIT = '#4d86c8';
+const TRUNK = '#0d1524';
 
 // The shaded side of everything that stands up. One colour for every wall in the town rather than a
 // shade per roof: from this height a wall is three or four pixels of a face nobody is meant to
 // study, and forty separate darks in it read as noise where one reads as *the side away from the
 // light*.
-const WALL = '#0f1526';
-const CAST = 'rgba(4, 8, 20, 0.3)';
+const WALL = '#080d1c';
+const CAST = 'rgba(2, 5, 16, 0.34)';
 
 // Rock, reed, scrub. The ground was river, grass, road, roof and canopy and nothing else, which is
 // four hundred identical lollipops on a lawn — the three things here are all irregular by
 // construction and exist to break that up.
-const ROCK = ['#3d4759', '#2f3849', '#4a5468'];
-const REED = '#6d5a2e';
-const SCRUB_LEAF = ['#345c94', '#2b4d80'];
+const ROCK = ['#333d50', '#26303f', '#404a5e'];
+const REED = '#5e4d22';
+const SCRUB_LEAF = ['#26538c', '#1e4576'];
 
 // Neon, and it is **blue** — azure, periwinkle and a cyan-teal, alternating so the town does not hum
 // on one note. Not a colour anything down there *is*: a rim on the edges that catch, which at this
@@ -126,9 +126,9 @@ const SCRUB_LEAF = ['#345c94', '#2b4d80'];
 // material lit rather than as a different object outlined, which is exactly what neon is. The one
 // exception is the waterline, which takes an amber rim: the river is the warm axis of the scheme and
 // a cold rim on it would cut it out of the picture it belongs to.
-const NEON = ['rgba(64, 196, 255, 0.55)', 'rgba(120, 160, 255, 0.5)', 'rgba(56, 240, 226, 0.42)'];
-const NEON_WATER = 'rgba(255, 170, 76, 0.32)';
-const NEON_ROAD = 'rgba(72, 186, 255, 0.28)';
+const NEON = ['rgba(48, 200, 255, 0.6)', 'rgba(104, 148, 255, 0.55)', 'rgba(40, 245, 226, 0.46)'];
+const NEON_WATER = 'rgba(255, 160, 60, 0.34)';
+const NEON_ROAD = 'rgba(56, 180, 255, 0.3)';
 
 /* --------------------------------------------------------------- 2.5D ---- */
 
@@ -222,21 +222,73 @@ export function planGround(rng) {
     tables: 7,
   });
 
-  // Ordinary houses behind the front, on a second and third row, so the town has depth.
-  for (let i = 0; i < 26; i += 1) {
-    const along = rng.range(townFrom - 0.03, townTo + 0.02);
-    const row = 0.085 + Math.floor(rng.range(0, 3)) * 0.036 + rng.range(-0.008, 0.008);
-    place(along, row, rng.range(0.016, 0.028), rng.range(0.018, 0.03), 'house',
+  // Ordinary houses behind the front, on a second, third and fourth row, so the town has depth — and
+  // over a much wider span of size than they had, because a row of houses all within a tenth of each
+  // other is a terrace, and a terrace behind a terrace is a housing estate.
+  const houses = 22 + Math.floor(rng.range(0, 12));
+  for (let i = 0; i < houses; i += 1) {
+    const along = rng.range(townFrom - 0.05, townTo + 0.04);
+    const row = 0.085 + Math.floor(rng.range(0, 4)) * 0.034 + rng.range(-0.012, 0.012);
+    place(along, row, rng.range(0.012, 0.038), rng.range(0.013, 0.036), 'house',
       [ROOF_SLATE, ROOF_TILE, ROOF_LEAD][Math.floor(rng.range(0, 3))]);
+  }
+
+  // Outbuildings: barns and sheds out in the fields, well away from the town and turned whichever
+  // way they like. Everything built was within a couple of hundred metres of the water and squared
+  // up to it, which reads as a model village — the strays are what make it a place people spread out
+  // across rather than one street seen from above.
+  const strays = 5 + Math.floor(rng.range(0, 6));
+  for (let i = 0; i < 200 && buildings.length < houses + 14 + strays; i += 1) {
+    const bx = rng.next();
+    const by = rng.next();
+    if (nearestRiver(river, bx, by).distance < 0.1) continue;
+    if (buildings.some((b) => Math.hypot(b.x - bx, b.y - by) < 0.09)) continue;
+    const w = rng.range(0.014, 0.034);
+    const h = rng.range(0.012, 0.03);
+    const angle = rng.range(0, TAU);
+    buildings.push({
+      x: bx,
+      y: by,
+      w,
+      h,
+      corner: Array.from({ length: 4 }, (_, k) => ({
+        x: (k === 0 || k === 3 ? -0.5 : 0.5) * w * (0.82 + rng.next() * 0.36),
+        y: (k < 2 ? -0.5 : 0.5) * h * (0.82 + rng.next() * 0.36),
+      })),
+      lift: rng.range(0.4, 1.3),
+      angle,
+      kind: 'house',
+      roof: [ROOF_SLATE, ROOF_TILE, ROOF_LEAD][Math.floor(rng.range(0, 3))],
+    });
   }
 
   // Trees everywhere the town is not. Placement is rejection-sampled against the river and the
   // buildings, because a canopy sitting on a roof or floating on the water is the one mistake that
   // makes an overhead view stop reading as an overhead view.
+  //
+  // They are also **clustered into copses**. A rejection-sampled uniform scatter is uniform, and four
+  // hundred evenly spread trees is a lawn with dots on it — what a wooded valley looks like from
+  // above is thick stands with clearings between them. Two thirds of the trees are dropped near one
+  // of a dozen copse centres and the rest are left scattered, which is what puts a wood in one place
+  // and open ground in another.
+  const copses = Array.from({ length: 12 }, () => ({
+    x: rng.next(),
+    y: rng.next(),
+    r: rng.range(0.05, 0.16),
+  }));
   const trees = [];
-  for (let i = 0; i < 620 && trees.length < 420; i += 1) {
-    const tx = rng.next();
-    const ty = rng.next();
+  for (let i = 0; i < 900 && trees.length < 420; i += 1) {
+    let tx = rng.next();
+    let ty = rng.next();
+    if (rng.next() < 0.68) {
+      const copse = copses[Math.floor(rng.range(0, copses.length))];
+      const a = rng.range(0, TAU);
+      // Square-rooted so the density does not pile up in the middle of every stand.
+      const d = copse.r * Math.sqrt(rng.next());
+      tx = copse.x + Math.cos(a) * d;
+      ty = copse.y + Math.sin(a) * d;
+      if (tx < 0 || tx > 1 || ty < 0 || ty > 1) continue;
+    }
     const near = nearestRiver(river, tx, ty);
     if (near.distance < near.width * 0.62) continue;
     if (buildings.some((b) => Math.abs(b.x - tx) < b.w * 0.9 && Math.abs(b.y - ty) < b.h * 0.9)) continue;
@@ -261,17 +313,20 @@ export function planGround(rng) {
   // an edge with nothing on either side of it, and what actually reads as agriculture from the air
   // is enclosed ground of slightly different tone, in shapes no two of which are alike.
   const parcels = [];
-  for (let i = 0; i < 40 && parcels.length < 14; i += 1) {
+  const wanted = 11 + Math.floor(rng.range(0, 8));
+  for (let i = 0; i < 60 && parcels.length < wanted; i += 1) {
     const cx = rng.next();
     const cy = rng.next();
     if (nearestRiver(river, cx, cy).distance < 0.09) continue;
     const sides = 5 + Math.floor(rng.range(0, 3));
     const spin = rng.range(0, TAU);
-    const rx = rng.range(0.05, 0.13);
+    const rx = rng.range(0.035, 0.19);
     const ry = rx * rng.range(0.55, 1.1);
     parcels.push({
       tone: Math.floor(rng.range(0, GRASS.length)),
-      neon: Math.floor(rng.range(0, NEON.length)),
+      // Only about half of them catch a rim. Every parcel rimmed, at the count they run to now, is a
+      // wireframe laid over the fields rather than a few edges picking up light.
+      neon: rng.next() < 0.5 ? Math.floor(rng.range(0, NEON.length)) : -1,
       points: Array.from({ length: sides }, (_, k) => {
         const a = spin + (k / sides) * TAU + rng.range(-0.2, 0.2);
         const wobble = 0.72 + rng.next() * 0.5;
@@ -885,14 +940,14 @@ function drawBuildings(ctx, W, H, S, buildings) {
         ctx.fillStyle = b.awning;
         ctx.fillRect(-w / 2, h / 2, w, Math.max(1.5, h * 0.3));
         if (b.lamp) {
-          ctx.fillStyle = 'rgba(8, 20, 48, 0.72)';
+          ctx.fillStyle = 'rgba(6, 16, 42, 0.75)';
           ctx.fillRect(-w * 0.1, h / 2 + h * 0.34, Math.max(1.5, w * 0.2), Math.max(1.5, h * 0.16));
         }
       }
 
       if (b.kind === 'cafe') {
         // Parasols on the forecourt. Circles, from above, in a rough arc.
-        ctx.fillStyle = '#0a1220';
+        ctx.fillStyle = '#060d18';
         ctx.beginPath();
         for (let i = 0; i < b.parasols; i += 1) {
           const px = lerp(-w * 0.45, w * 0.45, i / (b.parasols - 1));
@@ -906,9 +961,9 @@ function drawBuildings(ctx, W, H, S, buildings) {
 
       if (b.kind === 'restaurant') {
         // A terrace: a paler slab with tables on it.
-        ctx.fillStyle = 'rgba(6, 11, 22, 0.6)';
+        ctx.fillStyle = 'rgba(4, 8, 18, 0.62)';
         ctx.fillRect(-w * 0.55, h / 2, w * 1.1, h * 0.5);
-        ctx.fillStyle = '#bda878';
+        ctx.fillStyle = '#ab9668';
         ctx.beginPath();
         for (let i = 0; i < b.tables; i += 1) {
           const px = lerp(-w * 0.42, w * 0.42, i / (b.tables - 1));
