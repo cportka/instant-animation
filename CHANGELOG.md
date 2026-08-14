@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [3.3.0] - 2026-08-14
+## [3.4.0] - 2026-08-14
 
 **"Above the Fog" is finished, and a fourth animation begins.** That is the only thing a MAJOR bump
 means here — see `.claude/CLAUDE.md`.
@@ -182,6 +182,73 @@ re-birth."*
   workshops and four hands in it. The ceiling is 20ms, and it is not a preference: the stage drops
   render scale after twelve slow frames but only restores it after three hundred frames under 20ms, so
   a scene sitting above that would degrade once and never recover.
+
+### Four ramps instead of one, and a storm with weather
+
+The scene was reading as 8-bit, and the reason was structural rather than stylistic: with one
+seven-step ramp, value was fully spent on depth, so *everything* had to be told apart by silhouette
+alone. A picture where value carries no information is an 8-bit picture whatever else is true of it.
+
+- **Twenty-six colours in four ramps, chosen as a harmony.** **SPIN** is the storm, rose through
+  magenta, around 330°. **JADE** is everything that grows or is glazed — the forest, and the temple's
+  roof tiles — at around 165°, which is magenta's **complement**: the greatest separation available
+  without either colour looking arbitrary, and the reason a green-tiled temple in front of a rose
+  tornado reads instantly as a different substance rather than as a darker piece of storm. **LAPIS**
+  is the night and the shadow under everything, at 225°, sitting *between* the other two so the
+  complement is a relationship rather than a collision. **GOLD** is the accent, four steps, rationed
+  to a handful of chunks — fire, the finial, the light inside glass.
+- **The green roof is not only a colour decision.** Fired ceramic tile is what a temple of this kind
+  is actually roofed in, so the one element carrying the complement is also the one whose material
+  the scene keeps showing you being made in a kiln.
+- **The sky crosses two ramps**, deep lapis at the top falling into the storm's own rose at the
+  horizon. A rose funnel against a rose sky is a shape in a field of its own colour; the same funnel
+  against a night that turns rose only where it meets the ground has somewhere to be brightest.
+
+### The storm has a life
+
+It held one width, one speed and one place, which is a decoration rather than a tornado.
+
+- **It walks.** The march moves the whole storm across a third of the frame on two long unrelated
+  periods, so it comes down on the temple, grinds at it, and drags away — and because the temple's
+  bays ask where the storm *was* when their round turned over, the destruction rate is not a constant
+  with a wobble on it, it is the weather. Storm on the building: the eaves go, then the walls. Storm
+  away: almost nothing. That contrast is the whole point of the cycle and it was previously invisible.
+- **It swells and slackens**, from a rope at 0.73 of its width to a wedge at 1.2.
+- **The turn is the integral of its speed, not its speed times the clock.** `t * power(t)` looks like
+  the same quantity and is not: differentiate it and there is a `t · dpower/dt` term that grows
+  without bound, so the vortex visibly runs *backwards* every time the wind eases. The closed form
+  costs the same two cosines and turns one way forever, because the power never reaches zero.
+
+### The temple, at nine values instead of two
+
+A roof with a lit ridge, a body and a shaded underside is *ceramic*; the same roof in one flat tone
+is a wedge. Every third tile column is a capped roll, keyed to the column index rather than to screen
+position so the pattern does not crawl as the building sways. Under each eave: a dark shadow line
+that separates one storey from the next, then a gold bracket course — the dougong, and the only
+rhythm needed to read "repeated wooden units" at seven pixels. Lit doorways and windows with a lamp
+burning inside, which is the one reason to believe anyone has ever been in here. A gilded sōrin with
+its nine rings and the flaming jewel at the tip.
+
+**And the walls have a lit face and a shadow face — chosen by where the storm is standing.** There is
+no sun in this scene; the vortex is the only light in it, so the building re-lights itself as the
+storm walks past. One comparison, a whole extra read.
+
+### The forest, and what the hands are actually doing
+
+- **Conifers in tiers, in two depth bands.** A trunk with a blob on it is a lollipop and eighteen in a
+  row is a comb. What reads as a conifer is the taper *in steps* — a stack of tiers, each narrower
+  than the one below, each with a lit crown. It is the pagoda's own trick, which is no coincidence:
+  a pagoda is a stylised tree. The far band sits a chunk lower and a step darker, which is all the
+  depth a treeline needs.
+- **The hands are authored as a bitmap**, because a palm rectangle with chunks stuck on it is a
+  mitten. A hand needs a palm with mass, fingers that are separate, a thumb set off across a gap, and
+  a wrist narrower than both — none of which survive being improvised in code. Two poses, open and
+  gripping, mirrored to face the way they are going.
+- **Each craft is visibly a different job.** The circuit is four acts — work, carry, fix, return — and
+  the work is where the crafts differ: the sawmill drives a toothed blade back and forth and throws
+  dust, the kiln works tongs with a tile glowing in their mouth, the glass bench turns a pipe with a
+  gather on the end of it, slowly, because glass is slow. The workshops gained pitched roofs,
+  chimneys and lit mouths, each breathing on its own rhythm.
 
 ### Its chrome and its channel change
 

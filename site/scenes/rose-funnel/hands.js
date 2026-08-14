@@ -21,7 +21,7 @@ import { clamp, rgba, wrap01 } from '../../lib/draw.js';
 import { hash2 } from '../../effects/field.js';
 import { chunk } from '../../effects/pixel.js';
 import { backPixel, GROUND } from './layout.js';
-import { SPIN } from './palette.js';
+import { GOLD, JADE, LAPIS, SPIN } from './palette.js';
 
 /**
  * The three crafts, and where they stand along the horizon.
@@ -41,19 +41,22 @@ export function planHands(rng) {
     seed: rng.range(0, 90),
     // Two pairs. Four large hands read as ceaseless labour; ten small ones read as a swarm, and at
     // this size ten of them would also be a swarm of paddles.
-    hands: Array.from({ length: 4 }, (_, i) => ({
+    hands: Array.from({ length: 7 }, (_, i) => ({
       key: i,
       shop: i % SHOPS.length,
       // Staggered on one fixed circuit each, so the traffic never synchronises and nothing queues.
-      period: 9 + rng.next() * 7,
+      period: 11 + rng.next() * 9,
       phase: rng.next(),
       storey: Math.floor(rng.range(0, 6)),
       lean: rng.range(-0.4, 0.4),
     })),
-    trees: Array.from({ length: 18 }, (_, i) => ({
-      at: (i + 0.5) / 18 + rng.range(-0.02, 0.02),
-      h: rng.range(0.6, 1.4),
-      lean: rng.range(-0.3, 0.3),
+    trees: Array.from({ length: 34 }, (_, i) => ({
+      at: (i + 0.5) / 34 + rng.range(-0.03, 0.03),
+      h: rng.range(0.6, 1.5),
+      lean: rng.range(-0.22, 0.22),
+      // Two bands. The far one sits a chunk lower and a step darker, which is the entire depth cue a
+      // treeline needs and costs one comparison.
+      depth: rng.next(),
       // One tree is coming down at a time, on its own long clock. A forest where nothing ever falls
       // is scenery; one falling tree makes the whole treeline a source of timber.
       fell: rng.range(0, 1),
@@ -66,56 +69,111 @@ export function drawWorks(ctx, W, H, t, plan, px) {
   const bpx = backPixel(px);
   const horizonY = Math.round((H * GROUND) / bpx) * bpx;
   const mass = [];
+  const canopy = [];
+  const canopyFar = [];
+  const crown = [];
   const ember = [];
 
-  // The treeline. Three chunks of trunk and a blob of canopy — at this size a tree is a texture with
-  // a stem, and anything more is invisible from the first row back.
+  // The forest: conifers in tiers, in two depth bands.
+  //
+  // A tree at this size is not a trunk with a blob on it — that is a lollipop, and eighteen of them
+  // in a row is a comb. What reads as a conifer is the **taper in steps**: a stack of three or four
+  // tiers, each narrower than the one below and each with its own lit top edge and shaded underside.
+  // It is the pagoda's own trick, which is not a coincidence — a pagoda is a stylised tree.
+  //
+  // And they are green. The forest is the other half of the scene's complement: jade against the
+  // storm's rose, so the land reads as a living place the temple is standing in rather than as more
+  // weather. The far band is a step darker and drawn a chunk lower, which is all the depth a
+  // treeline needs.
   for (const tree of plan.trees) {
     // Clear of the temple, so the building stands in a clearing rather than in a hedge.
-    if (Math.abs(tree.at - 0.33) < 0.09) continue;
+    if (Math.abs(tree.at - 0.33) < 0.1) continue;
     const x = Math.round((tree.at * W) / bpx) * bpx;
-    const h = Math.max(3, Math.round((tree.h * H * 0.062) / bpx));
-    // ...and one is always coming down: it leans further and further, then it is a stump, then a new
-    // one has grown. Pure in `t`, like everything else here.
+    const far = tree.depth < 0.5;
+    const foot = horizonY - (far ? bpx : 0);
+    const h = Math.max(4, Math.round((tree.h * H * (far ? 0.055 : 0.085)) / bpx));
+    // One is always coming down: it leans further and further, then it is a stump, then it has grown
+    // back. Pure in `t`, like everything else here — and it is what makes the treeline a source of
+    // timber rather than scenery.
     const u = wrap01(t / 23 + tree.fell);
-    const falling = u > 0.82 ? (u - 0.82) / 0.18 : 0;
-    const lean = Math.round((tree.lean + falling * 2.6) * h);
+    const falling = u > 0.86 ? (u - 0.86) / 0.14 : 0;
+    const lean = (tree.lean + falling * 3.2) * h;
+    const tiers = Math.max(2, Math.round(h / 2.2));
+
     for (let r = 0; r < h; r += 1) {
       const shift = Math.round((lean * r) / h) * bpx;
-      // Trunk for the lower half, canopy above it — at three chunks a tree is a stem with a
-      // blob on it, and the blob has to be at least twice the stem or the whole thing is a post.
-      const wide = r > h - 3 ? 3 : 1;
-      mass.push(x + shift - (wide - 1) * bpx * 0.5, horizonY - (r + 1) * bpx, wide * bpx, bpx);
+      const up = r / h;
+      // The trunk is the bottom fifth and one chunk wide; everything above it is canopy, and the
+      // canopy's width steps *down* in tiers rather than tapering smoothly — the step is the read.
+      if (up < 0.22) {
+        mass.push(x + shift, foot - (r + 1) * bpx, bpx, bpx);
+        continue;
+      }
+      const tier = Math.floor((up - 0.22) / (0.78 / tiers));
+      const wide = Math.max(1, tiers - tier);
+      const bx = x + shift - Math.floor(wide / 2) * bpx;
+      const into = far ? canopyFar : canopy;
+      into.push(bx, foot - (r + 1) * bpx, wide * bpx, bpx);
+      // The lit crown of each tier: the top chunk of a tier catches what light there is.
+      if (tier !== Math.floor((up - 0.22 - 1 / h) / (0.78 / tiers)) && !far) {
+        crown.push(bx, foot - (r + 1) * bpx, wide * bpx, bpx);
+      }
     }
   }
 
-  // The workshops. A shed and a hearth: one dark lump, one hot chunk that breathes on its own beat.
+  // The workshops. A shed with a pitched roof, a lit mouth, and a chimney — and each craft doing a
+  // visibly different thing, because three identical lumps with sparks over them is one workshop
+  // drawn three times.
   for (const shop of SHOPS) {
     const x = Math.round((shop.at * W) / bpx) * bpx;
-    mass.push(x - bpx * 3, horizonY - bpx * 2, bpx * 6, bpx * 2);
-    mass.push(x - bpx * 4, horizonY - bpx * 3, bpx * 8, bpx);
-    // The fire in it. A kiln glows steadily, a smelter pulses, a glass furnace flares — same chunk,
-    // different clock, and that is the whole difference between three crafts at this size.
-    const heat = 0.55 + 0.45 * Math.sin(t * shop.beat + shop.at * 30);
-    ember.push(x - bpx * 0.5, horizonY - bpx, heat);
-    // Sparks off the mill and the smelter, rising and gone.
-    for (let s = 0; s < 3; s += 1) {
-      const u = wrap01(t * (0.4 + s * 0.13) + shop.at * 7 + s * 0.31);
-      if (u > 0.5) continue;
-      ember.push(x + (hash2(s, Math.floor(t * (0.4 + s * 0.13) + shop.at * 7)) - 0.5) * bpx * 4,
-        horizonY - bpx * 3 - u * bpx * 5, 1 - u * 2);
+    mass.push(x - bpx * 3, horizonY - bpx * 3, bpx * 6, bpx * 3);
+    // A pitched roof, stepped, so a shed is not a box.
+    for (let r = 0; r < 2; r += 1) {
+      mass.push(x - bpx * (4 - r), horizonY - bpx * (4 + r), bpx * (8 - r * 2), bpx);
+    }
+    // The chimney, and what is coming out of it.
+    mass.push(x + bpx * 2, horizonY - bpx * 6, bpx, bpx * 2);
+
+    // The mouth of the forge, always lit, breathing on this craft's own clock: a kiln glows steadily,
+    // a smelter pulses hard, a glass furnace flares. Same two chunks, three different rhythms.
+    const heat = shop.kind === 'kiln'
+      ? 0.72 + 0.14 * Math.sin(t * shop.beat)
+      : shop.kind === 'glass'
+        ? 0.5 + 0.5 * Math.abs(Math.sin(t * shop.beat * 0.7)) ** 3
+        : 0.45 + 0.55 * Math.max(0, Math.sin(t * shop.beat));
+    ember.push(x - bpx, horizonY - bpx * 2, heat);
+    ember.push(x, horizonY - bpx * 2, heat * 0.8);
+
+    // ...and what the craft throws off. The smelter showers sparks, the kiln breathes smoke, the
+    // glass bench sends up one slow bright gather at a time.
+    const jets = shop.kind === 'mill' ? 5 : shop.kind === 'kiln' ? 3 : 2;
+    for (let s = 0; s < jets; s += 1) {
+      const rate = shop.kind === 'glass' ? 0.22 : 0.4 + s * 0.13;
+      const u = wrap01(t * rate + shop.at * 7 + s * 0.31);
+      if (u > 0.62) continue;
+      const spread = shop.kind === 'mill' ? 5 : 2;
+      ember.push(
+        x + (hash2(s, Math.floor(t * rate + shop.at * 7)) - 0.5) * bpx * spread,
+        horizonY - bpx * 6 - u * bpx * 6,
+        (1 - u / 0.62) * (shop.kind === 'kiln' ? 0.35 : 1),
+      );
     }
   }
 
-  ctx.fillStyle = rgba(SPIN[6], 1);
-  ctx.beginPath();
-  for (let i = 0; i < mass.length; i += 4) chunk(ctx, mass[i], mass[i + 1], mass[i + 2], mass[i + 3], bpx);
-  ctx.fill();
+  // Back to front: the far canopy, the near canopy, its lit crowns, then the built things in front
+  // of all of it, then the fires.
+  for (const [cells, colour] of [[canopyFar, JADE[6]], [canopy, JADE[5]], [crown, JADE[4]], [mass, LAPIS[7]]]) {
+    if (!cells.length) continue;
+    ctx.fillStyle = rgba(colour, 1);
+    ctx.beginPath();
+    for (let i = 0; i < cells.length; i += 4) chunk(ctx, cells[i], cells[i + 1], cells[i + 2], cells[i + 3], bpx);
+    ctx.fill();
+  }
 
-  // Two heats, two fills — the hearths are the only warm thing on the ground and they have to sit
-  // clearly below the skirt's contact core, which owns the top of the ramp.
-  for (const [step, lo, hi] of [[2, 0.62, 2], [3, 0, 0.62]]) {
-    ctx.fillStyle = rgba(SPIN[step], 1);
+  // Three heats. Gold, because fire is the one thing on the ground that is neither storm nor forest,
+  // and because a hearth in the storm's own ramp is a piece of storm that has fallen over.
+  for (const [colour, lo, hi] of [[GOLD[0], 0.75, 2], [GOLD[1], 0.4, 0.75], [GOLD[2], 0.12, 0.4]]) {
+    ctx.fillStyle = rgba(colour, 1);
     ctx.beginPath();
     for (let i = 0; i < ember.length; i += 3) {
       if (ember[i + 2] < lo || ember[i + 2] >= hi) continue;
@@ -126,18 +184,70 @@ export function drawWorks(ctx, W, H, t, plan, px) {
 }
 
 /**
+ * A hand, as a bitmap.
+ *
+ * Everything before this was a palm rectangle with chunks stuck on it, and it read as a mitten
+ * because a mitten is exactly what it was. A hand needs four things at any size — a **palm** with
+ * mass, **fingers that are separate**, a **thumb set off across a gap**, and a **wrist narrower than
+ * both** — and none of them survive being improvised per-hand in code. Authored as a grid they are
+ * simply there, and the two poses can differ in the one way that matters: open and reaching, or
+ * closed around something.
+ *
+ * `#` is the body, `+` the edge that catches light, `.` nothing.
+ */
+const POSE = {
+  open: [
+    '.+.+.+',
+    '+#+#+#',
+    '.####+',
+    '+#####',
+    '.####.',
+    '..##..',
+    '..#...',
+  ],
+  grip: [
+    '......',
+    '.+++..',
+    '.####+',
+    '+#####',
+    '.####.',
+    '..##..',
+    '..#...',
+  ],
+};
+
+/** Stamp a pose. `flip` mirrors it, so a hand can face the way it is going. */
+function stampHand(body, edge, pose, x, y, px, flip) {
+  const rows = POSE[pose];
+  for (let r = 0; r < rows.length; r += 1) {
+    for (let c = 0; c < rows[r].length; c += 1) {
+      const ch = rows[r][flip ? rows[r].length - 1 - c : c];
+      if (ch === '.') continue;
+      (ch === '+' ? edge : body).push(x + c * px, y + r * px, px, px);
+    }
+  }
+}
+
+/**
  * The hands themselves, on their circuits.
  *
- * Each runs one fixed loop: out to its workshop, and back up the building to the storey it is
- * mending, carrying whatever it has just made. A circuit rather than a queue, because a queue is
- * state and there is none to be had — and because ceaseless labour is a thing that has always been
- * going on, which is exactly what a loop with no start looks like.
+ * Each runs one loop with four acts: **work** at its own craft, **carry** the piece up to the
+ * temple, **fix** it into the building, and come back empty. A circuit rather than a queue, because
+ * a queue is state and there is none to be had — and because ceaseless labour is a thing that has
+ * always been going on, which is what a loop with no start looks like.
+ *
+ * The act is what makes the crafts different. A hand at the sawmill drives a blade back and forth and
+ * throws sawdust; at the kiln it works tongs in the fire with a tile glowing in their mouth; at the
+ * glass bench it turns a pipe with a gather on the end of it, slowly, because glass is slow. Same
+ * sprite, same circuit, three unmistakably different jobs — and all of it a pure function of `t`.
  */
 export function drawHands(ctx, W, H, t, plan, px, places) {
   const groundY = H * GROUND;
-  const mass = [];
-  const lit = [];
-  const cargo = [];
+  const body = [];
+  const edge = [];
+  const wisp = [];
+  const tool = [];
+  const hot = [];
 
   for (const hand of plan.hands) {
     const shop = SHOPS[hand.shop];
@@ -145,50 +255,89 @@ export function drawHands(ctx, W, H, t, plan, px, places) {
     const site = places[Math.min(places.length - 1, hand.storey * 3 + 2)];
     if (!site) continue;
 
-    const from = { x: shop.at * W, y: groundY - px * 3 };
-    const to = { x: site.x, y: site.y };
-    // Out and back on one path, with the carry on the outward leg. `1 - |2u - 1|` is a triangle
-    // wave: it goes, it arrives, it returns, and it never jumps at the wrap because both ends are
-    // the same point.
-    const leg = 1 - Math.abs(2 * u - 1);
-    const x = from.x + (to.x - from.x) * leg;
-    // Lifted on an arc, so it flies rather than slides. Nothing in this scene walks.
-    const y = from.y + (to.y - from.y) * leg - Math.sin(leg * Math.PI) * H * 0.09;
-    const carrying = u < 0.5;
+    const bench = { x: shop.at * W, y: groundY - px * 7 };
+    const stroke = Math.sin(t * shop.beat * 2.2 + hand.key * 1.7);
 
-    // The hand: a palm, two fingers, a thumb, and a wrist that comes apart behind it. Nine chunks,
-    // and the gap between thumb and fingers is the one that makes it a hand and not a paddle.
-    const tilt = Math.sin(t * 1.6 + hand.key * 2.1) * 0.5 + hand.lean;
-    const d = Math.round(tilt) * px;
-    mass.push(x - px * 1.5, y, px * 3, px * 3); // palm
-    mass.push(x - px * 1.5 + d, y - px, px * 2, px); // fingers
-    mass.push(x + px * 0.5 + d, y - px * 2, px, px * 2); // the long finger, further forward
-    mass.push(x + px * 1.5, y + px, px, px * 2); // thumb, set off the palm by a gap
-    // The wrist, coming apart. Three chunks that thin to nothing — no arm, nothing it is attached to.
-    for (let w = 1; w <= 3; w += 1) {
-      if (hash2(hand.key * 3.3 + w, Math.floor(t * 6)) < w * 0.28) continue;
-      lit.push(x - px * 0.5 - d * w * 0.4, y + px * (2 + w));
+    let x;
+    let y;
+    let pose = 'open';
+    let flip = false;
+
+    if (u < 0.34) {
+      // ---- working. The hand holds station and the *tool* does the travelling. ------------------
+      const swing = stroke * px * 2.5;
+      x = bench.x + swing;
+      y = bench.y + Math.abs(stroke) * px;
+      pose = 'grip';
+      flip = stroke < 0;
+
+      if (shop.kind === 'mill') {
+        // A saw, drawn along the stroke with teeth on its underside, and dust off the far end.
+        for (let i = 0; i < 7; i += 1) {
+          tool.push(x + px * (i - 3) + swing, y + px * (2 + (i % 2) * 0.5), px, px * 0.6);
+        }
+        if (Math.abs(stroke) > 0.7) hot.push(x + swing * 2, y + px * 3, 0.2);
+      } else if (shop.kind === 'kiln') {
+        // Tongs, holding a tile in the mouth of the fire. The tile is the hot thing, not the hand.
+        tool.push(x + px, y + px * 2, px * 3, px);
+        hot.push(x + px * 3.5, y + px * 2, 0.55 + 0.45 * Math.abs(stroke));
+      } else {
+        // A blowpipe, turning, with the gather glowing on the end.
+        const turn = Math.sin(t * 0.9 + hand.key);
+        tool.push(x + px, y + px * 2, px * 4, px * 0.7);
+        hot.push(x + px * 5, y + px * 2 - turn * px, 0.9);
+      }
+    } else if (u < 0.62) {
+      // ---- carrying, up and out to the building --------------------------------------------------
+      const leg = (u - 0.34) / 0.28;
+      x = bench.x + (site.x - bench.x) * leg;
+      y = bench.y + (site.y - bench.y) * leg - Math.sin(leg * Math.PI) * H * 0.1;
+      pose = 'grip';
+      flip = site.x < bench.x;
+      tool.push(x + (flip ? -px * 3 : px * 5), y + px * 2, px * 3, px);
+    } else if (u < 0.74) {
+      // ---- fixing. It hovers at the bay and taps, and the taps are what mending looks like. ------
+      const tap = Math.sin(((u - 0.62) / 0.12) * Math.PI * 7);
+      x = site.x + px * 2;
+      y = site.y + tap * px * 1.5;
+      if (tap > 0.6) hot.push(x + px, y + px * 3, 0.45);
+    } else {
+      // ---- and back, empty. A hand returning with nothing is what tells you the one going up is
+      // carrying something.
+      const leg = (u - 0.74) / 0.26;
+      x = site.x + (bench.x - site.x) * leg;
+      y = site.y + (bench.y - site.y) * leg - Math.sin(leg * Math.PI) * H * 0.06;
+      flip = bench.x < site.x;
     }
 
-    // ...and what it has made, on the way up only. A hand going back empty is what tells you the
-    // one going up is carrying something.
-    if (carrying) cargo.push(x - px * 2, y - px * 4, px * 4, px);
+    stampHand(body, edge, pose, x, y, px, flip);
+    // The wrist, coming apart. No arm, nothing it could be attached to — disembodied is done by
+    // subtraction, and a wrist that faded out would be a soft edge in a scene that has none.
+    for (let w = 1; w <= 3; w += 1) {
+      if (hash2(hand.key * 3.3 + w, Math.floor(t * 5)) < w * 0.3) continue;
+      wisp.push(x + px * (2 - w * 0.3 * (flip ? -1 : 1)), y + px * (6 + w), px, px);
+    }
   }
 
-  ctx.fillStyle = rgba(SPIN[2], 1);
-  ctx.beginPath();
-  for (let i = 0; i < mass.length; i += 4) chunk(ctx, mass[i], mass[i + 1], mass[i + 2], mass[i + 3], px);
-  ctx.fill();
+  // A spirit is the one thing in this frame lit by nothing, so it does not get the top of the ramp:
+  // the two hottest steps belong to the storm's contact core and to lightning, and seven hands
+  // wearing them would take the hot end by sheer count.
+  for (const [cells, colour] of [[wisp, LAPIS[3]], [tool, LAPIS[2]], [body, SPIN[3]], [edge, SPIN[1]]]) {
+    if (!cells.length) continue;
+    ctx.fillStyle = rgba(colour, 1);
+    ctx.beginPath();
+    for (let i = 0; i < cells.length; i += 4) chunk(ctx, cells[i], cells[i + 1], cells[i + 2], cells[i + 3], px);
+    ctx.fill();
+  }
 
-  // The wisp is a step down from the hand, not up: a spirit is the thing in this frame lit by
-  // nothing, and the two hottest steps belong to the storm's contact core and to lightning.
-  ctx.fillStyle = rgba(SPIN[4], 1);
-  ctx.beginPath();
-  for (let i = 0; i < lit.length; i += 2) chunk(ctx, lit[i], lit[i + 1], px, px, px);
-  ctx.fill();
-
-  ctx.fillStyle = rgba(SPIN[clamp(4, 0, 6)], 1);
-  ctx.beginPath();
-  for (let i = 0; i < cargo.length; i += 4) chunk(ctx, cargo[i], cargo[i + 1], cargo[i + 2], cargo[i + 3], px);
-  ctx.fill();
+  // Whatever is glowing in their hands — hot metal, a gather of glass, a fired tile.
+  for (const [colour, lo, hi] of [[GOLD[0], 0.7, 2], [GOLD[1], 0.4, 0.7], [GOLD[2], 0, 0.4]]) {
+    ctx.fillStyle = rgba(colour, 1);
+    ctx.beginPath();
+    for (let i = 0; i < hot.length; i += 3) {
+      if (hot[i + 2] < lo || hot[i + 2] >= hi) continue;
+      chunk(ctx, hot[i], hot[i + 1], px, px, px);
+    }
+    ctx.fill();
+  }
 }

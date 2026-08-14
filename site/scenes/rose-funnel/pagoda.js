@@ -27,8 +27,9 @@
 import { rgba } from '../../lib/draw.js';
 import { chunk } from '../../effects/pixel.js';
 import { bayAt } from './cycle.js';
+import { vortexAt } from './funnel.js';
 import { CLOUD, GROUND } from './layout.js';
-import { SPIN } from './palette.js';
+import { GOLD, JADE, LAPIS, SPIN } from './palette.js';
 
 /** Each storey is this much of the one below it. */
 const SHRINK = 0.93;
@@ -149,12 +150,22 @@ export function drawPagoda(ctx, W, H, t, plan, px, R, cycle, funnel) {
   const { cx, baseY, rows } = shape;
   const n = rows.length;
 
-  // Two buckets and two fills for the whole building. The mass is the ramp's darkest step and the
-  // eaves are the chord; nothing else in front of the funnel is allowed either.
-  const mass = [];
-  const rim = [];
+  // One bucket per colour the building is allowed, filled back-to-front and emptied in that order.
+  // Nine values instead of two, which is the whole difference between a silhouette and a building:
+  // a roof with a lit ridge, a body and a shaded underside is *ceramic*, and the same roof in one
+  // flat tone is a wedge. The order matters — a bright bracket course emitted after the wall it sits
+  // on would be painted under it and vanish.
+  const B = {
+    shadow: [], wallLit: [], wallDark: [], door: [], lamp: [],
+    tileDark: [], tile: [], tileLit: [], bracket: [], gilt: [],
+  };
   const put = (into, x, y, w, h) => into.push(x, y, w, h);
   const bayOf = (storey, part) => cycle.bays[storey * 3 + ['eaveL', 'eaveR', 'wall'].indexOf(part)];
+
+  // Where the storm is standing, asked once. The scene has no sun — the vortex is the only light in
+  // it — so which face of the temple is lit is a question about where the storm *is*, and because it
+  // walks, the building re-lights itself as the storm passes. A whole extra read for one comparison.
+  const stormX = vortexAt(W, H, t, funnel, 0.35).cx;
 
   let top = baseY;
   for (let i = 0; i < n; i += 1) {
@@ -165,30 +176,49 @@ export function drawPagoda(ctx, W, H, t, plan, px, R, cycle, funnel) {
 
     const half = Math.round(wallHalf(shape, i) / px) * px;
     const eave = Math.round(eaveHalf(shape, i) / px) * px;
-    const roofRows = Math.max(2, Math.round(storeyRows * 0.32));
+    const roofRows = Math.max(3, Math.round(storeyRows * 0.34));
     const cols = Math.max(2, Math.round(eave / px));
 
-    // What the storm has left of this storey, asked once per bay per round.
     const left = bayAt(bayOf(i, 'eaveL'), cx + dx - eave, t, W, H, funnel, cycle.seed).life;
     const right = bayAt(bayOf(i, 'eaveR'), cx + dx + eave, t, W, H, funnel, cycle.seed).life;
     const wall = bayAt(bayOf(i, 'wall'), cx + dx, t, W, H, funnel, cycle.seed).life;
 
-    // The wall goes from the top down. Erosion has a *direction*: a per-chunk hash test scatters
-    // holes evenly through the masonry, which is the one texture that reads as a broken renderer
-    // rather than as a building coming apart.
-    const wallRows = Math.round((storeyRows - roofRows) * wall);
-    if (wallRows > 0) {
-      const wallTop = top + (storeyRows - wallRows) * px;
-      put(mass, cx + dx - half, wallTop, half * 2, wallRows * px);
+    // ---- the body of the storey, top down: shadow, brackets, then wall -------------------------
+    const bodyRows = storeyRows - roofRows;
+    const standing = Math.round(bodyRows * wall);
+    if (standing > 0) {
+      const bodyTop = top + (storeyRows - standing) * px;
+      // The dark line directly under the eave. It is what separates one storey from the next, and
+      // without it the roofs read as shelves bolted to a single tower.
+      put(B.shadow, cx + dx - half, bodyTop, half * 2, px);
+      // The bracket course — the dougong. One bright row under every eave, and the only rhythm the
+      // eye needs to read "this is built out of repeated wooden units" at seven pixels.
+      if (standing > 2) put(B.bracket, cx + dx - half, bodyTop + px, half * 2, px);
+      const wallTop = bodyTop + Math.min(2, standing - 1) * px;
+      const wallH = bodyTop + standing * px - wallTop;
+      if (wallH > 0) {
+        // Two faces. The light in this scene is the storm — there is no sun — so the lit side is
+        // simply the side the vortex is on, which means the building re-lights itself as the storm
+        // walks past it. One flat wall would have thrown that away.
+        const litLeft = stormX < cx + dx;
+        put(B.wallLit, cx + dx - half, wallTop, half * (litLeft ? 1.2 : 0.8), wallH);
+        put(B.wallDark, cx + dx + (litLeft ? half * 0.2 : -half * 0.8), wallTop, half * (litLeft ? 0.8 : 1.2), wallH);
+        // A door on the ground storey, windows above it. Dark openings with a lamp burning inside —
+        // the only reason to believe anyone has ever been in here.
+        if (wallH > px * 2) {
+          const openW = Math.max(px, Math.round((half * 0.34) / px) * px);
+          const openH = Math.min(wallH - px, px * (i === 0 ? 4 : 2));
+          const oy = wallTop + wallH - openH;
+          put(B.door, cx + dx - openW / 2, oy, openW, openH);
+          put(B.lamp, cx + dx - openW / 2 + px, oy + px, Math.max(px, openW - px * 2), Math.max(px, openH - px * 2));
+        }
+      }
     }
 
-    // The roof, column by column, and this is where the upturn lives. The fall is concave —
-    // `u ** 0.62`, the funnel's own flare exponent, for the same reason: a linear fall is a party
-    // hat. The kick is defined by *columns from the tip*, not by a fraction of the span, so the
-    // curl is exactly two chunks on the wide bottom roof and on the narrow top one alike; as a
-    // fraction it becomes a hook on one and a jag on the other.
-    //
-    // Each side is eaten from its own tip inward, because that is the end standing in the wind.
+    // ---- the roof ------------------------------------------------------------------------------
+    // Glazed tile, and the one thing in the frame wearing the storm's complement. A green roof in
+    // front of a rose vortex is instantly a different substance; the same roof in the storm's own
+    // ramp is a darker piece of storm. It is also what the kiln down on the ground is firing.
     for (let c = -cols; c <= cols; c += 1) {
       const reach = Math.round(cols * (c < 0 ? left : right));
       if (Math.abs(c) > reach) continue;
@@ -197,49 +227,59 @@ export function drawPagoda(ctx, W, H, t, plan, px, R, cycle, funnel) {
       const fromTip = cols - Math.abs(c);
       const kick = fromTip === 0 ? 2 : fromTip === 1 ? 1 : 0;
       const yTop = top + (fall - kick) * px;
-      // Solid down to the wall under the middle of the roof, a thin blade out past it.
       const deep = Math.abs(c) * px <= half ? roofRows + 1 - fall + kick : 2;
-      put(mass, cx + dx + c * px, yTop, px, deep * px);
-      // The eave rim: one chunk along the lower edge, and the only ornament on the building. It is
-      // what survives being crossed by the funnel, because it is the part that sticks out past it.
-      put(rim, cx + dx + c * px, yTop + (deep - 1) * px, px, px);
+
+      // Ridge light along the top chunk, body beneath, and the underside in shade — three values up
+      // a two-or-three chunk roof, which is as much modelling as this resolution can hold and
+      // exactly enough to read as a curved tiled surface rather than a plank.
+      put(B.tileLit, cx + dx + c * px, yTop, px, px);
+      if (deep > 2) put(B.tile, cx + dx + c * px, yTop + px, px, (deep - 2) * px);
+      put(B.tileDark, cx + dx + c * px, yTop + (deep - 1) * px, px, px);
+      // Every third tile column is a capped roll — the ridges a tiled roof actually has, and the
+      // reason it reads as many small pieces rather than one sheet. Keyed to the column index, not
+      // to screen position, so the pattern does not crawl across the roof as the building sways.
+      if (Math.abs(c) % 3 === 0 && deep > 1) put(B.tile, cx + dx + c * px, yTop, px, px);
+      // ...and the upturned tip is gilded, which is where the eye goes.
+      if (fromTip <= 1) put(B.gilt, cx + dx + c * px, yTop + (deep - 1) * px, px, px);
     }
   }
 
-  // The spire. Rings stacked on a mast, narrowing, with the building's one bright accent at the very
-  // top — deliberately the point the storm is grinding at.
+  // ---- the sōrin ------------------------------------------------------------------------------
   const spire = bayAt(cycle.bays[cycle.bays.length - 1], cx, t, W, H, funnel, cycle.seed).life;
   const topDx = shoveAt(t, plan, 1, px);
   const spireRows = Math.round(shape.spireRows * spire);
   if (spireRows > 1) {
     const mastW = Math.max(px, Math.round((wallHalf(shape, n - 1) * 0.22) / px) * px);
-    put(mass, cx + topDx - mastW / 2, top - spireRows * px, mastW, spireRows * px);
-    // Nine rings is the sōrin's own number, and they are narrow: wide ones stack into a fir tree.
+    put(B.wallDark, cx + topDx - mastW / 2, top - spireRows * px, mastW, spireRows * px);
     const ringCount = Math.min(9, Math.max(4, Math.round(spireRows / 4)));
     for (let r = 0; r < ringCount; r += 1) {
       const u = r / Math.max(1, ringCount - 1);
       const rw = Math.max(px, Math.round((wallHalf(shape, n - 1) * 0.3 * (1 - u * 0.6)) / px) * px);
       const y = top - px * 3 - Math.round(((spireRows - 4) * px * u) / px) * px;
-      put(rim, cx + topDx - rw, y, rw * 2, px);
+      put(B.gilt, cx + topDx - rw, y, rw * 2, px);
     }
+    // The hōju — the flaming jewel at the very tip, and the single brightest chunk on the building.
+    put(B.bracket, cx + topDx - px, top - (spireRows + 1) * px, px * 2, px * 2);
   }
 
-  // The plinth it stands on, and the only part the storm never takes — you cannot carry away a
-  // foundation. Deliberately *not* the mass value: step 6 and the ground are within a few levels of
-  // each other, so a building whose foot wears the mass colour has no feet at all.
-  const plinthHalf = Math.round((wallHalf(shape, 0) * 1.25) / px) * px;
-  ctx.fillStyle = rgba(SPIN[5], 1);
-  ctx.beginPath();
-  chunk(ctx, cx - plinthHalf, baseY, plinthHalf * 2, px * 2, px);
-  ctx.fill();
+  // ---- the plinth -----------------------------------------------------------------------------
+  // Stone, and the one part the storm never takes: you cannot carry away a foundation.
+  const plinthHalf = Math.round((wallHalf(shape, 0) * 1.3) / px) * px;
+  put(B.wallDark, cx - plinthHalf, baseY, plinthHalf * 2, px * 2);
+  put(B.bracket, cx - plinthHalf, baseY, plinthHalf * 2, px);
 
-  ctx.fillStyle = rgba(SPIN[6], 1);
-  ctx.beginPath();
-  for (let i = 0; i < mass.length; i += 4) chunk(ctx, mass[i], mass[i + 1], mass[i + 2], mass[i + 3], px);
-  ctx.fill();
-
-  ctx.fillStyle = rgba(SPIN[2], 1);
-  ctx.beginPath();
-  for (let i = 0; i < rim.length; i += 4) chunk(ctx, rim[i], rim[i + 1], rim[i + 2], rim[i + 3], px);
-  ctx.fill();
+  const ORDER = [
+    ['shadow', SPIN[7]], ['wallDark', LAPIS[6]], ['wallLit', LAPIS[5]],
+    ['door', LAPIS[7]], ['lamp', GOLD[2]],
+    ['tileDark', JADE[5]], ['tile', JADE[3]], ['tileLit', JADE[1]],
+    ['bracket', GOLD[3]], ['gilt', GOLD[1]],
+  ];
+  for (const [name, colour] of ORDER) {
+    const cells = B[name];
+    if (!cells.length) continue;
+    ctx.fillStyle = rgba(colour, 1);
+    ctx.beginPath();
+    for (let i = 0; i < cells.length; i += 4) chunk(ctx, cells[i], cells[i + 1], cells[i + 2], cells[i + 3], px);
+    ctx.fill();
+  }
 }
