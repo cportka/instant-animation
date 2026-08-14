@@ -25,11 +25,19 @@
 // sideways.
 //
 // The bursts are drawn as **branching pixel art**. Every limb is a run of chunks snapped to a coarse
-// grid, stepping down the ramp from a warm-white head to a red tail at full opacity with hard edges;
-// and every limb forks in two, twice, so two dozen rays leave the centre and two hundred are on
-// screen — each generation shorter, kinked further off its parent and cooler than the one it grew
-// from. A plain radial star is the one arrangement that reads as *drawn* rather than as something
-// that burst.
+// grid, stepping down the ramp from a warm-white head to a red tail at full opacity with hard edges,
+// and limbs fork — each generation shorter, kinked further off its parent and cooler than the one it
+// grew from. A plain radial star is the one arrangement that reads as *drawn* rather than as
+// something that burst.
+//
+// **How many limbs, how often they fork, how far off, how far they throw and how long they burn are
+// all drawn from the shell's own seed**, so one is a dense fine peony and the next is a dozen long
+// unbranched streamers. Before that every burst had identical topology: the hashes underneath varied
+// per shell so no two were the same *drawing*, and yet each was recognisably the same **object**.
+// Randomising the seed harder cannot touch that, because what repeated was the structure and the
+// structure was a constant. The launch sites move between shows for the same reason — once you have
+// watched two rounds you know where to look, and no amount of variety inside a burst fixes a burst
+// that always happens in the same place.
 //
 // They are drawn twice: once under the whole depth of the cloud, and once over it at a third
 // strength with **the cloud eating chunks** — where the bank in front is thick a chunk is simply not
@@ -114,7 +122,6 @@ export function planLights(rng, river, nearestRiver) {
     // A minute and a half or so between shows, staggered, so two never go up together.
     period: rng.range(74, 118),
     phase: i / 3 + rng.range(-0.04, 0.04),
-    shells: 3 + Math.floor(rng.range(0, 3)),
     seed: rng.range(0, 40),
   }));
 
@@ -146,9 +153,15 @@ export function planLights(rng, river, nearestRiver) {
 
 /* ------------------------------------------------------------- schedule ---- */
 
-/** A fire's fast, never-ending unsteadiness. */
+/**
+ * A fire's slow, never-ending unsteadiness.
+ *
+ * Two octaves, but the fast one is now half the rate it was and carries a third of the weight. At
+ * 9 Hz the second term was a strobe, and twelve fires strobing out of phase is the kind of motion
+ * you notice before you notice the scene. Fire breathes; it does not buzz.
+ */
 export const flickerAt = (fire, t) =>
-  0.6 + 0.4 * (noise2(fire.phase, t * 3.4) * 0.6 + noise2(fire.phase + 7.3, t * 9.1) * 0.4);
+  0.62 + 0.38 * (noise2(fire.phase, t * 1.9) * 0.72 + noise2(fire.phase + 7.3, t * 4.6) * 0.28);
 
 /** A fire's occasional surge — 0 most of the time, and never a sharp edge. */
 export function flareAt(fire, t) {
@@ -196,23 +209,64 @@ export function shellsAt(shows, t) {
     const cycles = t / show.period + show.phase;
     const n = Math.floor(cycles);
     const into = (cycles - n) * show.period;
-    for (let i = 0; i < show.shells; i += 1) {
-      const start = i * (0.75 + hash2(show.seed + i, n) * 0.85);
+    // **The site moves between shows.** Three fixed launch spots meant that once you had watched two
+    // rounds you knew exactly where to look, and no amount of variety inside a burst fixes a burst
+    // that always happens in the same place. People pick a different patch of bank each time.
+    const siteX = show.x + (hash2(show.seed + 1.3, n * 2.7) - 0.5) * 0.19;
+    const siteY = show.y + (hash2(show.seed + 4.9, n * 3.1 + 6) - 0.5) * 0.19;
+    // ...and they do not always bring the same number of them.
+    const count = 3 + Math.floor(hash2(show.seed + 8.1, n + 11) * 4);
+    for (let i = 0; i < count; i += 1) {
+      const start = i * (0.6 + hash2(show.seed + i, n) * 1.1);
       const u = (into - start) / SHELL_LIFE;
       if (u <= 0 || u >= 1) continue;
+      const seed = show.seed + i * 3.7 + n * 11.3;
       live.push({
         u,
         show: s,
-        seed: show.seed + i * 3.7 + n * 11.3,
+        seed,
         // Each shell goes up from a slightly different spot, because they are being lit by hand.
-        x: show.x + (hash2(show.seed + i * 2.3, n) - 0.5) * 0.07,
-        y: show.y + (hash2(show.seed + i * 5.1, n + 3) - 0.5) * 0.07,
+        x: siteX + (hash2(show.seed + i * 2.3, n) - 0.5) * 0.07,
+        y: siteY + (hash2(show.seed + i * 5.1, n + 3) - 0.5) * 0.07,
         // Where in the ramp this shell sits: some go up gold, some go up nearly all red.
         tint: hash2(show.seed + i * 7.9, n + 7) * 1.5,
+        ...shellKind(seed),
       });
     }
   }
   return live;
+}
+
+/**
+ * What *kind* of firework this one is.
+ *
+ * Every burst used to have identical topology — the same two dozen primaries, forking twice at the
+ * same angle, over the same fraction of the frame. The hashes underneath it all varied per shell, so
+ * no two were the same *drawing*, and yet every one was recognisably the same **object**: a thing of
+ * a certain size that comes apart a certain way. Randomising the seed harder would not have touched
+ * that, because the thing that repeated was the structure and the structure was a constant.
+ *
+ * So the structure is drawn from the seed too. A shell can be a dense fine peony of forty limbs
+ * forking twice, or a dozen long unbranched streamers, or a tight bright knot that barely spreads.
+ * The three read as three different fireworks rather than three samples of one.
+ */
+function shellKind(seed) {
+  const a = hash2(seed * 1.7, 21);
+  const b = hash2(seed * 2.9 + 5, 33);
+  const c = hash2(seed * 4.3 + 9, 47);
+  return {
+    // Twelve to forty-four primaries.
+    sparks: 12 + Math.round(a * 32),
+    // Nought to two generations of forking. Nought is a willow: long limbs, no branching at all.
+    forks: Math.round(b * 2),
+    // How far a fork kicks off its parent.
+    kink: 0.22 + c * 0.6,
+    // Fewer limbs throw further, so a sparse shell is a big one and a dense shell is a tight one —
+    // which is roughly how they are actually built, and stops the count reading as a density knob.
+    reach: 1.35 - a * 0.6,
+    // Some burn out in a second, some hang for three.
+    burn: 0.72 + b * 0.7,
+  };
 }
 
 /** How bright a shell is overall, for the pass that lights the cloud. */
@@ -234,19 +288,17 @@ const burstSpread = (shell, S) => S * (0.11 + 0.09 * hash2(shell.seed, 3));
  */
 const burstPixel = (S) => Math.max(3, Math.round(S / 130));
 
-const SPARKS = 24;
 /** Chunks in a spark's trail at full life — and, not coincidentally, steps in the ramp. */
 const TRAIL = EMBER.length;
-/** How many times a spark splits. Each generation forks in two, so 2 gives seven limbs per ray. */
-const FORKS = 2;
 
 /**
  * The sparks of a burst, as geometry — a **branching** structure, not a star.
  *
- * Every primary ray forks in two partway along its length, and each of those forks again, so what
- * leaves the centre is thirty limbs and what you see is two hundred. Each generation is shorter,
- * kinked further off its parent and shorter-lived than the one it came from, which is the whole of
- * it: self-similar at three scales. A firework really does come apart this way, and a plain radial
+ * A primary ray forks in two partway along its length, and each of those may fork again — how many
+ * times, how far off, how many rays there were to begin with and how far they throw all come from
+ * the shell's own `kind`, so one burst is a dense fine peony and the next is a dozen long unbranched
+ * streamers. Each generation is shorter, kinked further off its parent and shorter-lived than the one
+ * it came from. A firework really does come apart this way, and a plain radial
  * star — which is what this was — is the one arrangement that reads as *drawn* rather than as
  * something that burst.
  *
@@ -266,7 +318,7 @@ function burstSparks(shell, spread, out, fade, beat) {
     const dx = Math.cos(angle);
     const dy = Math.sin(angle);
     sparks.push({ x0, y0, dx, dy, len, life, depth });
-    if (depth >= FORKS) return;
+    if (depth >= shell.forks) return;
     for (let b = 0; b < 2; b += 1) {
       const h = hash2(shell.seed + id * 2.7 + b * 5.3, depth + 3);
       const k = hash2(shell.seed + id * 4.1 + b * 1.9, depth + 11);
@@ -275,7 +327,7 @@ function burstSparks(shell, spread, out, fade, beat) {
       const at = len * (0.4 + h * 0.34);
       grow(
         x0 + dx * at, y0 + dy * at,
-        angle + (b ? 1 : -1) * (0.4 + k * 0.5),
+        angle + (b ? 1 : -1) * (shell.kink + k * 0.4),
         len * (0.5 + h * 0.3),
         life * (0.62 + k * 0.16),
         depth + 1,
@@ -284,9 +336,9 @@ function burstSparks(shell, spread, out, fade, beat) {
     }
   };
 
-  for (let i = 0; i < SPARKS; i += 1) {
-    // Hashed angles, not even ones. Two dozen rays at exactly fifteen degrees apart is a compass rose,
-    // and the eye finds that instantly.
+  for (let i = 0; i < shell.sparks; i += 1) {
+    // Hashed angles, not even ones. Any number of rays at exactly equal spacing is a compass rose, and
+    // the eye finds that instantly.
     const h = hash2(shell.seed + i * 1.9, i);
     const k = hash2(shell.seed + i * 3.3, i + 5);
     const j = hash2(shell.seed + i * 6.1, i + 9);
@@ -299,8 +351,8 @@ function burstSparks(shell, spread, out, fade, beat) {
       // A little curl on top of the radial line, growing as it goes out — a streamer bends, a ray
       // does not.
       h * TAU + (j - 0.5) * 0.7 * out,
-      spread * out * (0.42 + k * 1.05),
-      clamp(fade * (0.45 + j * 1.1), 0, 1),
+      spread * out * (0.42 + k * 1.05) * shell.reach,
+      clamp(fade * (0.45 + j * 1.1) * shell.burn, 0, 1),
       0,
       i + 1,
     );
@@ -481,7 +533,10 @@ function drawFire(ctx, W, H, S, t, fire, life) {
   const flare = Math.max(flareAt(fire, t) * life, catching);
   const wind = windHere(x, y, S, t);
   const { body, core } = FIRE[fire.hue];
-  const beat = Math.floor(t * 12) / 12;
+  // The held clock the lobe body is rebuilt on. Seven times a second rather than twelve: a fire does
+  // gutter rather than ease, but at twelve the guttering was faster than the eye tracks and read as
+  // noise on top of the shape instead of as the shape moving.
+  const beat = Math.floor(t * 7) / 7;
   const size = (1 + flare * 0.8) * flicker;
 
   // The pool of light it throws on the ground, stretched downwind.
@@ -562,7 +617,6 @@ function drawFire(ctx, W, H, S, t, fire, life) {
  * usually three.
  */
 function drawFlame(ctx, S, t, fire, x, y, r, wind, flare, life, px, strength, veil) {
-  const beat = Math.floor(t * 12) / 12;
   // Between three and seven rows tall, by how hard it is burning.
   const rows = Math.max(3, Math.round((r / px) * (1.6 + flare * 1.4) * life));
   const wide = Math.max(1, Math.round((r / px) * 0.85));
@@ -576,14 +630,20 @@ function drawFlame(ctx, S, t, fire, x, y, r, wind, flare, life, px, strength, ve
       const up = k / rows;
       // Cooling upward, and the whole flame cools as it dies back.
       if (Math.min(TRAIL - 1, Math.round(up * (TRAIL - 1) + (1 - life) * 1.5)) !== step) continue;
-      // Narrowing, with a chunk of jitter per row so no two rows agree and the edge is ragged.
-      const jitter = hash2(fire.phase + k * 3.7, beat);
-      const half = Math.max(0, Math.round(wide * (1 - up * 0.85) * (0.6 + jitter * 0.7)));
+      // Width and sway both come from **continuous noise**, and the noise is read *upward through the
+      // flame* as well as through time — so a bulge starts at the base and travels to the tip, which
+      // is what a flame does. This was a hash re-rolled per row on a held twelve-frame clock, which
+      // gave every row a new unrelated width eighty-odd times a second: not flicker, scintillation.
+      // The chunk grid still quantises the result, so it is a pixel flame either way; the difference
+      // is whether the pixels are moving or merely changing.
+      const swell = noise2(fire.phase + k * 0.55, t * 1.9 - k * 0.32);
+      const half = Math.max(0, Math.round(wide * (1 - up * 0.85) * (0.62 + swell * 0.66)));
       // Leaning further downwind the higher it goes: the tip of a flame is downwind of its base. Only
       // a little, though — a flame that leans a full chunk per row is a flame lying on its side, and
       // twelve of those read as streaks rather than as fires.
       const lean = k * px * (0.16 + gustAt(t) * 0.22);
-      const cx = x + wind.x * lean + (hash2(fire.phase + k * 1.9, beat + 5) - 0.5) * px;
+      const sway = (noise2(fire.phase + 6.3 + k * 0.4, t * 1.35 - k * 0.28) - 0.5) * 1.6;
+      const cx = x + wind.x * lean + sway * px;
       const cy = y + wind.y * lean - k * px * 0.12;
       for (let c = -half; c <= half; c += 1) {
         const bx = cx + wind.y * c * px;

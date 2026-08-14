@@ -148,8 +148,20 @@ grow, draw out, thin away and are replaced by masses welling up through them.
   of short strokes rather than a blob; and **reeds** in stands along the bank, leaning together on a
   shared gust so a clump moves as a clump.
 
-  Fields are **parcels** now — closed, five-to-seven-sided, no two alike, each a slightly different
-  tone with a hedge on its boundary. They replaced nine long straight lines ruled across the grass at
+  Trees are **clustered into copses**, not scattered evenly: two thirds of them are dropped around one
+  of a dozen stand centres, square-rooted so the density does not pile up in the middle of each, and
+  the rest left loose. A rejection-sampled uniform scatter is uniform, and four hundred evenly spread
+  trees is a lawn with dots on it — a wooded valley from above is thick stands with clearings between
+  them. Houses run over a much wider span of size than they did, because a row all within a tenth of
+  each other is a terrace and a terrace behind a terrace is a housing estate. And a handful of
+  **outbuildings** stand well out in the fields, turned whichever way they like: everything built used
+  to be within a couple of hundred metres of the water and squared up to it, which reads as a model
+  village, and the strays are what make it somewhere people spread out across.
+
+  Fields are **parcels** now — closed, five-to-seven-sided, no two alike, over a wide span of size,
+  each a slightly different tone with a hedge on its boundary and about half of them catching a neon
+  rim. (All of them rimmed, at the count they run to, is a wireframe laid over the fields rather than
+  a few edges picking up light.) They replaced nine long straight lines ruled across the grass at
   arbitrary angles. A hedge line does say *farmed*, but a straight one bounding nothing is a scratch
   on the picture, and once the ground had rocks and scrub and reeds on it those nine lines were the
   only thing left in frame that nothing in nature would have made.
@@ -189,7 +201,7 @@ grow, draw out, thin away and are replaced by masses welling up through them.
   de-saturated photograph is another de-saturated photograph — everything landed between about 130
   and 210, which is one flat mid-grey wash with a hint of lilac in it, and through a hole the size of
   a fist that is nothing at all. So: **contrast is value** — the ladder runs the whole way, roads
-  near black at about 14 and the river the brightest thing on the ground, because brightness is the
+  near black at about 8 and the river the brightest thing on the ground, because brightness is the
   only thing that survives being seen for a second through a hole. And **off-ness is hue** — the
   complements are taken at real chroma instead of pulled back toward grey, giving blue grass, amber
   water, teal and slate roofs, jewel-toned awnings, and a *dark* glitter crawling downstream on a
@@ -204,7 +216,7 @@ grow, draw out, thin away and are replaced by masses welling up through them.
   within a few levels of the cloud in front of it and dissolved into it, and a peek-a-boo stopped
   looking like a hole. And every light in the scene is additive, so a bright ground is a bright floor
   under the fires and the fireworks and leaves them less room to be brighter than it. The river is a
-  burnt amber at 139 now rather than a cream at 238, the grass runs 87 down to 45, the canopy sits
+  burnt amber at 122 now rather than a cream at 238, the grass runs 70 down to 34, the canopy sits
   between them, and the awnings and roofs went with them — richer than the pale version and most of
   it a hundred levels below where it started. The gap between the brightest grass and the darkest
   canopy is fifteen levels and it is the tightest join in the palette: close it and four hundred
@@ -291,11 +303,25 @@ grow, draw out, thin away and are replaced by masses welling up through them.
   for a minute and a half — because people do not set off one firework.
 
   **A burst is branching pixel art.** Every limb is a run of chunks snapped to a coarse grid,
-  stepping down the ramp from a warm-white head to a deep red tail, at full opacity with hard edges —
-  and every limb **forks in two, twice**, so two dozen rays leave the centre and two hundred are on
-  screen, each generation shorter, kinked further off its parent and starting further down the ramp
-  than the one it grew from. Self-similar at three scales. A plain radial star is the one arrangement
-  that reads as *drawn* rather than as something that burst, and that is what this was.
+  stepping down the ramp from a warm-white head to a deep red tail, at full opacity with hard edges,
+  and limbs **fork** — each generation shorter, kinked further off its parent and starting further
+  down the ramp than the one it grew from. A plain radial star is the one arrangement that reads as
+  *drawn* rather than as something that burst, and that is what this was.
+
+  **No two are the same firework.** How many limbs leave the centre (twelve to forty-four), how many
+  times they fork (nought to twice — nought is a willow, long limbs and no branching at all), how far
+  a fork kicks off its parent, how far the limbs throw and how long they burn are all drawn from the
+  shell's own seed. Fewer limbs throw further, so a sparse shell is a big one and a dense shell is a
+  tight one, which is roughly how they are really built and stops the count reading as a density
+  knob. The **launch sites move between shows** and the number of shells in a salvo varies with them.
+
+  Every burst used to have identical topology, and the reason that was worth fixing is worth writing
+  down: the hashes underneath it all *did* vary per shell, so no two were ever the same drawing — and
+  yet every one was recognisably the same **object**, a thing of a certain size that comes apart a
+  certain way. Randomising the seed harder could not have touched it, because what repeated was the
+  structure and the structure was a constant. Nor could it have fixed three launch sites that never
+  moved: once you have watched two rounds you know where to look, and no amount of variety inside a
+  burst fixes a burst that always happens in the same place.
 
   A limb is a point, a direction and a length rather than an angle from the centre, because a branch
   does not start at the centre. Its chunks are laid from the tip backwards, spaced by a fraction of
@@ -348,9 +374,17 @@ grow, draw out, thin away and are replaced by masses welling up through them.
   noticing; a firework is an event.
 
   **A flame is a tapering stack of rows** — widest at the base, narrowing as it goes, leaning a little
-  further downwind with every row, hottest at the bottom and cooling to red at the tip, rebuilt on the
-  same held twelve-frame clock the soft lobes under it run on so both halves of a fire gutter together
-  instead of beating against each other. Three to five fills each. It is drawn a second time over the
+  further downwind with every row, hottest at the bottom and cooling to red at the tip.
+
+  Its width and its sway come from **continuous noise read upward through the flame as well as
+  through time**, so a bulge starts at the base and travels to the tip, which is what a flame does.
+  That was a hash re-rolled per row on a held twelve-frame clock, which handed every row a new
+  unrelated width eighty-odd times a second: not flicker, scintillation. The chunk grid quantises the
+  result either way, so it is a pixel flame regardless — the difference is whether the pixels are
+  *moving* or merely changing. The soft lobes underneath now gutter at seven frames a second rather
+  than twelve, and the flicker's fast octave runs at half its old rate carrying a third of the weight;
+  at 9 Hz it was a strobe, and twelve fires strobing out of phase is motion you notice before you
+  notice the scene. Three to five fills each. It is drawn a second time over the
   fog with the cloud eating chunks, exactly as a burst is, because a fire seen through weather should
   come apart the way a firework does or the two stop looking like they are in the same air. Before
   this the fires were soft lobes with a scatter of dithered specks over them, and the specks were what
