@@ -846,6 +846,15 @@ snuggled under the covers peacefully sleeping while the bed gently floats amongs
 the page; the title and description survive only as the canvas label and a screen-reader live
 region. Navigation is two soft chevrons floating at the top and bottom edges, each present only
 when there is somewhere to go — so a single-animation gallery is nothing but the animation.
+  With more than one, **the gallery is a ring**: down from the oldest arrives back at the newest and
+  up from the newest arrives at the oldest, so both chevrons are always live and no direction is ever
+  a dead end you have to reverse out of. The index is wrapped rather than clamped, and it is wrapped
+  as `((i % n) + n) % n` rather than `i % n`, because JavaScript's remainder keeps the sign of its
+  left operand: `-1 % 3` is `-1`, so the naive version sends *up* from the first scene to
+  `scenes[-1]` and renders a blank page. The wrap lives in `lib/gallery.js` as a pure function so it
+  is tested as arithmetic rather than as a regular expression over `app.js`. Arriving by wrap is an
+  arrival like any other, so it plays the **incoming** scene's own channel change — verified by
+  driving the built page in a browser, not by reading the code.
 
 And they are **invisible almost all of the time**: every ten seconds they fade up, hold for a
 second, and fade away again. A control parked permanently on top of the picture is chrome however
