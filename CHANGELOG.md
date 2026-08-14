@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [3.1.0] - 2026-08-14
+## [3.2.0] - 2026-08-14
 
 **"Above the Fog" is finished, and a fourth animation begins.** That is the only thing a MAJOR bump
 means here — see `.claude/CLAUDE.md`.
@@ -105,6 +105,66 @@ only part that cannot be faked with a texture. The scene is built around it.
 - **Seven fills for the whole tornado**, however many thousand chunks it is made of: every chunk is
   bucketed by ramp step and each step issues one path. A fill per chunk is the identical picture at
   several thousand rasteriser passes a frame.
+
+### The temple under it
+
+*"An ornate pagoda temple many stories tall and with a giant spire, being destroyed and created —
+wood splintering, roof tiles flung, stone statues cracking and exploding what they collide with,
+glassware shattering — while disembodied spirit hands rebuild it ceaselessly, cutting trees, milling
+wood, smelting iron, firing kilns and blowing glass, in a never-ending cycle of birth and death and
+re-birth."*
+
+- **A pagoda at seven pixels is not a shape, it is a chord.** Silhouette alone gets you *tower*. What
+  gets you *pagoda* is a value rhythm repeated up the frame — dark mass, overhanging eave, bright rim
+  — each repetition narrower than the one below, with the upturned corner defined in *columns from
+  the tip* rather than as a fraction of the span, so the curl is exactly two chunks on the wide bottom
+  roof and on the narrow top one alike. As a fraction it is a hook on one and a jag on the other.
+- **The mass is one flat value, and it is the ramp's darkest — the one step the funnel forbids
+  itself.** That prohibition, written for the tornado's own reasons, turns out to be load-bearing for
+  the building: step 6 is produced only by things *behind* the funnel, so a step-6 shape in front of
+  it can never be read as part of it. The temple is a hole in the tornado, which is the only way a
+  building stays legible against a vortex drawn in the same seven colours. The chord is therefore
+  spent on the *eaves* rather than the walls, because the eaves project past the funnel on both sides
+  at every storey and a mid-ramp wall over a mid-ramp helix appears and vanishes on the rotation.
+- **Destruction is caused, and causation is memory — which is forbidden.** The render tests sample `t`
+  out of order, so nothing may be latched. The resolution: a latch is only forbidden if you have to
+  *store* it. Every bay runs its own cycle, and the second its current round began is available in
+  closed form as `began = (n - phase) * period`. Ask the storm where it was *then*, hash the verdict
+  off `(bay, n)`, and destruction is causal, latched for the round, fresh every round, and computable
+  at any `t` in any order. The funnel wandering off heals nothing, because nothing is re-asked.
+- **It is never whole and never gone.** The strike chance has a floor, so something is always missing;
+  the phases are spread over the whole unit interval with a golden rotation per storey, so at `t = 0`
+  every bay is already inside its own round. There is no moment at which this building was ever new,
+  and no seam, because there is no global loop — only thirty incommensurable ones.
+- **Four materials out of one ramp.** Value is already spent on depth, so material is carried by
+  aspect, spin, mass and how each one dies: wood is long and tumbles end over end, a tile collapses to
+  a line twice a turn, stone is big and slow, glass is small and breaks into a dozen bright specks.
+  All four share the same seven buckets, so four materials cost exactly what one costs. Spin rates are
+  all under about two radians a second — faster and a five-chunk plank moves its own endpoint further
+  than a chunk between frames, so the silhouette jumps instead of turning.
+- **A statue does not find something to hit; the thing it hits is launched so as to be there.** A
+  detected collision cannot alter a trajectory that is a closed-form function of `t`, and integrating
+  one is the stored state the tests exist to forbid — so the meeting is choreographed, solving
+  `v = (p₁ - p₀ - ½gT²) / T` for the victim's launch. Exact, two lines, and it happens every round.
+- **The hands are drawn at the size of what they carry, not at the size of a hand** — a lie the eye
+  takes instantly because there is no other hand in frame to compare against. Disembodied is done by
+  subtraction: no arm, nothing to be attached to, and a wrist that comes apart into separating chunks
+  behind it. The workshops are silhouettes with one hot chunk each, because a shed with a structure
+  and a lit doorway drawn in nine background chunks is a speckle, and a dark shape with an ember in it
+  reads as a forge from across the room.
+- **The funnel gave up its own debris.** It used to carry a hundred and fifty motes; the moment there
+  was a temple beneath it being torn apart, those became the same idea drawn twice — two orbiting
+  populations doing one job, at which point the orbit stops being legible and becomes a cloud.
+  Everything in the air now came off the building, which is cheaper and makes the debris *mean*
+  something.
+- **The background moved to two grids and paid for all of it.** The sky's ramp is a smooth field whose
+  dither is its only pattern, so coarsening it turns a texture into a lattice — and it is the cheap
+  part. The storm and the ground are noise-driven, where a bigger chunk reads as a bigger billow, and
+  they are where the time goes. Splitting them took the frame from 14ms to 10.9ms *before* anything
+  was added; the whole scene now runs at 12ms with a temple, four kinds of debris, a forest, three
+  workshops and four hands in it. The ceiling is 20ms, and it is not a preference: the stage drops
+  render scale after twelve slow frames but only restores it after three hundred frames under 20ms, so
+  a scene sitting above that would degrade once and never recover.
 
 ### Its chrome and its channel change
 
