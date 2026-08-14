@@ -203,24 +203,41 @@ export function createStage(canvas, options = {}) {
     else if (!prefersReducedMotion()) start();
   }
 
-  function build(module) {
+  function build(module, variant) {
     return {
       module,
       elapsed: prefersReducedMotion() ? (module.meta.posterTime ?? 0) : 0,
-      instance: module.create({ width, height, seed: module.meta.seed || module.meta.id, tape }),
+      instance: module.create({ width, height, seed: module.meta.seed || module.meta.id, variant, tape }),
     };
   }
 
   /**
    * Mount a scene module. Pass a direction to play the channel change into it.
+   *
+   * `variant` is one of the scene's own `meta.variants`, chosen by the shell, and the stage does not
+   * look inside it — it forwards it to `create()` and forgets it. That is deliberate: a scene having
+   * several compositions of itself is a fact about the *artwork*, and the moment the engine starts
+   * understanding compositions it acquires opinions about how they differ, which is exactly the
+   * knowledge that belongs in the scene. Passing `undefined` is normal and means "however you open".
+   *
    * @param {{ meta: object, create: Function }} module
-   * @param {{ direction?: 'down' | 'up' }} [opts]
+   * @param {{ direction?: 'down' | 'up', variant?: object }} [opts]
    */
   function mount(module, opts = {}) {
     pixelCap = Math.min(module.meta.maxDpr ?? MAX_DPR, MAX_DPR);
     measure();
     const reduced = prefersReducedMotion();
-    const next = build(module);
+    const next = build(module, opts.variant);
+
+    // Re-mounting the *same* animation — which is what changing composition is — carries its clock
+    // across. Both entries are then the same artwork at the same instant, so the sky, the stars, the
+    // tide of lamps and the figment's schedule all continue through the change instead of snapping
+    // back to zero, and what you see is one picture being re-arranged rather than two pictures.
+    //
+    // This is legal only because scenes are pure functions of `t`. Handing a freshly built instance
+    // somebody else's clock would be meaningless if drawing at `t` depended on having drawn at
+    // `t - dt` first — the whole determinism rule is what buys this one line.
+    if (current && current.module === module && !reduced) next.elapsed = current.elapsed;
 
     // A transition is motion for its own sake — skip it entirely when that's unwelcome.
     if (current && opts.direction && !reduced) {

@@ -43,53 +43,62 @@ function spyTape(width, height) {
   };
 }
 
+// Every composition of every scene. A scene with several arrangements of itself has several sets of
+// geometry, and testing only the one it opens on leaves the others to rot — which is exactly what
+// would happen, because the default is the one anybody looking at the page would notice was broken.
+// `[undefined]` stands for "the scene as it opens" so scenes without compositions read identically.
+const compositionsOf = (scene) => scene.meta.variants ?? [undefined];
+const named = (variant) => (variant ? ` / ${variant.id}` : '');
+
 for (const scene of scenes) {
   const { meta } = scene;
 
-  test(`${meta.id}: renders cleanly at every viewport`, () => {
-    for (const viewport of VIEWPORTS) {
-      const recorder = createRecordingContext(viewport);
-      const instance = scene.create({ ...viewport, seed: meta.id });
+  for (const variant of compositionsOf(scene)) {
+    test(`${meta.id}${named(variant)}: renders cleanly at every viewport`, () => {
+      for (const viewport of VIEWPORTS) {
+        const recorder = createRecordingContext(viewport);
+        const instance = scene.create({ ...viewport, seed: meta.id, variant });
 
-      for (const t of SAMPLE_TIMES) {
-        instance.draw(recorder.ctx, t, 1 / 60);
+        for (const t of SAMPLE_TIMES) {
+          instance.draw(recorder.ctx, t, 1 / 60);
+        }
+
+        recorder.assertClean(`${meta.id}${named(variant)} @ ${viewport.label}`);
+        assert.equal(recorder.depth, 0, `${meta.id}${named(variant)} @ ${viewport.label}: unbalanced save/restore`);
+        assert.ok(
+          recorder.paints > SAMPLE_TIMES.length * 20,
+          `${meta.id}${named(variant)} @ ${viewport.label}: drew almost nothing (${recorder.paints} paints)`,
+        );
       }
-
-      recorder.assertClean(`${meta.id} @ ${viewport.label}`);
-      assert.equal(recorder.depth, 0, `${meta.id} @ ${viewport.label}: unbalanced save/restore`);
-      assert.ok(
-        recorder.paints > SAMPLE_TIMES.length * 20,
-        `${meta.id} @ ${viewport.label}: drew almost nothing (${recorder.paints} paints)`,
-      );
-    }
-  });
-
-  test(`${meta.id}: survives a resize`, () => {
-    const recorder = createRecordingContext({ width: 800, height: 600 });
-    const instance = scene.create({ width: 800, height: 600, seed: meta.id });
-    instance.draw(recorder.ctx, 0, 0);
-    instance.resize?.(1600, 500);
-    instance.draw(recorder.ctx, 2.5, 1 / 60);
-    instance.resize?.(320, 900);
-    instance.draw(recorder.ctx, 5, 1 / 60);
-    recorder.assertClean(`${meta.id} after resize`);
-    assert.equal(recorder.depth, 0);
-  });
-
-  test(`${meta.id}: is deterministic for a given seed`, () => {
-    const viewport = { width: 1200, height: 800 };
-    const runs = [0, 1].map(() => {
-      const recorder = createRecordingContext(viewport);
-      const instance = scene.create({ ...viewport, seed: meta.id });
-      for (const t of SAMPLE_TIMES) instance.draw(recorder.ctx, t, 1 / 60);
-      return recorder.fingerprint();
     });
-    assert.equal(
-      runs[0],
-      runs[1],
-      `${meta.id} drew differently on two identical runs — is something using Math.random() or Date.now()?`,
-    );
-  });
+
+    test(`${meta.id}${named(variant)}: is deterministic for a given seed`, () => {
+      const viewport = { width: 1200, height: 800 };
+      const runs = [0, 1].map(() => {
+        const recorder = createRecordingContext(viewport);
+        const instance = scene.create({ ...viewport, seed: meta.id, variant });
+        for (const t of SAMPLE_TIMES) instance.draw(recorder.ctx, t, 1 / 60);
+        return recorder.fingerprint();
+      });
+      assert.equal(
+        runs[0],
+        runs[1],
+        `${meta.id}${named(variant)} drew differently on two identical runs — Math.random() or Date.now()?`,
+      );
+    });
+
+    test(`${meta.id}${named(variant)}: survives a resize`, () => {
+      const recorder = createRecordingContext({ width: 800, height: 600 });
+      const instance = scene.create({ width: 800, height: 600, seed: meta.id, variant });
+      instance.draw(recorder.ctx, 0, 0);
+      instance.resize?.(1600, 500);
+      instance.draw(recorder.ctx, 2.5, 1 / 60);
+      instance.resize?.(320, 900);
+      instance.draw(recorder.ctx, 5, 1 / 60);
+      recorder.assertClean(`${meta.id}${named(variant)} after resize`);
+      assert.equal(recorder.depth, 0);
+    });
+  }
 
   test(`${meta.id}: different seeds produce different art`, () => {
     const viewport = { width: 1200, height: 800 };

@@ -2,7 +2,7 @@
 
 An instant animation generator. Animate anything you can describe.
 
-**Version:** 3.0.0 · **Live:** https://cportka.github.io/instant-animation/
+**Version:** 3.1.0 · **Live:** https://cportka.github.io/instant-animation/
 
 Describe something. It becomes a hand-drawn canvas animation and joins the gallery. There is no
 text on the site — the animation *is* the page. The only chrome is a soft chevron floating at each
@@ -17,11 +17,18 @@ space or the arrow keys, or swiping. Moving between animations plays a channel c
 scenes push past each other while the picture tears itself apart, then settles — and the change is
 always the one belonging to the animation you are arriving *at*, including on the wrap.
 
+**Tap the picture** and some animations re-arrange themselves. An animation may hold more than one
+*composition* of itself — the same artwork, put together a different way — so the gallery has two
+axes, and both are rings: up and down moves between animations, left and right (or a tap) moves
+between arrangements of the one you are looking at. The clock carries across, so what you see is one
+picture being re-composed rather than two pictures. Compositions have their own addresses —
+`#grizzly-peak/into-the-dark` — and the first one writes no suffix, so every link keeps its meaning.
+
 | Animation | From the description |
 | --- | --- |
 | **The Rose Funnel** | *a pixelated tornado swirling up reds, pinks and purples* |
 | **Above the Fog** | *an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and changing into each other, over a lazy winding river and a riverside town in reversed colour — people down there setting fires and letting off fireworks that burst amongst the fog as stylised orange and red fractal pixel art, and every few minutes one cloud pixelates into an angel, then a grim reaper, then a giant happy face* |
-| **Westbound on Grizzly Peak** | *2.5D 16-bit from the perspective of a car travelling diagonally up and to the left, a series of copper bronze street lamps, a cliff drop-off overlooking the bay, trees, and a fiery sunset in a night sky* |
+| **Westbound on Grizzly Peak** *(two compositions)* | *2.5D 16-bit from the perspective of a car travelling diagonally up and to the left, a series of copper bronze street lamps, a cliff drop-off overlooking the bay, trees, and a fiery sunset in a night sky* |
 | **Asleep Among the Stars** | *a bed floating in space with someone snuggled under the covers peacefully sleeping while the bed gently floats amongst the stars* |
 
 ## How it works
@@ -40,7 +47,8 @@ site/
                       and the channel change between scenes
     rng.js            seeded randomness — scenes never call Math.random()
     draw.js           shared geometry and colour helpers
-    gallery.js        the ring: which scene an index lands on when you walk off the end
+    gallery.js        the rings: which scene an index lands on when you walk off the end,
+                      and how an address names a scene and one of its compositions
 
   effects/            shared animation code — nothing but looks
     vhs.js            tracking bands, shred, chroma split, stuck macroblocks, tape dropouts
@@ -90,8 +98,11 @@ Node 20+. There are no dependencies to install.
 Nothing is written on the page, so the description has to reach a screen reader another way: the
 canvas carries it as its label, and scene changes are announced through a live region. The
 chevrons are real buttons with accessible names. Navigation works from the keyboard (`↑` `↓`
-`Space` `Home` `End`). Visitors who ask for reduced motion get a still frame held at the moment
-each scene reads best, the chevrons stop bobbing, and the channel change is skipped entirely.
+`Space` `Home` `End`, and `←` `→` between compositions). Where an animation has more than one
+composition the live region says so, and names both the tap and the arrow keys — a tap-only
+affordance is otherwise undiscoverable without sight. Visitors who ask for reduced motion get a still
+frame held at the moment each scene reads best, the chevrons stop bobbing, and the channel change is
+skipped entirely.
 
 ## Versioning
 
