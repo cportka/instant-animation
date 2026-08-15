@@ -219,7 +219,8 @@ export function drawDebris(ctx, W, H, t, plan, cycle, funnel, px, where) {
     if (!bay) continue;
     const site = where(bay);
     if (!site) continue;
-    const state = bayAt(bay, site.x, t, W, H, funnel, cycle.seed);
+    const bayUp = clamp((groundY - site.y) / (groundY - H * 0.04), 0, 1);
+    const state = bayAt(bay, site.x, bayUp, t, W, H, funnel, cycle.seed, 0);
     // A piece exists only while its bay is down. Nothing is hidden and nothing pops: a seat whose bay
     // was not taken this round simply never threw anything.
     if (!state.struck || state.age > FLIGHT) continue;

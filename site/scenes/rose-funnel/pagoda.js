@@ -24,9 +24,10 @@
 // period. The eaves project past the funnel on both sides at every storey, so that is where the
 // ornament goes, and it is legible there against sky instead of against a moving barber pole.
 
-import { rgba } from '../../lib/draw.js';
+import { clamp, rgba } from '../../lib/draw.js';
 import { chunk } from '../../effects/pixel.js';
-import { bayAt } from './cycle.js';
+import { FALL, GONE, bayAt } from './cycle.js';
+import { FIX_AT, tendingAt } from './hands.js';
 import { vortexAt } from './funnel.js';
 import { CLOUD, GROUND } from './layout.js';
 import { GOLD, JADE, LAPIS, SPIN } from './palette.js';
@@ -149,7 +150,22 @@ export function bayPlaces(W, H, t, plan, px, R) {
   return places;
 }
 
-export function drawPagoda(ctx, W, H, t, plan, px, R, cycle, funnel) {
+/**
+ * How far the hand that serves this bay has got with putting it back.
+ *
+ * The bay stays down until somebody arrives. `tendingAt` says when that hand last completed a fix
+ * pass; if that was after the wound opened, the bay comes back over the second or so around it, and
+ * if the hand has not been since, it is still a hole. That is the whole of "location-aware repair" —
+ * the building heals where the labour is, and nowhere else.
+ */
+function mendedBy(cycle, hands, key, t, began) {
+  const { doneAt } = tendingAt(hands, key, t);
+  const wounded = began + FALL + GONE;
+  if (doneAt < wounded) return 0;
+  return clamp((t - doneAt) / 1.4 + 0.15, 0, 1);
+}
+
+export function drawPagoda(ctx, W, H, t, plan, px, R, cycle, funnel, hands) {
   const shape = pagodaShape(W, H, px, R);
   const { cx, baseY, rows } = shape;
   const n = rows.length;
@@ -165,6 +181,14 @@ export function drawPagoda(ctx, W, H, t, plan, px, R, cycle, funnel) {
   };
   const put = (into, x, y, w, h) => into.push(x, y, w, h);
   const bayOf = (storey, part) => cycle.bays[storey * 3 + ['eaveL', 'eaveR', 'wall'].indexOf(part)];
+  const groundY = H * GROUND;
+  const skyTop = H * 0.04;
+  const lifeOf = (bay, bx, by) => {
+    const up = clamp((groundY - by) / (groundY - skyTop), 0, 1);
+    const first = bayAt(bay, bx, up, t, W, H, funnel, cycle.seed, 0);
+    if (!first.struck || !first.ruined) return first.life;
+    return bayAt(bay, bx, up, t, W, H, funnel, cycle.seed, mendedBy(cycle, hands, bay.key, t, first.began)).life;
+  };
 
   // Where the storm is standing, asked once. The scene has no sun — the vortex is the only light in
   // it — so which face of the temple is lit is a question about where the storm *is*, and because it
@@ -183,9 +207,9 @@ export function drawPagoda(ctx, W, H, t, plan, px, R, cycle, funnel) {
     const roofRows = Math.max(3, Math.round(storeyRows * 0.34));
     const cols = Math.max(2, Math.round(eave / px));
 
-    const left = bayAt(bayOf(i, 'eaveL'), cx + dx - eave, t, W, H, funnel, cycle.seed).life;
-    const right = bayAt(bayOf(i, 'eaveR'), cx + dx + eave, t, W, H, funnel, cycle.seed).life;
-    const wall = bayAt(bayOf(i, 'wall'), cx + dx, t, W, H, funnel, cycle.seed).life;
+    const left = lifeOf(bayOf(i, 'eaveL'), cx + dx - eave, top);
+    const right = lifeOf(bayOf(i, 'eaveR'), cx + dx + eave, top);
+    const wall = lifeOf(bayOf(i, 'wall'), cx + dx, top + storeyRows * px * 0.6);
 
     // ---- the body of the storey ----------------------------------------------------------------
     //
@@ -312,7 +336,7 @@ export function drawPagoda(ctx, W, H, t, plan, px, R, cycle, funnel) {
   }
 
   // ---- the sōrin ------------------------------------------------------------------------------
-  const spire = bayAt(cycle.bays[cycle.bays.length - 1], cx, t, W, H, funnel, cycle.seed).life;
+  const spire = lifeOf(cycle.bays[cycle.bays.length - 1], cx, top - shape.spireRows * px * 0.5);
   const topDx = shoveAt(t, plan, 1, px);
   const spireRows = Math.round(shape.spireRows * spire);
   if (spireRows > 1) {
