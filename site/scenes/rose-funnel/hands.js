@@ -12,6 +12,11 @@
 // "coming out of the air" rather than "cropped by something". An arm that faded out would be a
 // drawing with a soft edge, and there is not one soft edge in this scene.
 //
+// What a hand *looks* like is in `spirit.js`. This file is what one **does**: whose bay it is
+// answerable for and when it gets there (which is the whole of the temple's repair rule, computed on
+// this side of it), how it behaves near the storm, and the fact that the storm sometimes wins. The
+// last of those is why there are slots rather than hands — a slot can be empty.
+//
 // The workshops are silhouettes with a single hot chunk in them, and that is not a saving. The band
 // between the horizon and the bottom of the frame is nine background chunks deep, and a shed drawn
 // with a structure, a roof and a lit doorway in nine chunks is a speckle. A dark shape with one
@@ -19,8 +24,10 @@
 
 import { clamp, rgba, wrap01 } from '../../lib/draw.js';
 import { hash2 } from '../../effects/field.js';
-import { bayerOn, chunk } from '../../effects/pixel.js';
+import { chunk } from '../../effects/pixel.js';
 import { backPixel, GROUND } from './layout.js';
+import { vortexAt } from './funnel.js';
+import { HAND_H, HAND_W, handMask, stampSpirit } from './spirit.js';
 import { GOLD, JADE, LAPIS, SPIN } from './palette.js';
 
 /**
@@ -36,20 +43,35 @@ const SHOPS = [
   { at: 0.87, kind: 'glass', beat: 2.3 },
 ];
 
-export function planHands(rng) {
+export function planHands(rng, bayCount = 27) {
+  // Twelve slots rather than twelve hands. A slot is not always occupied: the storm takes them, and
+  // a new one is summoned into the empty slot a while later — so the population breathes, and the
+  // hands you are watching are not the hands you started with.
+  const hands = Array.from({ length: 12 }, (_, i) => ({
+    key: i,
+    shop: i % SHOPS.length,
+    // Staggered on one fixed circuit each, so the traffic never synchronises and nothing queues.
+    period: 9 + rng.next() * 7,
+    phase: rng.next(),
+    // How long a spirit lasts before the question of whether the storm has taken it comes round
+    // again — and how strong it is, which decides whether it can hold its ground in the wind.
+    //
+    // Short rounds on purpose. At sixty seconds the question was asked so rarely that a spirit was
+    // taken about once every seventy-five seconds across every slot there is, and the empty slot that
+    // follows was on screen four percent of the time — a mechanic nobody would ever see run.
+    life: 22 + rng.next() * 22,
+    born: rng.next(),
+    nerve: rng.range(0.35, 1),
+    /** The bays this one is answerable for, taken in turn, one per circuit. */
+    bays: [],
+  }));
+  // Share the temple out. Every bay is somebody's round and no bay is nobody's — which is the thing
+  // that makes a repair *locatable* at all: ask who mends this bay and there is exactly one answer,
+  // and that spirit's errand is to fly to it.
+  for (let k = 0; k < bayCount; k += 1) hands[k % hands.length].bays.push(k);
   return {
     seed: rng.range(0, 90),
-    // Two pairs. Four large hands read as ceaseless labour; ten small ones read as a swarm, and at
-    // this size ten of them would also be a swarm of paddles.
-    hands: Array.from({ length: 7 }, (_, i) => ({
-      key: i,
-      shop: i % SHOPS.length,
-      // Staggered on one fixed circuit each, so the traffic never synchronises and nothing queues.
-      period: 11 + rng.next() * 9,
-      phase: rng.next(),
-      storey: Math.floor(rng.range(0, 6)),
-      lean: rng.range(-0.4, 0.4),
-    })),
+    hands,
     trees: Array.from({ length: 34 }, (_, i) => ({
       at: (i + 0.5) / 34 + rng.range(-0.03, 0.03),
       h: rng.range(0.6, 1.5),
@@ -184,183 +206,261 @@ export function drawWorks(ctx, W, H, t, plan, px) {
 }
 
 /**
- * A hand, as a bitmap.
+ * Where a hand is in its life, and whether it is there at all.
  *
- * Everything before this was a palm rectangle with chunks stuck on it, and it read as a mitten
- * because a mitten is exactly what it was. A hand needs four things at any size — a **palm** with
- * mass, **fingers that are separate**, a **thumb set off across a gap**, and a **wrist narrower than
- * both** — and none of them survive being improvised per-hand in code. Authored as a grid they are
- * simply there, and the two poses can differ in the one way that matters: open and reaching, or
- * closed around something.
+ * A slot runs a long round of its own. At the start of each round the question is asked once — was
+ * the storm near this hand's beat when the round turned over? — and if it was, this is the round the
+ * spirit is **taken**: it is pulled off its circuit, wound up the column, and gone. The slot then
+ * stands empty for a while and a new hand is summoned into it, fading up out of nothing.
  *
- * `#` is the body, `+` the edge that catches light, `.` nothing.
+ * Asked once, at the round's own start, against where the storm was *then* — the same latch the
+ * temple's bays use, and for the same reason. A spirit halfway up the funnel must not be handed back
+ * because the weather improved.
  */
-const POSE = {
-  open: [
-    '.+.+.+',
-    '+#+#+#',
-    '.####+',
-    '+#####',
-    '.####.',
-    '..##..',
-    '..#...',
-  ],
-  grip: [
-    '......',
-    '.+++..',
-    '.####+',
-    '+#####',
-    '.####.',
-    '..##..',
-    '..#...',
-  ],
-};
+function spiritAt(hand, t, W, H, funnel, seed) {
+  const cycles = t / hand.life + hand.born;
+  const n = Math.floor(cycles);
+  const began = (n - hand.born) * hand.life;
+  const age = (cycles - n) * hand.life;
+  const bench = SHOPS[hand.shop].at * W;
+
+  const storm = vortexAt(W, H, began, funnel, 0.12);
+  const exposed = 1 - clamp(Math.abs(bench - storm.cx) / Math.max(1, storm.wind), 0, 1);
+  const doomed = hash2(hand.key * 5.3 + 1.7, n + seed) < exposed * (1.9 - hand.nerve);
+
+  if (!doomed) return { here: 1, taken: 0 };
+  // Taken partway through the round: dragged across and wound up the column, then an empty slot long
+  // enough to be noticed, then a new one summoned into it. The empty stretch is the part that has to
+  // be generous — a slot that refills before you have registered it was empty is not a replacement,
+  // it is a flicker.
+  const at = hand.life * 0.42;
+  if (age < at) return { here: 1, taken: 0 };
+  if (age < at + 2.6) return { here: 1, taken: (age - at) / 2.6 };
+  if (age < at + 9.1) return { here: 0, taken: 1 };
+  return { here: clamp((age - at - 9.1) / 3.2, 0, 1), taken: 0 };
+}
 
 /**
- * Stamp a pose — and this is where the hand stops being a hand and becomes a *spirit*.
+ * Which bay a hand is on its way to at time `t`, and where that is.
  *
- * The trick is **ordered dither as translucency**. Every chunk is put through the same Bayer matrix
- * the sky's ramp uses, at a density that falls off from the middle of the palm outward: the core is
- * solid, the fingers are half there, and the wrist is barely there at all — so the picture behind it
- * shows through the gaps and the thing reads as not-quite-present. It is how a 16-bit machine drew a
- * ghost, for the same reason we are doing it: there is no alpha to be had, and a flat silhouette in
- * a pale colour is a *pale hand*, not a spectral one.
- *
- * Keyed on the sprite's own grid rather than on screen position, so the dither pattern travels with
- * the hand instead of the hand sliding across a fixed screen-door — which would read as a hole cut
- * in the picture that a hand happens to be behind.
+ * A hand takes its own bays in turn, one per circuit, so which one it is carrying a piece to is a
+ * function of the circuit number and nothing else — computable from `t` alone, on both sides of the
+ * building, without either side telling the other.
  */
-function stampHand(body, edge, aura, pose, x, y, px, flip) {
-  const rows = POSE[pose];
-  const midC = (rows[0].length - 1) / 2;
-  const midR = 2.5;
-  for (let r = 0; r < rows.length; r += 1) {
-    for (let c = 0; c < rows[r].length; c += 1) {
-      const ch = rows[r][flip ? rows[r].length - 1 - c : c];
-      // Solid at the palm, thinning to about a third out at the fingertips and the wrist.
-      const away = Math.hypot((c - midC) / midC, (r - midR) / 3.4);
-      const density = clamp(1.12 - away * 0.62, 0.28, 1);
-      if (ch === '.') {
-        // ...and the aura is the same shape one ring further out, at the density the silhouette has
-        // just run out of. A spirit with a hard edge is a sticker.
-        if (away > 0.8 && away < 1.25 && bayerOn(c, r, 0.34)) aura.push(x + c * px, y + r * px, px, px);
-        continue;
-      }
-      if (!bayerOn(c, r, density)) continue;
-      (ch === '+' ? edge : body).push(x + c * px, y + r * px, px, px);
-    }
-  }
+function errandOf(hand, t) {
+  const round = Math.floor(t / hand.period + hand.phase);
+  const slot = ((round % hand.bays.length) + hand.bays.length) % hand.bays.length;
+  return hand.bays[slot];
+}
+
+/**
+ * When the hand answerable for this bay last finished a fix pass *at this bay*.
+ *
+ * This is the half that makes the repairs mean anything, and it took two goes. A bay used to come
+ * back on a plain timer, whether or not a hand was anywhere near it. Then it came back on *a* hand's
+ * circuit — better, except that hand's errand went to a storey picked at random when the scene was
+ * planned, so the building still healed at one end while the labour was at the other. Now the errand
+ * and the repair name the same bay, and a hole stays a hole until you have watched somebody fly to it.
+ */
+export const FIX_AT = 0.7;
+export function tendingAt(plan, bayKey, t) {
+  const hand = plan.hands[bayKey % plan.hands.length];
+  const slot = hand.bays.indexOf(bayKey);
+  // A bay nobody is answerable for is a bay that never heals — but the shares are dealt out over
+  // every bay there is, so this is a guard rather than a case.
+  if (slot < 0) return { hand, doneAt: -Infinity };
+  // The last circuit that reached its fix at all...
+  const last = Math.floor(t / hand.period + hand.phase - FIX_AT);
+  // ...then back to the last one whose turn it was to come *here*.
+  const every = hand.bays.length;
+  const n = last - (((last - slot) % every) + every) % every;
+  return { hand, doneAt: (n + FIX_AT - hand.phase) * hand.period };
 }
 
 /**
  * The hands themselves, on their circuits.
  *
- * Each runs one loop with four acts: **work** at its own craft, **carry** the piece up to the
- * temple, **fix** it into the building, and come back empty. A circuit rather than a queue, because
- * a queue is state and there is none to be had — and because ceaseless labour is a thing that has
- * always been going on, which is what a loop with no start looks like.
+ * Four acts: **work** at their own craft, **carry** the piece out to the temple, **fix** it into the
+ * building, and come back empty. A circuit rather than a queue, because a queue is state and there
+ * is none to be had — and because ceaseless labour is a thing that has always been going on, which
+ * is what a loop with no start looks like.
  *
- * The act is what makes the crafts different. A hand at the sawmill drives a blade back and forth and
- * throws sawdust; at the kiln it works tongs in the fire with a tile glowing in their mouth; at the
- * glass bench it turns a pipe with a gather on the end of it, slowly, because glass is slow. Same
- * sprite, same circuit, three unmistakably different jobs — and all of it a pure function of `t`.
+ * What is new is that they are **afraid**. A hand whose path would take it into the wind is pushed
+ * out of it, and the nearer the storm the wider it swings and the tighter it curls — so the traffic
+ * bends around the column instead of walking through it, and when the storm is on the temple the
+ * work visibly stops going there. Sometimes the push is not enough and the spirit is taken.
  */
 export function drawHands(ctx, W, H, t, plan, px, places) {
   const groundY = H * GROUND;
-  const body = [];
   const edge = [];
-  const aura = [];
+  const fill = [];
+  const lit = [];
   const wisp = [];
   const tool = [];
   const hot = [];
+  // A hand is drawn at the size of the thing it is carrying rather than at the size of a hand — a
+  // lie the eye takes without complaint, because there is no other hand in frame to measure against.
+  const hpx = Math.max(2, Math.round(px * 0.72));
 
   for (const hand of plan.hands) {
+    const state = spiritAt(hand, t, W, H, plan.funnel, plan.seed);
+    if (state.here <= 0) continue;
+
     const shop = SHOPS[hand.shop];
     const u = wrap01(t / hand.period + hand.phase);
-    const site = places[Math.min(places.length - 1, hand.storey * 3 + 2)];
+    // The bay it is answerable for this circuit — the same one `tendingAt` will credit it with
+    // mending, which is the whole of the correspondence.
+    const site = places[Math.min(places.length - 1, errandOf(hand, t))];
     if (!site) continue;
 
-    const bench = { x: shop.at * W, y: groundY - px * 7 };
+    const bench = { x: shop.at * W, y: groundY - px * 8 };
     const stroke = Math.sin(t * shop.beat * 2.2 + hand.key * 1.7);
 
     let x;
     let y;
-    let pose = 'open';
+    let curl = 0.2;
     let flip = false;
+    // What the hand is holding, emitted *after* the storm has had its say — otherwise the plank and
+    // the blowpipe stay where the hand would have been if it had not flinched, and a spirit that gets
+    // shoved out of the wind leaves its work hanging in the air behind it.
+    let holds = null;
 
     if (u < 0.34) {
-      // ---- working. The hand holds station and the *tool* does the travelling. ------------------
-      const swing = stroke * px * 2.5;
-      x = bench.x + swing;
+      // Working. The hand holds station and the tool travels — and the grip opens and closes on the
+      // stroke, which is the thing a fixed sprite could never do.
+      x = bench.x + stroke * px * 2.5;
       y = bench.y + Math.abs(stroke) * px;
-      pose = 'grip';
+      curl = 0.55 + stroke * 0.35;
       flip = stroke < 0;
-
-      if (shop.kind === 'mill') {
-        // A saw, drawn along the stroke with teeth on its underside, and dust off the far end.
-        for (let i = 0; i < 7; i += 1) {
-          tool.push(x + px * (i - 3) + swing, y + px * (2 + (i % 2) * 0.5), px, px * 0.6);
-        }
-        if (Math.abs(stroke) > 0.7) hot.push(x + swing * 2, y + px * 3, 0.2);
-      } else if (shop.kind === 'kiln') {
-        // Tongs, holding a tile in the mouth of the fire. The tile is the hot thing, not the hand.
-        tool.push(x + px, y + px * 2, px * 3, px);
-        hot.push(x + px * 3.5, y + px * 2, 0.55 + 0.45 * Math.abs(stroke));
-      } else {
-        // A blowpipe, turning, with the gather glowing on the end.
-        const turn = Math.sin(t * 0.9 + hand.key);
-        tool.push(x + px, y + px * 2, px * 4, px * 0.7);
-        hot.push(x + px * 5, y + px * 2 - turn * px, 0.9);
-      }
+      holds = 'work';
     } else if (u < 0.62) {
-      // ---- carrying, up and out to the building --------------------------------------------------
       const leg = (u - 0.34) / 0.28;
       x = bench.x + (site.x - bench.x) * leg;
       y = bench.y + (site.y - bench.y) * leg - Math.sin(leg * Math.PI) * H * 0.1;
-      pose = 'grip';
+      curl = 0.85;
       flip = site.x < bench.x;
-      tool.push(x + (flip ? -px * 3 : px * 5), y + px * 2, px * 3, px);
-    } else if (u < 0.74) {
-      // ---- fixing. It hovers at the bay and taps, and the taps are what mending looks like. ------
-      const tap = Math.sin(((u - 0.62) / 0.12) * Math.PI * 7);
+      holds = 'carry';
+    } else if (u < 0.82) {
+      // Fixing: hovering at the wound and tapping, with the hand opening on each tap.
+      const tap = Math.sin(((u - FIX_AT + 0.08) / 0.2) * Math.PI * 6);
       x = site.x + px * 2;
       y = site.y + tap * px * 1.5;
-      if (tap > 0.6) hot.push(x + px, y + px * 3, 0.45);
+      curl = 0.3 + tap * 0.25;
+      if (tap > 0.6) holds = 'fix';
     } else {
-      // ---- and back, empty. A hand returning with nothing is what tells you the one going up is
-      // carrying something.
-      const leg = (u - 0.74) / 0.26;
+      const leg = (u - 0.82) / 0.18;
       x = site.x + (bench.x - site.x) * leg;
       y = site.y + (bench.y - site.y) * leg - Math.sin(leg * Math.PI) * H * 0.06;
+      curl = 0.15;
       flip = bench.x < site.x;
     }
 
-    stampHand(body, edge, aura, pose, x, y, px, flip);
-    // The wrist, coming apart into a tail. No arm, nothing it could be attached to — disembodied is
-    // done by subtraction. It is longer than it was and it *drifts*, each chunk further back lagging
-    // further behind the hand's own travel, so the tail streams rather than hanging.
-    for (let w = 1; w <= 7; w += 1) {
-      if (hash2(hand.key * 3.3 + w, Math.floor(t * 4)) < w * 0.11) continue;
-      const sway = Math.sin(t * 1.9 + hand.key * 2.2 - w * 0.7) * px * w * 0.28;
-      wisp.push(x + px * 2 + sway - (flip ? -px : px) * w * 0.16, y + px * (6 + w * 1.1), px, px);
+    // ---- fear, and being taken ------------------------------------------------------------------
+    // How far into the wind this hand has strayed. It is asked at `t`, not at any epoch, because
+    // flinching is not a decision that has to persist — it is where the hand is *right now*.
+    const up = clamp((groundY - y) / (groundY - H * 0.04), 0, 1);
+    const near = vortexAt(W, H, t, plan.funnel, up);
+    const gap = x - near.cx;
+    const dread = 1 - clamp(Math.abs(gap) / Math.max(1, near.wind), 0, 1);
+    if (dread > 0) {
+      // Two forces, not one. The spirit shoves itself out of the wind and the wind pulls it back in,
+      // and which wins depends on how deep in it already is. `flinch` is quadratic and `drag` is
+      // shallower than linear, so at the outer edge of the wind the pull is the larger of the two and
+      // the hand is drawn *toward* the column before it has noticed; from about a third of the way in
+      // the flinch overtakes it and throws the hand clear.
+      //
+      // A single outward shove was the first version and it was a hand that simply avoided a region.
+      // Two forces crossing over is a hand that gets too close, gets tugged, and scrambles out — and
+      // it costs one extra `pow`.
+      const strength = 0.5 + hand.nerve * 0.5;
+      const flinch = dread * dread * near.wind * 1.5 * strength;
+      const drag = dread ** 0.8 * near.wind * 0.3;
+      // The sign of `gap` keeps it on the side it was already on, so hands do not swap sides of the
+      // column mid-errand.
+      x += Math.sign(gap || 1) * (flinch - drag);
+      // Losing the argument also means being lifted, which is the tell that the pull is winning.
+      y -= Math.max(0, drag - flinch) * 0.55;
+      // ...and it flinches: fingers spread and the whole thing shakes on a fast clock. How far the
+      // fingers go is per-spirit, because when the storm walks onto the temple every hand in the
+      // frame flinches at once, and a dozen identical splayed hands in an arc is a stencil.
+      curl = clamp(curl - dread * (0.3 + hash2(hand.key, 11) * 0.45), 0, 1);
+      y += Math.sin(t * 17 + hand.key * 3) * dread * px * 0.8;
+    }
+
+    if (state.taken > 0) {
+      // Caught: hauled across to the column, then wound around it and carried up, curling tight as it
+      // goes. Hauled rather than *placed* — the first version assigned the vortex position outright
+      // and the hand vanished from its bench and reappeared on the funnel in one frame, which is a
+      // cut, not a capture. The whole event is worth watching only if you see it lose.
+      const g = state.taken;
+      const climb = clamp((g - 0.35) / 0.65, 0, 1);
+      const grabbed = vortexAt(W, H, t, plan.funnel, climb * 0.9);
+      const spin = g * 11 + hand.key;
+      const haul = clamp(g / 0.35, 0, 1);
+      const ease = haul * haul * (3 - 2 * haul);
+      x += (grabbed.cx + Math.cos(spin) * grabbed.r * 1.05 - x) * ease;
+      y += (groundY - climb * (groundY - H * 0.1) - y) * ease;
+      curl = clamp(curl + (0.15 + g * 0.7 - curl) * ease, 0, 1);
+      flip = Math.cos(spin) < 0;
+      // Behind the column once it is riding it — but not before, or it would blink out mid-haul while
+      // still out in the open.
+      if (ease > 0.9 && Math.sin(spin) < -0.15) continue;
+    }
+
+    // What it is holding, now that it is where it is actually going to be drawn. A spirit that is
+    // being carried up the funnel has dropped everything, which is why this is gated on the haul.
+    if (holds && state.taken < 0.25) {
+      if (holds === 'carry') {
+        tool.push(x + (flip ? -px * 3 : px * 7), y + px * 4, px * 3, px);
+      } else if (holds === 'fix') {
+        hot.push(x + px * 4, y + px * 7, 0.45);
+      } else if (shop.kind === 'mill') {
+        for (let i = 0; i < 7; i += 1) tool.push(x + px * (i - 3), y + px * (3 + (i % 2) * 0.5), px, px * 0.6);
+        if (Math.abs(stroke) > 0.7) hot.push(x + stroke * px * 5, y + px * 4, 0.2);
+      } else if (shop.kind === 'kiln') {
+        tool.push(x + px, y + px * 3, px * 3, px);
+        hot.push(x + px * 3.5, y + px * 3, 0.55 + 0.45 * Math.abs(stroke));
+      } else {
+        tool.push(x + px, y + px * 3, px * 4, px * 0.7);
+        hot.push(x + px * 5, y + px * 3 - Math.sin(t * 0.9 + hand.key) * px, 0.9);
+      }
+    }
+
+    // Fading up as it is summoned, and fading as it is taken: the dither density *is* the presence.
+    const solid = 0.28 + 0.42 * state.here * (1 - state.taken * 0.75);
+    stampSpirit(edge, fill, lit, handMask(clamp(curl, 0, 1), dread), x, y, hpx, flip, solid);
+
+    // Being summoned: sparks gathering into the palm. The fade-up alone said "appearing"; the sparks
+    // say somebody is *doing* it, which is the difference between a spirit that turns up and a spirit
+    // the others have made — and it is the only moment in the scene where gold is spent on a hand.
+    if (state.here < 1 && state.taken === 0) {
+      const born = 1 - state.here;
+      for (let s = 0; s < 4; s += 1) {
+        const a = s * 1.57 + t * 2.4 + hand.key;
+        hot.push(
+          x + hpx * (HAND_W / 2) + Math.cos(a) * born * px * 5,
+          y + hpx * HAND_H * 0.6 + Math.sin(a) * born * px * 4,
+          0.45 + state.here * 0.5,
+        );
+      }
+    }
+
+    // The tail — separating chunks streaming behind the wrist, each one lagging further back.
+    for (let w = 1; w <= 8; w += 1) {
+      if (hash2(hand.key * 3.3 + w, Math.floor(t * 4)) < w * 0.1 + state.taken * 0.4) continue;
+      const sway = Math.sin(t * 1.9 + hand.key * 2.2 - w * 0.7) * hpx * w * 0.3;
+      wisp.push(x + hpx * (HAND_W / 2) + sway, y + hpx * (HAND_H + w * 0.9), hpx, hpx);
     }
   }
 
-  // A spirit is the one thing in this frame lit by nothing, so it does not get the top of the ramp:
-  // the two hottest steps belong to the storm's contact core and to lightning, and seven hands
-  // wearing them would take the hot end by sheer count.
-  // Spectral blue-white, and deliberately neither of the scene's two subjects: not the storm's rose
-  // and not the building's jade or gold. A spirit lit by nothing has to be its own colour or it reads
-  // as a chip off whichever thing it is standing in front of.
-  for (const [cells, colour] of [[aura, LAPIS[2]], [wisp, LAPIS[1]], [tool, LAPIS[3]], [body, LAPIS[0]], [edge, SPIN[0]]]) {
+  for (const [cells, colour] of [[wisp, LAPIS[2]], [tool, LAPIS[3]], [fill, LAPIS[1]], [lit, LAPIS[0]], [edge, LAPIS[0]]]) {
     if (!cells.length) continue;
     ctx.fillStyle = rgba(colour, 1);
     ctx.beginPath();
-    for (let i = 0; i < cells.length; i += 4) chunk(ctx, cells[i], cells[i + 1], cells[i + 2], cells[i + 3], px);
+    for (let i = 0; i < cells.length; i += 4) chunk(ctx, cells[i], cells[i + 1], cells[i + 2], cells[i + 3], hpx);
     ctx.fill();
   }
 
-  // Whatever is glowing in their hands — hot metal, a gather of glass, a fired tile.
   for (const [colour, lo, hi] of [[GOLD[0], 0.7, 2], [GOLD[1], 0.4, 0.7], [GOLD[2], 0, 0.4]]) {
     ctx.fillStyle = rgba(colour, 1);
     ctx.beginPath();

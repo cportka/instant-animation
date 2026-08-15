@@ -28,6 +28,7 @@ import { drawFunnel, drawWind, funnelPixel, planFunnel, sizeRef } from './funnel
 import { planCycle } from './cycle.js';
 import { drawDebris, drawLitter, planDebris, planLitter } from './debris.js';
 import { drawHands, drawWorks, planHands } from './hands.js';
+import { drawHouse, planHouse } from './house.js';
 import { bayPlaces, drawPagoda, planPagoda } from './pagoda.js';
 import { drawLightning, drawSky, planSky } from './sky.js';
 
@@ -61,8 +62,14 @@ export function create({ width, height, seed = meta.id }) {
   // built for the most storeys there can ever be and the shorter frames simply use fewer.
   const cycle = planCycle(rng, 9);
   const debris = planDebris(rng, cycle.bays.length);
-  const works = planHands(rng);
+  // The hands need the size of the temple, because every bay is dealt out to one of them and a bay
+  // nobody is answerable for would be a hole that never closes.
+  const works = planHands(rng, cycle.bays.length);
   const litter = planLitter(rng);
+  const house = planHouse(rng);
+  // The hands need to know where the storm is to be afraid of it, and the temple needs to know where
+  // the hands are to heal where they have been. One plan, handed to both.
+  works.funnel = funnel;
 
   let W = width;
   let H = height;
@@ -85,7 +92,9 @@ export function create({ width, height, seed = meta.id }) {
       // The forest and the workshops belong to the ground, so they go down with it — behind the
       // temple, on the background's coarse grid, where a bigger chunk reads as further away.
       drawWorks(ctx, W, H, t, works, px);
-      drawPagoda(ctx, W, H, t, pagoda, px, R, cycle, funnel);
+      // The little house, always at the storm's foot, coming apart wherever the wind reaches it.
+      drawHouse(ctx, W, H, t, house, funnel, px);
+      drawPagoda(ctx, W, H, t, pagoda, px, R, cycle, funnel, works);
       drawFunnel(ctx, W, H, t, funnel);
       // The wind is outside the column, so it goes over it — and the ground litter it has picked up
       // rides the same field, climbing until it is gone.

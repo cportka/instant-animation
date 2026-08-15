@@ -76,7 +76,7 @@ const CALM = 0.7;
 const GUST = 0.3;
 
 /** 0.4 in the lulls, 1 at its worst. Never zero: a vortex that stops is a column of dust. */
-const powerAt = (t) => CALM + GUST * GUSTS.reduce((sum, g) => sum + g.amp * Math.sin(t * g.rate + g.phase), 0);
+export const powerAt = (t) => CALM + GUST * GUSTS.reduce((sum, g) => sum + g.amp * Math.sin(t * g.rate + g.phase), 0);
 
 /**
  * ...and the angle it has turned through by `t`, which is the **integral** of that speed and not the

@@ -35,7 +35,7 @@ import { vortexAt } from './funnel.js';
 
 /** How long a bay takes to come apart, lie in pieces, and be put back. */
 const FALL = 0.55;
-const GONE = 3.2;
+const GONE = 2.4;
 
 /**
  * The chance a bay is taken when its round turns over with the storm nowhere near.
@@ -67,7 +67,11 @@ export function planCycle(rng, storeys) {
         part,
         // A continuous range, never a set of round numbers: periods that share factors drift into
         // step with each other and the building starts to pulse.
-        period: 17 + rng.next() * 23,
+        // Short, and that is the whole fix for "the storm sits on the temple and nothing happens".
+        // A bay only re-rolls when its round turns over, so the round *is* the response time: at
+        // 17–40s the peak damage arrived a quarter of a minute after the storm had already walked
+        // past, which reads as a building that decays on a timer rather than one being hit.
+        period: 5 + rng.next() * 9,
         // Phase over the whole interval, which is what guarantees no bay is ever new — plus the
         // golden rotation by storey so successive storeys land maximally far apart on the circle
         // instead of peeling off the top in a visible wave.
@@ -85,7 +89,7 @@ export function planCycle(rng, storeys) {
   bays.push({
     key: bays.length,
     storey: storeys, part: 'spire',
-    period: 21 + rng.next() * 17,
+    period: 6 + rng.next() * 7,
     phase: (rng.next() * 0.72 + storeys * 0.6180339887) % 1,
     exposure: 1,
     reach: 1,
@@ -99,7 +103,7 @@ export function planCycle(rng, storeys) {
  * `life` runs 1 (whole) to 0 (gone). `struck` says the storm took it this round; `age` is seconds
  * since that round began, which is what the debris flies on.
  */
-export function bayAt(bay, x, t, W, H, funnel, seed) {
+export function bayAt(bay, x, up, t, W, H, funnel, seed, mended = 1) {
   const cycles = t / bay.period + bay.phase;
   const n = Math.floor(cycles);
   // The second this round began — exact, possibly negative, and correct either way.
@@ -109,23 +113,35 @@ export function bayAt(bay, x, t, W, H, funnel, seed) {
   // Where the storm was *then*. Sampling it at `t` instead would make destruction a function of
   // where the funnel is now, so the temple would heal the instant it wandered — splinters flying
   // home, the tape running backwards.
-  const { cx, r, wind } = vortexAt(W, H, began, funnel, bay.reach * 0.7);
+  // Sampled at the bay's **own height**, not at a stand-in for it. The funnel is a trumpet: narrow
+  // at the foot and wide at the mouth, so where it is standing decides *which storeys* it can reach.
+  // Asking at one nominal height threw that away and made the damage a function of the storm's
+  // horizontal position alone — a tornado that took the ground floor and the spire equally.
+  const { cx, r, wind } = vortexAt(W, H, began, funnel, up);
+  const gap = Math.abs(x - cx);
   // Measured against the **wind field**, not the wall. Most of what a tornado does, it does to things
-  // it never touches — so a storm passing near the temple strips it without the column ever crossing
-  // it, and the destruction has a reach that matches the streaks you can see blowing past.
-  const near = 1 - smoothstep(r * 0.5, wind, Math.abs(x - cx));
-  const bite = Math.max(BASE, near) * bay.exposure * bay.reach;
+  // it never touches — so a storm passing near strips the temple without the column ever crossing it.
+  const near = 1 - smoothstep(r * 0.5, wind, gap);
+  // ...and a direct hit is not "a bit more than near". Inside the column there is nothing to decide:
+  // whatever is in there goes. Without this the difference between a storm beside the building and a
+  // storm standing *in* it was a third of the bays against a fifth, which is not what either looks
+  // like.
+  const inside = gap < r ? 1 : 0;
+  const bite = Math.max(inside, Math.max(BASE, near) * bay.exposure * bay.reach);
   const struck = hash2(bay.key * 3.1 + 0.7, n + seed) < bite;
 
-  if (!struck) return { life: 1, struck: false, age, n, began };
+  if (!struck) return { life: 1, struck: false, age, n, began, ruined: false };
 
   let life;
   if (age < FALL) life = 1 - age / FALL;
-  else if (age < FALL + GONE) life = 0;
-  // ...and then the hands bring it back, over whatever is left of the round. Rebuilding is slow
-  // because it is the *rest* of the cycle: coming apart takes half a second and being put back takes
-  // most of a minute, which is the ratio the brief is about.
-  else life = smoothstep(0, 1, (age - FALL - GONE) / Math.max(1, bay.period - FALL - GONE));
+  // ...and then it stays down until somebody comes and puts it back. `mended` is how far the hand
+  // that serves this bay has got with it, and it is the caller's business to know — the building
+  // used to heal on a timer whether or not a hand was within a hundred chunks of the wound, which
+  // made the labour decorative. Nothing is rebuilt here that nobody rebuilt.
+  else life = clamp(mended, 0, 1);
 
-  return { life: clamp(life, 0, 1), struck: true, age, n, began };
+  return { life: clamp(life, 0, 1), struck: true, age, n, began, ruined: age >= FALL };
 }
+
+/** When a bay's current wound happened, and how long it has been open. Exported for the menders. */
+export { FALL, GONE };

@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [3.6.0] - 2026-08-14
+## [3.7.0] - 2026-08-15
 
 **"Above the Fog" is finished, and a fourth animation begins.** That is the only thing a MAJOR bump
 means here — see `.claude/CLAUDE.md`.
@@ -189,8 +189,8 @@ re-birth."*
   dither is its only pattern, so coarsening it turns a texture into a lattice — and it is the cheap
   part. The storm and the ground are noise-driven, where a bigger chunk reads as a bigger billow, and
   they are where the time goes. Splitting them took the frame from 14ms to 10.9ms *before* anything
-  was added; the whole scene now runs at 12ms with a temple, four kinds of debris, a forest, three
-  workshops and four hands in it. The ceiling is 20ms, and it is not a preference: the stage drops
+  was added; the whole scene now runs at 16.4ms with a temple, four kinds of debris, a forest, three
+  workshops, a house and twelve hands in it. The ceiling is 20ms, and it is not a preference: the stage drops
   render scale after twelve slow frames but only restores it after three hundred frames under 20ms, so
   a scene sitting above that would degrade once and never recover.
 
@@ -220,10 +220,9 @@ alone. A picture where value carries no information is an 8-bit picture whatever
 It held one width, one speed and one place, which is a decoration rather than a tornado.
 
 - **It walks.** The march moves the whole storm across a third of the frame on two long unrelated
-  periods, so it comes down on the temple, grinds at it, and drags away — and because the temple's
-  bays ask where the storm *was* when their round turned over, the destruction rate is not a constant
-  with a wobble on it, it is the weather. Storm on the building: the eaves go, then the walls. Storm
-  away: almost nothing. That contrast is the whole point of the cycle and it was previously invisible.
+  periods, so it comes down on the temple, grinds at it, and drags away. What that is *worth* is in
+  "Damage that knows where the storm is" below — the walk was in place well before the building
+  actually answered it.
 - **It swells and slackens**, from a rope at 0.73 of its width to a wedge at 1.2.
 - **The turn is the integral of its speed, not its speed times the clock.** `t * power(t)` looks like
   the same quantity and is not: differentiate it and there is a `t · dpower/dt` term that grows
@@ -251,10 +250,6 @@ storm walks past. One comparison, a whole extra read.
   than the one below, each with a lit crown. It is the pagoda's own trick, which is no coincidence:
   a pagoda is a stylised tree. The far band sits a chunk lower and a step darker, which is all the
   depth a treeline needs.
-- **The hands are authored as a bitmap**, because a palm rectangle with chunks stuck on it is a
-  mitten. A hand needs a palm with mass, fingers that are separate, a thumb set off across a gap, and
-  a wrist narrower than both — none of which survive being improvised in code. Two poses, open and
-  gripping, mirrored to face the way they are going.
 - **Each craft is visibly a different job.** The circuit is four acts — work, carry, fix, return — and
   the work is where the crafts differ: the sawmill drives a toothed blade back and forth and throws
   dust, the kiln works tongs with a tile glowing in their mouth, the glass bench turns a pipe with a
@@ -279,21 +274,128 @@ guardian**, which are the only two things in the building that are not *of* the 
 exactly why the eye finds them. Posts went from one every three chunks, where a wall becomes a stripe
 pattern, to one every eight, where the panel between them is the thing you see.
 
-### The hands are spirits now
+### The hands are built, not drawn
 
-Ordered dither as translucency. Every chunk goes through the same Bayer matrix the sky's ramp uses,
-at a density falling off from the middle of the palm outward: the core is solid, the fingers are half
-there, the wrist barely at all — so the picture behind shows through and the thing reads as
-not-quite-present. It is how a 16-bit machine drew a ghost, for exactly the reason we need it: there
-is no alpha to be had, and a flat silhouette in a pale colour is a *pale hand*, not a spectral one.
-The dither is keyed to the sprite's own grid rather than to screen position, or the hand would slide
-across a fixed screen-door and read as a hole cut in the picture.
+They were a bitmap: two authored poses, open and gripping, mirrored to face the way they were going.
+A hand authored as a fixed grid can hold exactly one shape, so everything it did had to be said by
+moving the whole sprite about — which is not a hand doing something, it is a hand-shaped cursor. And
+dithering the entire silhouette to make it spectral destroyed the *edge*, which was the only thing
+carrying the drawing. Between them, that is why they read as white blobs with a tail.
 
-They also gained an **aura** one ring outside the silhouette at the density it has just run out of —
-a spirit with a hard edge is a sticker — and a long **streaming tail** whose chunks lag further
-behind the further back they are. And they are spectral blue-white: neither the storm's rose nor the
-building's jade and gold, because a thing lit by nothing has to be its own colour or it reads as a
-chip off whatever it is standing in front of.
+- **A hand is now assembled from primitives at whatever pose is asked for.** A superelliptical palm,
+  four fingers rooted along its top edge, and a thumb set low and wide across a gap — each finger a
+  capsule pair whose geometry comes from one `curl` parameter. Open at 0, closed at 1, and every
+  value between is a *real* pose rather than a blend of two pictures. Grip, release, reach, flinch and
+  hold are one number moving, and it can be driven by what the hand is actually doing: the grip opens
+  and closes on the sawmill's stroke, tightens around a carried plank, taps at a wound, and springs
+  wide when the storm gets close.
+- **Fingers fold; they do not retract.** The first attempt shortened each finger and swung it inward
+  as it closed, which is what a finger looks like it does — and past about half curl every hand in the
+  frame collapsed into a triangular lump. A finger removed from the silhouette is a finger the eye
+  cannot count. So each is two segments: the knuckle barely moves and spreads slightly as the hand
+  shuts, and everything past it **foreshortens**, because seen front-on a closing finger points at the
+  viewer. Rotating it in-plane instead swept the tips through the horizontal at mid-curl and gave every
+  hand sideways stubs that read as flying debris. A fist is legible because of its knuckles, and now
+  it keeps four.
+- **The outline is solid and only the fill is dithered.** That is the whole of the 16-bit ghost, and
+  it is the difference between a spectre and a smudge: a 50% screen over a solid form erases the
+  silhouette, and the silhouette is the drawing. The outline is *derived* — any filled chunk with an
+  empty neighbour — so it follows the pose exactly, including around the gaps between fingers, which
+  is precisely where a hand-drawn outline goes wrong. The dither is keyed to the sprite's own grid
+  rather than to screen position, or the hand slides across a fixed screen-door and reads as a hole
+  cut in the picture.
+- **Half again as big, and spectral blue-white** — neither the storm's rose nor the building's jade
+  and gold, because a thing lit by nothing has to be its own colour or it reads as a chip off whatever
+  it is standing in front of. The wrist ends in separating chunks rather than an arm: disembodied is
+  done by subtraction, and there is not one soft edge in this scene.
+
+### Damage that knows where the storm is
+
+The storm could stand squarely on the temple and the building came apart at very nearly the rate it
+did with the storm across the frame. Measured rather than argued: 37% of bays down with the column on
+the building against 12% with it well away, and — worse — the peak damage arrived about **fifteen
+seconds after** the storm had already left.
+
+The cause was not the damage rule, it was the **clock**. Each bay asks, once per round, where the
+storm was when that round began; with rounds seventeen to forty seconds long, the round *is* the
+response time. A verdict latched for half a minute cannot track weather that moves in ten seconds,
+so the answer arrived long after the question stopped being interesting, and averaged over its own
+round it was very nearly the mean.
+
+- **Rounds run five to fourteen seconds**, so a bay re-asks the question inside the time the storm
+  takes to cross it. Now: **77% down with the column on the building and 15% with it away**, peaking
+  while the storm is there rather than a quarter of a minute later.
+- **Each bay is sampled at its own height.** The funnel is a trumpet, not a cylinder — it is three
+  times wider at the top than at the foot — so which storeys a passing storm can even reach is a
+  question about *height*, and asking every bay at one nominal altitude threw that away. The upper
+  eaves now go while the ground storey is untouched, and a storm at arm's length takes the top of the
+  building and nothing else.
+- **A direct hit is certain, not likely.** Inside the column the strike chance is 1. Anything less
+  means the one arrangement a viewer can actually check — the tornado standing *on* the temple —
+  leaves parts of it visibly intact, and the whole mechanism reads as random.
+
+### Repairs that know where the hands are
+
+The other half, and the same complaint from the other side: the temple healed at one end while the
+labour was at the other.
+
+- **A bay stays down until somebody arrives.** Each bay is dealt to exactly one spirit, and it comes
+  back only if that spirit has completed a fix pass at it since the wound opened. If nobody has been,
+  it is still a hole.
+- **And the errand goes to the bay it mends.** The first cut of this gated healing on *a* hand's
+  circuit timing, but that hand's destination was a storey picked at random when the scene was
+  planned — so the repair was on somebody's clock without being at anybody's hands. Now a spirit takes
+  its own bays in turn, one per circuit, and the bay it is flying to is the bay it will be credited
+  with. Verified rather than asserted: across 145 mend events, the mending hand is at the bay it mends
+  every time, and every drawn bay has an owner.
+- **Both sides compute it from `t` alone.** Which bay a hand is on its way to is `floor(t/period +
+  phase) mod its share`, and when it last finished *there* steps back from the last completed circuit
+  to the last one whose turn it was. No message passes between the building and the labour, which is
+  what keeps the whole scene a pure function of the clock.
+
+### The hands are afraid of it
+
+- **Two forces, not one.** A hand shoves itself out of the wind and the wind pulls it back, and which
+  wins depends on how deep in it already is: the flinch is quadratic in proximity and the drag is
+  shallower than linear, so at the outer edge of the field the pull is the larger of the two and a
+  hand is drawn *toward* the column before it has noticed — then from about a third of the way in the
+  flinch overtakes it and throws it clear. A single outward shove was the first version and it was a
+  hand avoiding a region; two forces crossing over is a hand that gets too close, gets tugged, and
+  scrambles out. Losing the argument also lifts it, which is the tell that the pull is winning.
+- **Sometimes it loses.** Once a round a spirit asks whether the storm was over its bench when that
+  round turned over — the same closed-form latch the temple's bays use, for the same reason: a spirit
+  halfway up the funnel must not be handed back because the weather improved. If it was, this is the
+  round it is taken: **hauled** across to the column, wound around it, carried up and gone. Hauled
+  rather than placed — assigning it the vortex position outright made it vanish from its bench and
+  reappear on the funnel in one frame, which is a cut, not a capture.
+- **The population breathes.** Twelve *slots*, not twelve hands. A taken slot stands empty long enough
+  to be noticed and then a new spirit is summoned into it, fading up out of nothing with gold
+  gathering into its palm — the one moment in the scene where the accent is spent on a hand. About one
+  spirit is taken every half-minute and a slot is empty a fifth of the time, so the hands you are
+  watching are not the hands you started with.
+- **When the storm is on the temple, the work visibly stops going there.** That is the fear and the
+  location-aware repair meeting: the traffic bends around the column, nothing arrives, and the
+  building stays down until the storm drags away and the spirits come back.
+
+### The house at the foot of it
+
+There was a triangle sitting on a rectangle down there. It is now a house — a 45° terracotta roof
+with an overhanging eave, cream walls, one dark door, two lit windows and a chimney — and it
+**travels with the storm**, always at the foot.
+
+That is the decision that makes it work. A house standing somewhere fixed is a building the tornado
+happens to pass; a house that is always at the base is a house being *followed*, and it turns the
+storm's march across the frame into one long act of destruction with a single victim you can keep
+track of. It is eaten from the roof down and from the windward side in, ragged rather than sliced, and
+in the lulls it is simply there again — the temple is the thing that is repaired, and giving the house
+its own crew would say the same sentence twice.
+
+How much of it is left is a pure function of how hard the storm is blowing, and getting to that took
+two wrong models worth keeping a note of. Distance to the storm is a **constant** here — the house is
+always at the foot — and a constant cannot dissolve anything; it came out at its floor at every
+strength and the house was never once drawn. Inferring the storm's power from the ratio of its radius
+to its wind reach is the same mistake wearing a disguise, since the reach is *defined* as a multiple
+of the radius. The storm's strength had to be asked for directly.
 
 ### Wind, and things going up the throat
 
