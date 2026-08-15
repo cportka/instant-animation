@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 
 import { createRng } from '../site/lib/rng.js';
 import {
-  FIX_AT, MEND_BUCKETS, emptyMend, errandOf, pieceKindFor, planHands, stampPiece, tendingAt,
+  FIX_AT, MEND_BUCKETS, emptyMend, errandOf, pieceKindFor, planHands, stampPiece, swerveAt, tendingAt,
 } from '../site/scenes/rose-funnel/hands.js';
 
 const BAYS = 27;
@@ -78,6 +78,46 @@ test('a spirit carries a piece of the part it is going to mend', () => {
       for (const v of mend[bucket]) assert.ok(Number.isFinite(v), `${kind}: ${bucket} holds a non-finite value`);
     }
   }
+});
+
+test('the storm never teleports a spirit', () => {
+  // Every position in this scene is recomputed from `t` alone with nothing carried between frames,
+  // which means a discontinuity in the *formula* is a discontinuity on screen — there is no inertia
+  // to hide behind. The flinch was `sign(gap) * dread² * wind * 1.5`, and it had both kinds:
+  // unbounded (wind runs to ~900px near the mouth) and sign-flipping (at the axis). Hands crossed
+  // the frame between frames, a hundred and twenty times a minute.
+  //
+  // So this is the shape contract, and it is the whole fix:
+  for (const strength of [0.5, 0.675, 0.85, 1]) {
+    // `Math.abs` because a signed zero is still zero, and `assert.equal` disagrees.
+    assert.equal(Math.abs(swerveAt(0, strength)), 0, 'on the axis there is no "away", so there must be no push');
+    for (const edge of [1, -1]) {
+      assert.equal(Math.abs(swerveAt(edge, strength)), 0, 'at the edge of the field it must meet "no field" at zero');
+      assert.equal(Math.abs(swerveAt(edge * 1.7, strength)), 0, 'and stay zero outside it');
+    }
+
+    let peak = 0;
+    let worstSlope = 0;
+    let prev = swerveAt(-1.4, strength);
+    for (let s = -1.4; s <= 1.4; s += 0.001) {
+      const v = swerveAt(s, strength);
+      assert.ok(Number.isFinite(v), `swerveAt(${s}) is not finite`);
+      peak = Math.max(peak, Math.abs(v));
+      worstSlope = Math.max(worstSlope, Math.abs(v - prev));
+      prev = v;
+      // Odd, so the two sides of the column behave the same and neither is preferred.
+      assert.ok(Math.abs(v + swerveAt(-s, strength)) < 1e-9, `swerveAt is not odd at ${s}`);
+    }
+    // Bounded: the caller multiplies by a reach capped at a twelfth of the frame, so a peak near 1
+    // keeps the largest possible shove around a hundred pixels rather than fourteen hundred.
+    assert.ok(peak < 1.2, `swerve peaks at ${peak.toFixed(2)} — too strong to stay on screen`);
+    // Continuous: a thousandth of the field must not move a hand by a hundredth of the reach.
+    assert.ok(worstSlope < 0.01, `swerve steps by ${worstSlope.toFixed(4)} over 0.001 of the field`);
+  }
+
+  // Outward through the middle, inward near the edge — the behaviour the shape has to keep.
+  assert.ok(swerveAt(0.3, 1) > 0.2, 'a spirit half in the field should be thrown clear of it');
+  assert.ok(swerveAt(0.9, 1) < 0, 'a spirit at the fringe should be tugged toward the column');
 });
 
 test('the fix happens at the moment the piece leaves the hand', () => {

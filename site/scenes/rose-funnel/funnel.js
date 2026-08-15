@@ -127,7 +127,13 @@ function radiusAt(up, t, S, plan) {
   // bulge is that it is *somewhere in particular*, so it is a narrow gaussian in height whose centre
   // rises with its own clock and whose depth comes and goes on a slower, unrelated one.
   const at = wrap01(t * 0.11);
-  const bulge = 1 + 0.5 * Math.max(0, Math.sin(t * 0.037 + 0.6)) * Math.exp(-((up - at) ** 2) / 0.012);
+  // ...and it **fades in and out at the ends of its climb**, which is not decoration. `at` wraps from
+  // 1 to 0, so a bulge still at full depth when it reaches the top reappears instantly at the bottom
+  // — and every chunk near either end steps by up to a third of the funnel's radius in one frame.
+  // Anything riding the column at that moment (a captured spirit is pinned to `r`) jumps with it.
+  // `sin(π·at)` is zero at both ends of the sweep, so the wrap has nothing left to discard.
+  const bulge = 1 + 0.5 * Math.max(0, Math.sin(t * 0.037 + 0.6)) * Math.sin(Math.PI * at)
+    * Math.exp(-((up - at) ** 2) / 0.012);
   // ...and the storm's own strength on top of that: a rope at 0.73 of its width, a wedge at 1.2.
   return S * flare * swell * bulge * (0.42 + powerAt(t) * 0.78);
 }

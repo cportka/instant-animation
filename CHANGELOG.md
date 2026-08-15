@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [3.8.0] - 2026-08-15
+## [3.8.1] - 2026-08-15
 
 **"Above the Fog" is finished, and a fourth animation begins.** That is the only thing a MAJOR bump
 means here — see `.claude/CLAUDE.md`.
@@ -189,7 +189,7 @@ re-birth."*
   dither is its only pattern, so coarsening it turns a texture into a lattice — and it is the cheap
   part. The storm and the ground are noise-driven, where a bigger chunk reads as a bigger billow, and
   they are where the time goes. Splitting them took the frame from 14ms to 10.9ms *before* anything
-  was added; the whole scene now runs at 17.2ms with a temple, four kinds of debris, a forest, three
+  was added; the whole scene now runs at 15.0ms with a temple, four kinds of debris, a forest, three
   workshops, a house dissolving into the storm and twelve hands carrying its pieces about. The band
   formula also came out of the funnel's inner loop on the way past — the helix's wander is a property
   of the *height*, and it was being looked up once per chunk for a value that was the same all the way
@@ -374,18 +374,43 @@ labour was at the other.
 
 ### The hands are afraid of it
 
-- **Two forces, not one.** A hand shoves itself out of the wind and the wind pulls it back, and which
-  wins depends on how deep in it already is: the flinch is quadratic in proximity and the drag is
-  shallower than linear, so at the outer edge of the field the pull is the larger of the two and a
-  hand is drawn *toward* the column before it has noticed — then from about a third of the way in the
-  flinch overtakes it and throws it clear. A single outward shove was the first version and it was a
-  hand avoiding a region; two forces crossing over is a hand that gets too close, gets tugged, and
-  scrambles out. Losing the argument also lifts it, which is the tell that the pull is winning.
-- **And it ducks.** The funnel is a trumpet, so its foot is the narrowest part of it and the wind down
-  there is the weakest — a spirit that drops toward the ground genuinely gets out of the storm's reach.
-  That relief is computed rather than asserted: the height a hand asks the vortex about comes from its
-  own `y`, so going low really does make the next frame's dread smaller. It is also the only way past
-  a column standing between a workshop and the temple, since over is not available.
+- **The flinch is a bounded curve that is zero on the axis, and that is a bug fix as much as a
+  design.** It used to be `sign(gap) × dread² × wind × 1.5`, and it had both kinds of discontinuity
+  at once. *Unbounded:* `wind` is a multiple of the funnel's own width and runs to nine hundred
+  pixels near the mouth, so the shove could reach fourteen hundred. *Sign-flipping:* `sign()` inverts
+  the instant the storm's axis crosses the hand, which doubles it. Nothing in this scene is
+  integrated between frames — every position is recomputed from `t` — so a discontinuity in the
+  formula is a discontinuity on screen with no inertia to hide it. Measured on the real thing: hands
+  teleporting six hundred to two thousand pixels between adjacent frames, **a hundred and twenty
+  times a minute**, sometimes clean off the side of the frame. Watched at speed that is not a hand
+  avoiding a tornado, it is a hand vanishing here and appearing there.
+
+  The replacement is odd, smooth and capped at a twelfth of the frame. **Zero on the axis**, because
+  "which way is out" has no answer there and any function that commits to one has to flip somewhere.
+  Outward through the middle of the field. Inward past about two thirds out — the tug the storm has
+  on anything that strays into its reach, which is the one piece of the old behaviour worth keeping.
+  And **zero again at the edge**, which is the part that is easy to miss: outside the field there is
+  no force at all, so a curve still pulling hard at the boundary steps by its whole value when a hand
+  crosses out. That one was worth a hundred pixels a frame on its own after the first fix. Both
+  zeroes fall out of the same `s(1 - s²)` factor, so they cannot drift apart by accident, and a test
+  pins the whole shape: odd, finite, bounded, and no step larger than a hundredth of the reach across
+  a thousandth of the field.
+- **And it ducks, and it goes round.** The funnel is a trumpet, so its foot is the narrowest part of
+  it and the wind down there is the weakest — a spirit that drops toward the ground genuinely gets
+  out of the storm's reach, and that relief is computed rather than asserted: the height a hand asks
+  the vortex about comes from its own `y`. Down is also the one direction with no sign to flip, which
+  is why it now carries the work that the sideways shove used to.
+  A travelling spirit gets a proper **detour** as well, latched on its circuit the way everything
+  else in this scene that must not change its mind is latched: which way round the column, and how
+  far, asked once of where the storm was when the errand set out and held for the whole flight. The
+  bump is zero at both ends, so the workshop and the bay are still hit exactly, and the arc goes
+  *over* on a clear run and **under** on a blocked one. Chosen per frame instead, from where the hand
+  happens to be, the side inverts the moment the axis crosses the straight line between workshop and
+  temple — and a hand that reverses its detour mid-flight crosses the frame in one frame.
+- **The floor is a property of where a spirit may be, not of whether it is frightened.** Clamping the
+  ducked `y` inside the flinch meant the clamp switched on and off with `dread`, so a hand whose
+  errand already took it below the line stepped up to meet it the instant the storm came within
+  reach.
 - **Sometimes it loses, and it takes nine seconds.** Once a round a spirit asks whether the storm was
   over its bench when that round turned over — the same closed-form latch the temple's bays use, for
   the same reason: a spirit halfway up the funnel must not be handed back because the weather improved.
@@ -464,7 +489,11 @@ of the radius. The storm's strength had to be asked for directly.
 - **A real bulge.** A sine everywhere is a wobble; the read of a bulge is that it is *somewhere in
   particular*. It is a narrow gaussian in height whose centre climbs the column on its own clock and
   whose depth comes and goes on a slower, unrelated one, so one swelling travels up and is gone, and
-  another turns up somewhere else later.
+  another turns up somewhere else later. It also **fades in and out at the ends of its climb**, and
+  that is not decoration: the centre wraps from the top of the column back to the bottom, so a bulge
+  still at full depth when it got there reappeared instantly at the foot, and every chunk near either
+  end stepped by up to a third of the funnel's radius in a single frame. Anything riding the column
+  jumped with it — a captured spirit is pinned to the radius, and that was a hundred pixels.
 - **The storm has a wind field as well as a body.** Most of what a tornado does, it does to things it
   never touches, so `vortexAt` now returns both numbers. The temple's damage is measured against the
   **field**, not the wall — a storm passing near strips it without the column ever crossing it, and
