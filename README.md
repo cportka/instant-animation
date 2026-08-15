@@ -2,7 +2,7 @@
 
 An instant animation generator. Animate anything you can describe.
 
-**Version:** 3.9.0 · **Live:** https://cportka.github.io/instant-animation/
+**Version:** 4.0.0 · **Live:** https://cportka.github.io/instant-animation/
 
 Describe something. It becomes a hand-drawn canvas animation and joins the gallery. There is no
 text on the site — the animation *is* the page. The only chrome is a soft chevron floating at each
@@ -28,6 +28,7 @@ being re-composed rather than two pictures. Compositions have their own addresse
 
 | Animation | From the description |
 | --- | --- |
+| **Moon Over the Deep** | *a stark, highly-stylized, 32-bit pixel style full moon over the water with an island in the background, the water gently rolling under a clear night sky, and a faint glow that occasionally comes from deep below* |
 | **The Rose Funnel** | *a pixelated tornado swirling up reds, pinks and purples, tearing apart an ornate pagoda temple that disembodied spirit hands rebuild without pause* |
 | **Above the Fog** | *an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and changing into each other, over a lazy winding river and a riverside town in reversed colour — people down there setting fires and letting off fireworks that burst amongst the fog as stylised orange and red fractal pixel art, and every few minutes one cloud pixelates into an angel, then a grim reaper, then a giant happy face* |
 | **Westbound on Grizzly Peak** *(two compositions)* | *2.5D 16-bit from the perspective of a car travelling diagonally up and to the left, a series of copper bronze street lamps, a cliff drop-off overlooking the bay, trees, and a fiery sunset in a night sky* |
@@ -116,7 +117,8 @@ SemVer, with two repo-specific rules:
   only that. Every new animation cuts one, however small; nothing else cuts one, however large.
   `1.0.0` finished *Asleep Among the Stars* and started *Westbound on Grizzly Peak*; `2.0.0`
   finished that one and started *Above the Fog*; `3.0.0` finished that one and started *The Rose
-  Funnel*. If a bump can't name both, it isn't a MAJOR.
+  Funnel*; `4.0.0` finished that one and started *Moon Over the Deep*. If a bump can't name both, it
+  isn't a MAJOR.
 - **Changes fold into the current version** rather than minting a new number each round, so
   `CHANGELOG.md` describes what the project *is* rather than logging every intermediate state it
   passed through. A new section opens when an animation is finished, not on any other signal —

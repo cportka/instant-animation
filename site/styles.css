@@ -160,6 +160,38 @@ body {
   filter: drop-shadow(3px 3px 0 rgba(78, 22, 86, 0.95));
 }
 
+/* The `moon` chrome: one chevron drawn three times, two pixels apart, in three steps of moonlight.
+
+   Every other glyph in this gallery is a shape in a colour. This one is a shape in a *ramp* — the
+   same edge repeated down a value sequence, which is the entire idea of the scene it belongs to: a
+   32-bit picture is not one with more colours in it, it is one where a surface is described by many
+   close steps rather than by a few far apart. Two-pixel steps rather than the funnel's four, because
+   this scene's grid is finer than that one's and a glyph that lied about its resolution would be the
+   one tell that mattered.
+
+   No glow and no drop shadow. There is not a soft edge anywhere in the scene and the stack of steps
+   already gives the chevron somewhere to sit; a shadow under it would be a fourth value that is not
+   on the ramp. */
+.nav[data-chrome='moon'] .nav__glyph--moon {
+  display: block;
+}
+
+.nav[data-chrome='moon'] {
+  color: #ffffff;
+}
+
+.nav__moon-lit rect {
+  fill: currentColor;
+}
+
+.nav__moon-mid rect {
+  fill: #a9c2ef;
+}
+
+.nav__moon-deep rect {
+  fill: #1e326d;
+}
+
 /* Two animations on each: the float they always had, which never stops, and `peek`, which runs
    exactly **once**. The chevrons introduce themselves a moment after the page arrives and are then
    never seen again unless you reach for them.
@@ -223,12 +255,14 @@ body {
    `funnel` is on a chunk grid for the same reason and hops on the same beat; the two scenes look
    nothing alike, but neither of them may move by half a pixel. */
 .nav[data-chrome='pixel'].nav--down,
-.nav[data-chrome='funnel'].nav--down {
+.nav[data-chrome='funnel'].nav--down,
+.nav[data-chrome='moon'].nav--down {
   animation-name: float-down-pixel, peek;
 }
 
 .nav[data-chrome='pixel'].nav--up,
-.nav[data-chrome='funnel'].nav--up {
+.nav[data-chrome='funnel'].nav--up,
+.nav[data-chrome='moon'].nav--up {
   animation-name: float-up-pixel, peek;
 }
 
