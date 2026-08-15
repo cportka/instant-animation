@@ -23,6 +23,7 @@
 // outline would go wrong.
 
 import { clamp } from '../../lib/draw.js';
+import { hash2 } from '../../effects/field.js';
 import { bayerOn } from '../../effects/pixel.js';
 
 /** The grid a hand is rasterised into. Big enough to hold a splayed hand with room for the thumb. */
@@ -144,25 +145,48 @@ export function handMask(curl, reach = 0) {
  * The dither is keyed to the hand's own grid rather than to the screen, so the holes travel with the
  * hand. Keyed to the screen it becomes a fixed screen-door that a hand happens to move behind, which
  * reads as a hole cut in the picture rather than as something you can see through.
+ *
+ * **`scatter` is how a spirit arrives and how it leaves.** At 0 the hand is whole; at 1 it is not
+ * there at all, and in between its chunks have thinned out and drifted apart, upward and outward.
+ * One parameter does both jobs because they are the same event run in opposite directions: a spirit
+ * being taken has `scatter` rising, and one being summoned has it falling, so the chunks converge out
+ * of the air and settle into a hand. Which chunk goes first is hashed on its own cell, so the
+ * dispersal is a fixed pattern that the hand comes apart along rather than a shimmer.
+ *
+ * A fade in *density* alone was what this replaces, and it was not enough: the hand simply became a
+ * fainter hand and then was gone between one frame and the next. Chunks have to visibly leave.
  */
-export function stampSpirit(edge, fill, lit, mask, x, y, px, flip, solidity = 0.55) {
+export function stampSpirit(edge, fill, lit, mask, x, y, px, flip, solidity = 0.55, scatter = 0) {
+  // Late and fast: it holds its shape while the first chunks lift off, then goes all at once. Linear
+  // drift reads as a hand being gently blurred, which is not what is happening to it.
+  const away = scatter * scatter;
   for (let r = 0; r < HAND_H; r += 1) {
     for (let c = 0; c < HAND_W; c += 1) {
       const sc = flip ? HAND_W - 1 - c : c;
       if (!mask[r * HAND_W + sc]) continue;
+
+      let ox = 0;
+      let oy = 0;
+      if (scatter > 0) {
+        const h = hash2(c * 1.7 + 0.31, r * 2.9 + 0.7);
+        if (h < scatter) continue;
+        // Up and out. The storm takes things upward, and a summoning is that in reverse.
+        ox = (h * 2 - 1) * away * px * 7;
+        oy = -away * px * (2 + h * 8);
+      }
       // On the boundary? Then it is outline, and outline is never dithered — the silhouette is the
       // whole drawing and a half-erased edge is a smudge.
       const border = r === 0 || c === 0 || r === HAND_H - 1 || c === HAND_W - 1
         || !mask[(r - 1) * HAND_W + sc] || !mask[(r + 1) * HAND_W + sc]
         || !mask[r * HAND_W + (flip ? sc + 1 : sc - 1)] || !mask[r * HAND_W + (flip ? sc - 1 : sc + 1)];
       if (border) {
-        edge.push(x + c * px, y + r * px, px, px);
+        edge.push(x + c * px + ox, y + r * px + oy, px, px);
         continue;
       }
       if (!bayerOn(c, r, solidity)) continue;
       // A brighter band across the knuckles, which is where a hand catches light and the one place
       // a third value buys anything.
-      (r > HAND_H * 0.36 && r < HAND_H * 0.5 ? lit : fill).push(x + c * px, y + r * px, px, px);
+      (r > HAND_H * 0.36 && r < HAND_H * 0.5 ? lit : fill).push(x + c * px + ox, y + r * px + oy, px, px);
     }
   }
 }
