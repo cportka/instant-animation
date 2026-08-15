@@ -72,7 +72,7 @@ export function create({ width, height, seed = meta.id }) {
 
     draw(ctx, t) {
       ctx.save();
-      const px = pixelFor(Math.min(W, H));
+      const px = pixelFor(W, H);
       const disc = moonAt(W, H, moon);
       // The sky is told where the moon is, because the glare around it is *sky* — drawn on the sky's
       // grid, on the sky's ramp, by the sky's own dither. Nothing else would join without a seam.

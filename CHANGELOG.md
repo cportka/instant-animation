@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [4.1.0] - 2026-08-15
+## [4.1.1] - 2026-08-15
 
 **"The Rose Funnel" is finished, and a fifth animation begins.** That is the only thing a MAJOR bump
 means here — see `.claude/CLAUDE.md`.
@@ -73,6 +73,18 @@ picture is never still.
   into a second with smaller ones standing apart — because the arrangement is what the eye
   recognises, and blobs given a free run of the disc average out to a symmetrical smudge in the
   middle. Too faint and the moon is a cotton ball; too round and it is a golf ball.
+- **The lit face is *white*, and that is a load-bearing detail rather than a shade of taste.** The
+  limb term starts below zero so `shadeAt` clamps the middle of the disc to the top step and dithers
+  nothing there, and the mottle is signed so it cannot act as a bias. Both of those were wrong once
+  and the result was memorable: with the face sitting a third of a step above white and a mottle too
+  narrow to carry it across a boundary, every chunk of the moon was a mixture of the same two steps
+  at the same fraction — and an ordered dither held at a constant fraction is not a texture, it is a
+  **halftone screen**, a regular ruling of alternating chunks. Whether you could see the ruling
+  depended on how crisply the frame happened to be rasterised, so it came and went as the stage moved
+  its render scale, and the moon appeared to switch between two different graphics. Wide mottle is
+  the cure as much as the bias is: a grain that sweeps the level *through* a step reads as mottling
+  because the dither density changes from chunk to chunk, while the same grain at half the amplitude
+  holds one density across the area and rules a screen over it.
 - **The air around the moon belongs to the sky.** The moon draws nothing outside its own circle. The
   glare is a question the *sky* asks while drawing itself — a lift added to the level it was going to
   use anyway, on the sky's grid, on the sky's ramp, resolved by the sky's dither — so there is no
@@ -190,8 +202,25 @@ order of what they were actually worth:
   frame; 288 samples over the ellipse read back bilinearly is the same picture for a fortieth of the
   work.
 
-Measured after: **15.3ms** on an ordinary frame and **17.4ms** with the glow at full strength, against
-the 20ms ceiling — water 10.6ms, sky 1.8ms, moon 1.6ms, island 1.0ms.
+- **The chunk grid is budgeted, not just scaled.** Sizing it off the short edge sounds like the rule
+  that keeps the art the same coarseness everywhere, and for the axis it measures it is — but the
+  chunk count is a product of *both* axes and the horizon is a fraction of the **height**, so on a
+  tall frame the short edge is the width while nearly all the drawing is down the long side. A
+  390×844 phone came out at forty-eight thousand water chunks against a 1440×900 monitor's thirty
+  thousand: sixty per cent more work, on the weakest hardware that runs this, for a picture nobody
+  would call more detailed. The grid now starts from the short edge and is made coarser until the
+  frame is affordable, which leaves the size this scene was composed at untouched and takes the
+  phone from 21.4ms to 11.4ms.
+
+  This one is worth stating as a *correctness* problem rather than a speed one. The stage backs its
+  render scale off after twelve long frames and restores it after three hundred short ones, so a
+  scene sitting near the threshold does not simply degrade — it **oscillates**, and the picture
+  visibly changes resolution every few seconds for no reason a viewer can see. Staying inside a
+  budget is what keeps the stage's hand off the dial.
+
+Measured after: **15.3ms** on an ordinary frame and **17.4ms** with the glow at full strength on a
+1440×900 monitor, **11.4ms** on a phone, against the 20ms ceiling — water 10.6ms, sky 1.8ms, moon
+1.6ms, island 1.0ms.
 
 ## [3.9.0] - 2026-08-15
 
