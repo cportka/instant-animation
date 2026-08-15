@@ -31,17 +31,29 @@ import { HAND_H, HAND_W, handMask, stampSpirit } from './spirit.js';
 import { GOLD, JADE, LAPIS } from './palette.js';
 
 /**
- * The three crafts, and where they stand along the horizon.
+ * The four crafts, where they stand along the horizon, and **what each one makes**.
  *
- * Three, not five. Every one of them is a dark lump with a spark in it at this size, so a fourth and
- * a fifth add count without adding information — and the horizon band has a forest and everything
- * that lands to hold as well.
+ * That last column is the change that matters. A spirit's craft used to be a fixed property of the
+ * spirit — slot index modulo three — so a hand could spend its whole working life at the glass bench
+ * and then carry a roof tile to the temple. That is the same incoherence the anonymous blue plank
+ * was: the errand said one thing and the labour said another. The craft now **follows the errand**,
+ * so a hand bound for an eave is at the kiln firing a tile, and one bound for a wall is at the mill.
+ *
+ * It also spreads them out. Two of the three benches used to sit at 0.72 and 0.87, which is why the
+ * hands gathered in one corner and waited: most errands started there whatever they were for. Four
+ * benches across the frame, chosen by what the building needs, and the traffic is spread by
+ * construction rather than by luck.
  */
 const SHOPS = [
-  { at: 0.12, kind: 'mill', beat: 1.7 },
-  { at: 0.72, kind: 'kiln', beat: 1.1 },
-  { at: 0.87, kind: 'glass', beat: 2.3 },
+  { kind: 'mill', at: 0.1, beat: 1.7 },
+  { kind: 'forge', at: 0.2, beat: 2.6 },
+  { kind: 'kiln', at: 0.55, beat: 1.1 },
+  { kind: 'glass', at: 0.85, beat: 2.3 },
 ];
+/** Which bench makes which piece. The one place the two halves are tied together. */
+const SHOP_FOR = {
+  wall: 0, bracket: 1, spire: 1, eave: 2, lantern: 3,
+};
 
 export function planHands(rng, bayCount = 27) {
   // Twelve slots rather than twelve hands. A slot is not always occupied: the storm takes them, and
@@ -49,7 +61,6 @@ export function planHands(rng, bayCount = 27) {
   // hands you are watching are not the hands you started with.
   const hands = Array.from({ length: 12 }, (_, i) => ({
     key: i,
-    shop: i % SHOPS.length,
     // Staggered on one fixed circuit each, so the traffic never synchronises and nothing queues.
     period: 9 + rng.next() * 7,
     phase: rng.next(),
@@ -162,13 +173,19 @@ export function drawWorks(ctx, W, H, t, plan, px) {
       ? 0.72 + 0.14 * Math.sin(t * shop.beat)
       : shop.kind === 'glass'
         ? 0.5 + 0.5 * Math.abs(Math.sin(t * shop.beat * 0.7)) ** 3
-        : 0.45 + 0.55 * Math.max(0, Math.sin(t * shop.beat));
+        : shop.kind === 'mill'
+          // A sawmill has no fire in it. One lamp so the shed is not a dead lump, and nothing else —
+          // the mill is the one bench whose work is lit by somebody else's light.
+          ? 0.3
+          : 0.45 + 0.55 * Math.max(0, Math.sin(t * shop.beat));
     ember.push(x - bpx, horizonY - bpx * 2, heat);
-    ember.push(x, horizonY - bpx * 2, heat * 0.8);
+    if (shop.kind !== 'mill') ember.push(x, horizonY - bpx * 2, heat * 0.8);
 
-    // ...and what the craft throws off. The smelter showers sparks, the kiln breathes smoke, the
+    // ...and what the craft throws off. The forge showers sparks, the kiln breathes smoke, the
     // glass bench sends up one slow bright gather at a time.
-    const jets = shop.kind === 'mill' ? 5 : shop.kind === 'kiln' ? 3 : 2;
+    // ...and the mill throws none of it, because a sawmill has no fire in it. A shed with a plume
+    // over it is a shed that is burning something, and that one had nothing to burn.
+    const jets = shop.kind === 'forge' ? 5 : shop.kind === 'kiln' ? 3 : shop.kind === 'mill' ? 0 : 2;
     for (let s = 0; s < jets; s += 1) {
       const rate = shop.kind === 'glass' ? 0.22 : 0.4 + s * 0.13;
       const u = wrap01(t * rate + shop.at * 7 + s * 0.31);
@@ -235,12 +252,16 @@ const SUMMON = 3.4;
 const CAUGHT = DRAG + CLIMB;
 const LOST = CAUGHT + SHRED;
 
-function spiritAt(hand, t, W, H, funnel, seed) {
+function spiritAt(hand, t, W, H, funnel, seed, lastBay) {
   const cycles = t / hand.life + hand.born;
   const n = Math.floor(cycles);
   const began = (n - hand.born) * hand.life;
   const age = (cycles - n) * hand.life;
-  const bench = SHOPS[hand.shop].at * W;
+  // Which bench this spirit was standing at when its round turned over — asked of the errand it was
+  // on *then*, not of the one it is on now, because the whole question is where the storm was
+  // relative to where the spirit was at that instant. A craft that follows the errand moves the
+  // bench around, so the answer has to be looked up at the epoch like everything else here.
+  const bench = SHOPS[SHOP_FOR[pieceKindFor(errandOf(hand, began), lastBay)]].at * W;
 
   const storm = vortexAt(W, H, began, funnel, 0.12);
   const exposed = 1 - clamp(Math.abs(bench - storm.cx) / Math.max(1, storm.wind), 0, 1);
@@ -340,16 +361,183 @@ export function errandOf(hand, t) {
  * ring for the spire at the top. You can tell what a hand is carrying, and therefore where it is
  * going, before it gets there.
  */
-const PART_OF = ['eave', 'eave', 'wall'];
+/**
+ * What the bay at this key is a piece of. The spire is the one entry that is not a bay of a storey.
+ *
+ * Every part of this building takes **two** materials, and saying so is what keeps four benches busy
+ * instead of one. An eave is glazed tile *and* the gilt bracket course under it; a wall is posts
+ * *and* the lattice windows with a lamp behind them. Bays run `eaveL, eaveR, wall` up each storey,
+ * so the eaves split by side and the walls by storey, and the traffic comes out near enough
+ * two-two-one-one across kiln, forge, mill and glass.
+ *
+ * Mapping every eave to tile was the first cut and it was hopeless arithmetic: a pagoda is mostly
+ * roof, so the kiln drew two thirds of all errands and the forge drew one bay in twenty-two. The
+ * sawmill stood empty for most of a minute at a time, which is no way to show somebody a sawmill.
+ */
+export function pieceKindFor(bayKey, lastKey) {
+  if (bayKey >= lastKey) return 'spire';
+  const part = bayKey % 3;
+  if (part === 0) return 'eave';
+  if (part === 1) return 'bracket';
+  return Math.floor(bayKey / 3) % 2 ? 'lantern' : 'wall';
+}
 
-/** What the bay at this key is a piece of. The spire is the one entry that is not a bay of a storey. */
-export const pieceKindFor = (bayKey, lastKey) => (bayKey >= lastKey ? 'spire' : PART_OF[bayKey % 3]);
+/**
+ * Where a spirit stands for each of the three acts of its craft, in chunks from its bench.
+ *
+ * The work used to be one station and a wiggle: a hand held its place for three or four seconds,
+ * jiggled, and was then holding a finished piece. Nothing was made on screen, which is the whole
+ * point of having crafts at all. Three stations means the hand **walks its bench** — out to the trees
+ * and back with a log, along the kiln from wheel to fire to the cooling floor — and walking between
+ * marked places is what reads as a process rather than as waiting.
+ */
+const STATIONS = {
+  mill: [[-8, 2], [-4, 1], [0, 0]],
+  forge: [[3, 0], [-1, 1], [-5, 1]],
+  kiln: [[-5, 1], [0, 0], [5, -1]],
+  glass: [[4, 0], [0, -2], [-5, -1]],
+};
+
+/** What each act is called, in order — the three beats of each craft. */
+const ACTS = {
+  mill: ['fell', 'haul', 'saw'],
+  forge: ['smelt', 'pour', 'hammer'],
+  kiln: ['throw', 'fire', 'draw'],
+  glass: ['gather', 'blow', 'shape'],
+};
+
+/**
+ * How a spirit holds itself through one act, and how fast it is moving while it does it.
+ *
+ * The gesture is the other half of the read. A hand that swings on a slow heavy arc is chopping; one
+ * that shuttles fast and flat is sawing; one that turns slowly with an open grip is working glass.
+ * All of it is `curl` and two offsets, which is everything a hand built from a pose parameter can do
+ * and nothing a fixed sprite could have done at all.
+ */
+function gestureAt(craft, act, into, t, key) {
+  const beat = (rate, phase = 0) => Math.sin(t * rate + key * 1.7 + phase);
+  switch (`${craft}:${act}`) {
+    // Heavy, slow, and mostly vertical: the axe comes up and comes down.
+    case 'mill:fell': return { dx: beat(4.4) * 1.6, dy: Math.abs(beat(4.4)) * 2.6, curl: 0.92 };
+    // Leaning into a load, and the load is heavy enough to rock the walk.
+    case 'mill:haul': return { dx: 0, dy: Math.abs(beat(3.1)) * 0.9, curl: 0.95 };
+    // Fast, flat, and along one axis — a saw is the one gesture with no vertical in it.
+    case 'mill:saw': return { dx: beat(7.5) * 2.8, dy: 0, curl: 0.6 + beat(7.5) * 0.3 };
+    case 'forge:smelt': return { dx: beat(2.2) * 1.1, dy: beat(2.2, 1.6) * 0.8, curl: 0.88 };
+    // Tipping: a slow one-way lean rather than a cycle, because a pour happens once.
+    case 'forge:pour': return { dx: into * 2.2, dy: into * 1.4, curl: 0.95 };
+    case 'forge:hammer': return { dx: 0, dy: Math.max(0, beat(9)) * 3.4, curl: 0.9 };
+    // Turning something soft: the grip opens and closes as the clay comes round.
+    case 'kiln:throw': return { dx: beat(5.2) * 0.9, dy: 0, curl: 0.45 + beat(5.2, 1) * 0.35 };
+    // Pushing it in, then holding still while it fires.
+    case 'kiln:fire': return { dx: Math.min(1, into * 2) * 2.4, dy: 0, curl: 0.7 };
+    case 'kiln:draw': return { dx: -into * 2.6, dy: beat(3.4) * 0.5, curl: 0.95 };
+    case 'glass:gather': return { dx: beat(1.9) * 1.4, dy: beat(1.9, 0.8) * 1.1, curl: 0.9 };
+    // Steady — the one act in the scene where a hand deliberately does not move much.
+    case 'glass:blow': return { dx: 0, dy: beat(1.1) * 0.4, curl: 0.8 };
+    default: return { dx: beat(2.6) * 1.2, dy: 0, curl: 0.4 + beat(2.6) * 0.25 };
+  }
+}
 
 /** The buckets a carried piece can go into, and the temple colour each one is drawn in. */
 export const MEND_BUCKETS = ['tileLit', 'tile', 'tileDark', 'postLit', 'post', 'bracket', 'gilt', 'giltLit'];
 export const emptyMend = () => Object.fromEntries(MEND_BUCKETS.map((k) => [k, []]));
 
-export function stampPiece(mend, kind, x, y, px, scatter = 0) {
+/**
+ * What is on the bench during one act of one craft — the tools, the fire, and the tree.
+ *
+ * Emitted after the storm has had its say, so a spirit that flinches takes its axe with it. `px` is
+ * the hand's own chunk, so every prop is sized against the hand holding it.
+ */
+function craftProps(craft, act, into, t, key, x, y, px, groundY, props) {
+  const { tool, hot, bough, boughLit } = props;
+  const mid = x + px * (HAND_W / 2);
+  switch (`${craft}:${act}`) {
+    case 'mill:fell': {
+      // A conifer in the same tiers the forest is drawn in, leaning further with every stroke and
+      // down by the end of the act. This is the one place the timber visibly *comes from* somewhere.
+      //
+      // It stands on the **ground line**, not on an offset from the hand: measured off the hand it
+      // was drawn half buried, because the hand hovers and the ground does not.
+      const lean = into * into * 11;
+      const foot = groundY - px;
+      for (let r = 0; r < 10; r += 1) {
+        const wide = r < 3 ? 1 : Math.max(1, 5 - Math.floor((r - 3) / 2));
+        const shift = Math.round((lean * r) / 10);
+        (r < 3 ? bough : boughLit).push(
+          mid - px * (3 + Math.floor(wide / 2)) + shift * px, foot - r * px, px * wide, px,
+        );
+      }
+      // The axe, and the chips coming off the cut.
+      const swing = Math.sin(t * 4.4 + key * 1.7);
+      tool.push(x - px * 3, y + px * (8 + swing * 1.5), px * 5, px);
+      if (swing > 0.7) {
+        for (let s = 0; s < 3; s += 1) hot.push(mid - px * (4 + s), foot - px * (1 + s), 0.15);
+      }
+      return;
+    }
+    case 'mill:haul':
+      // Dragging it: the log is behind the hand, not in it.
+      tool.push(x - px * 7, y + px * 11, px * 9, px * 2);
+      return;
+    case 'mill:saw': {
+      // The frame saw, and the dust it throws.
+      for (let i = 0; i < 8; i += 1) tool.push(x + px * (i - 4), y + px * (12 + (i % 2) * 0.5), px, px * 0.6);
+      if (Math.abs(Math.sin(t * 7.5 + key * 1.7)) > 0.6) hot.push(mid, y + px * 14, 0.15);
+      return;
+    }
+    case 'forge:smelt':
+      // A crucible with the melt rising in it.
+      tool.push(x + px * 3, y + px * 10, px * 5, px * 3);
+      hot.push(x + px * 4, y + px * (12 - into * 1.6), 0.8);
+      hot.push(x + px * 6, y + px * (12 - into * 1.6), 0.95);
+      return;
+    case 'forge:pour':
+      // A thread of it going into the mould, getting shorter as the crucible empties.
+      for (let s = 0; s < 4; s += 1) {
+        if (s / 4 > 1 - into * 0.6) continue;
+        hot.push(x + px * (4 + s * 0.5), y + px * (10 + s * 1.6), 0.95 - s * 0.12);
+      }
+      tool.push(x + px * 2, y + px * 15, px * 6, px);
+      return;
+    case 'forge:hammer': {
+      tool.push(x - px, y + px * 14, px * 7, px * 2);
+      const blow = Math.max(0, Math.sin(t * 9 + key * 1.7));
+      if (blow > 0.85) for (let s = 0; s < 5; s += 1) hot.push(mid + px * (s - 2) * 1.3, y + px * (13 - s * 0.6), 1);
+      return;
+    }
+    case 'kiln:throw':
+      // The wheel: a flat disc under the hands with the clay turning on it.
+      tool.push(x - px * 2, y + px * 13, px * 9, px);
+      return;
+    case 'kiln:fire':
+      // The mouth of the kiln, and it flares as the piece goes in.
+      tool.push(x + px * 5, y + px * 8, px * 4, px * 6);
+      hot.push(x + px * 6, y + px * 11, 0.75 + Math.min(1, into * 2) * 0.25);
+      hot.push(x + px * 6, y + px * 13, 0.9);
+      return;
+    case 'kiln:draw':
+      // Tongs, with the piece still glowing in their mouth.
+      tool.push(x + px * 6, y + px * 9, px * 5, px * 0.7);
+      tool.push(x + px * 6, y + px * 11, px * 5, px * 0.7);
+      return;
+    case 'glass:gather':
+      // The pipe, into the furnace and out again with a gather on the end.
+      tool.push(x + px * 2, y + px * 10, px * 9, px * 0.8);
+      hot.push(x + px * 10, y + px * 10, 1);
+      return;
+    case 'glass:blow':
+      tool.push(x + px * 2, y + px * 10, px * 8, px * 0.8);
+      hot.push(x + px * 9, y + px * 10, 0.95);
+      return;
+    default:
+      // glass:shape — the jacks, closing on the piece as it is worked.
+      tool.push(x + px * 3, y + px * (9 + into), px * 5, px * 0.7);
+      tool.push(x + px * 3, y + px * (12 - into), px * 5, px * 0.7);
+  }
+}
+
+export function stampPiece(mend, kind, x, y, px, scatter = 0, made = 1) {
   // Centred on the palm and wider than it, so the grip reads as a grip: fingers over, piece under,
   // and enough of it sticking out either side to have a silhouette of its own.
   //
@@ -359,7 +547,24 @@ export function stampPiece(mend, kind, x, y, px, scatter = 0) {
   if (scatter >= 1) return;
   const at = (w) => x + px * Math.round((HAND_W - w) / 2);
   const top = y + px * (9 - scatter * scatter * 6);
+
+  // `made` runs 0 to 1 across the three acts of the craft, and the thing in the hand **changes with
+  // it**. That is the difference between a hand that works and a hand that waits: you watch a lump of
+  // clay go into the kiln dull, come out gold, and cool to glaze; a log arrive rough and leave
+  // dressed; a gather swell and become a lantern. It is the same few rectangles either way — what
+  // costs nothing is deciding *which* few.
   if (kind === 'eave') {
+    if (made < 0.38) {
+      // Wet clay, unfired: the roof's own material with none of its glaze yet.
+      mend.tileDark.push(at(6), top, px * 6, px * 2);
+      return;
+    }
+    if (made < 0.72) {
+      // Out of the fire, still hot enough to be its own light source.
+      mend.gilt.push(at(7), top, px * 7, px);
+      mend.bracket.push(at(7), top + px, px * 7, px * 2);
+      return;
+    }
     // The roof's own chord on a piece of the roof: lit ridge, glaze, shaded curl beneath.
     mend.tileLit.push(at(7), top, px * 7, px);
     mend.tile.push(at(7), top + px, px * 7, px);
@@ -367,12 +572,62 @@ export function stampPiece(mend, kind, x, y, px, scatter = 0) {
     return;
   }
   if (kind === 'wall') {
+    if (made < 0.45) {
+      // A log: round, bark-dark, and a chunk longer than the beam it will be cut into.
+      mend.post.push(at(9), top, px * 9, px * 2);
+      return;
+    }
     // A dressed timber with the bracket already fitted to one end — the dougong is what a wall of
     // this building is, so a beam without one is a stick.
     mend.postLit.push(at(8), top, px * 8, px);
     mend.post.push(at(8), top + px, px * 8, px);
     mend.bracket.push(at(8), top + px, px, px);
     mend.bracket.push(at(8) + px * 7, top + px, px, px);
+    return;
+  }
+  if (kind === 'bracket') {
+    if (made < 0.4) {
+      mend.gilt.push(at(4), top + px, px * 4, px);
+      return;
+    }
+    if (made < 0.75) {
+      mend.giltLit.push(at(5), top, px * 5, px * 2);
+      return;
+    }
+    // A dougong block: the stepped bracket that carries an eave, and the reason the course under
+    // every roof in this building reads as carpentry rather than as trim.
+    mend.bracket.push(at(6), top, px * 6, px);
+    mend.gilt.push(at(4), top + px, px * 4, px);
+    mend.bracket.push(at(2), top + px * 2, px * 2, px);
+    return;
+  }
+  if (kind === 'lantern') {
+    if (made < 0.35) {
+      // A gather on the end of the pipe: molten, and nothing yet but bright.
+      mend.giltLit.push(at(3), top + px, px * 3, px * 2);
+      return;
+    }
+    if (made < 0.7) {
+      // Blown out — bigger every second, and still all light and no frame.
+      const w = 3 + Math.round((made - 0.35) * 8);
+      mend.gilt.push(at(w), top, px * w, px);
+      mend.giltLit.push(at(w), top + px, px * w, px * 2);
+      return;
+    }
+    // Finished: a lattice frame with the light shut inside it, which is what a temple lamp is.
+    mend.post.push(at(5), top, px * 5, px * 4);
+    mend.giltLit.push(at(5) + px, top + px, px * 3, px * 2);
+    mend.post.push(at(5) + px * 2, top + px, px, px * 2);
+    return;
+  }
+  if (made < 0.4) {
+    // A pool of it in the crucible.
+    mend.gilt.push(at(4), top + px, px * 4, px);
+    return;
+  }
+  if (made < 0.75) {
+    // Poured, and not yet struck into anything.
+    mend.giltLit.push(at(4), top, px * 4, px * 2);
     return;
   }
   // A ring off the sōrin: the one piece that is only ever carried to the very top.
@@ -425,27 +680,31 @@ export function drawHands(ctx, W, H, t, plan, px, places) {
   const wisp = [];
   const tool = [];
   const hot = [];
+  const bough = [];
+  const boughLit = [];
   const mend = emptyMend();
   // A hand is drawn at the size of the thing it is carrying rather than at the size of a hand — a
   // lie the eye takes without complaint, because there is no other hand in frame to measure against.
   const hpx = Math.max(2, Math.round(px * 0.72));
 
   for (const hand of plan.hands) {
-    const state = spiritAt(hand, t, W, H, plan.funnel, plan.seed);
+    const state = spiritAt(hand, t, W, H, plan.funnel, plan.seed, places.length - 1);
     if (state.here <= 0) continue;
 
-    const shop = SHOPS[hand.shop];
     const u = wrap01(t / hand.period + hand.phase);
     // The bay it is answerable for this circuit — the same one `tendingAt` will credit it with
     // mending, which is the whole of the correspondence.
     const bayKey = errandOf(hand, t);
     const site = places[Math.min(places.length - 1, bayKey)];
     if (!site) continue;
-    // ...and therefore what it is carrying.
+    // ...and therefore what it is carrying, and therefore **which bench it is standing at**. The
+    // craft follows the errand, so a spirit bound for an eave spends its shift at the kiln.
     const kind = pieceKindFor(bayKey, places.length - 1);
+    const shop = SHOPS[SHOP_FOR[kind]];
 
-    const bench = { x: shop.at * W, y: groundY - px * 8 };
-    const stroke = Math.sin(t * shop.beat * 2.2 + hand.key * 1.7);
+    // Clear of the shed roofs. At eight chunks the spirits stood knee-deep in the workshops and half
+    // of every hand was down in the dark ground band where the drawing is lost.
+    const bench = { x: shop.at * W, y: groundY - px * 11 };
 
     let x;
     let y;
@@ -455,27 +714,51 @@ export function drawHands(ctx, W, H, t, plan, px, places) {
     // the blowpipe stay where the hand would have been if it had not flinched, and a spirit that gets
     // shoved out of the wind leaves its work hanging in the air behind it.
     let holds = null;
+    // How far through making the thing it is making, and which of the three acts it is on.
+    let made = 1;
+    let act = null;
+    let into = 0;
 
     if (u < 0.34) {
-      // Working. The hand holds station and the tool travels — and the grip opens and closes on the
-      // stroke, which is the thing a fixed sprite could never do.
-      x = bench.x + stroke * px * 2.5;
-      y = bench.y + Math.abs(stroke) * px;
-      curl = 0.55 + stroke * 0.35;
-      flip = stroke < 0;
-      holds = 'work';
+      // Working, and working is now three acts rather than one wiggle: the spirit walks its bench
+      // between three marked stations, and both what it is doing and what is in its hand change on
+      // the way. Which act it is on is `t` and nothing else, like everything here.
+      made = u / 0.34;
+      const beat = made * 3;
+      const step = Math.min(2, Math.floor(beat));
+      into = clamp(beat - step, 0, 1);
+      act = ACTS[shop.kind][step];
+      // It slides between stations over the first fifth of each act, so the walk is visible and the
+      // remaining four fifths are spent actually doing the thing.
+      const was = STATIONS[shop.kind][Math.max(0, step - 1)];
+      const now = STATIONS[shop.kind][step];
+      const walk = clamp(into / 0.2, 0, 1);
+      const ease = walk * walk * (3 - 2 * walk);
+      const pose = gestureAt(shop.kind, act, into, t, hand.key);
+      x = bench.x + (was[0] + (now[0] - was[0]) * ease) * px + pose.dx * px;
+      y = bench.y + (was[1] + (now[1] - was[1]) * ease) * px + pose.dy * px;
+      curl = pose.curl;
+      flip = now[0] < was[0] || (step === 0 && shop.kind === 'mill');
+      // The mill's first act is out among the trees with an axe, and there is no piece yet — the
+      // timber does not exist until the tree is down.
+      holds = shop.kind === 'mill' && step === 0 ? 'work' : 'carry';
     } else if (u < 0.62) {
       const leg = (u - 0.34) / 0.28;
+      // It leaves from the **last station of its shift**, not from the middle of the bench. A spirit
+      // that finishes hammering five chunks to the left of its anvil and then departs from the anvil
+      // has jumped those five chunks in one frame.
+      const off = STATIONS[shop.kind][2];
+      const from = { x: bench.x + off[0] * px, y: bench.y + off[1] * px };
       // The detour round the column, decided when the errand set out and held for the flight. The
       // bump is zero at both ends, so the workshop and the bay are still hit exactly.
-      const round = detourFor(hand, t, W, H, plan.funnel, (bench.x + site.x) / 2);
+      const round = detourFor(hand, t, W, H, plan.funnel, (from.x + site.x) / 2);
       const bump = Math.sin(leg * Math.PI);
-      x = bench.x + (site.x - bench.x) * leg + round.side * bump * round.block * W * 0.15;
+      x = from.x + (site.x - from.x) * leg + round.side * bump * round.block * W * 0.15;
       // The arc goes *over* on a clear run and **under** on a blocked one, on the same bump — the
       // storm's foot is the narrowest part of it, so under is where the way through is.
-      y = bench.y + (site.y - bench.y) * leg - bump * H * 0.1 * (1 - round.block * 1.9);
+      y = from.y + (site.y - from.y) * leg - bump * H * 0.1 * (1 - round.block * 1.9);
       curl = 0.85;
-      flip = site.x < bench.x;
+      flip = site.x < from.x;
       holds = 'carry';
     } else if (u < 0.82) {
       // Fixing: hovering at the wound and tapping, with the hand opening on each tap. It is still
@@ -489,10 +772,17 @@ export function drawHands(ctx, W, H, t, plan, px, places) {
       holds = u < FIX_AT ? 'carry' : (tap > 0.6 ? 'fix' : null);
     } else {
       const leg = (u - 0.82) / 0.18;
-      x = site.x + (bench.x - site.x) * leg;
-      y = site.y + (bench.y - site.y) * leg - Math.sin(leg * Math.PI) * H * 0.06;
+      // Home is the bench of the **next** errand, because that is where this spirit will be standing
+      // when it gets there. Now that the craft follows the errand, flying back to the bench it left
+      // and then starting work at a different one is a teleport — and a four-hundred-pixel one when
+      // the next piece is made somewhere else, which is most of the time.
+      const nextShop = SHOPS[SHOP_FOR[pieceKindFor(errandOf(hand, t + hand.period), places.length - 1)]];
+      const off = STATIONS[nextShop.kind][0];
+      const home = { x: nextShop.at * W + off[0] * px, y: bench.y + off[1] * px };
+      x = site.x + (home.x - site.x) * leg;
+      y = site.y + (home.y - site.y) * leg - Math.sin(leg * Math.PI) * H * 0.06;
       curl = 0.15;
-      flip = bench.x < site.x;
+      flip = home.x < site.x;
     }
 
     // ---- fear, and being taken ------------------------------------------------------------------
@@ -575,20 +865,13 @@ export function drawHands(ctx, W, H, t, plan, px, places) {
     // hauled up the funnel keeps hold of its piece and loses it the way it loses everything else —
     // but it has no business still sawing, so the bench work stops the moment it is caught.
     if (holds && (holds === 'carry' || state.taken === 0)) {
-      if (holds === 'carry') {
-        stampPiece(mend, kind, x, y, hpx, scatter);
-      } else if (holds === 'fix') {
-        hot.push(x + px * 4, y + px * 7, 0.45);
-      } else if (shop.kind === 'mill') {
-        for (let i = 0; i < 7; i += 1) tool.push(x + px * (i - 3), y + px * (3 + (i % 2) * 0.5), px, px * 0.6);
-        if (Math.abs(stroke) > 0.7) hot.push(x + stroke * px * 5, y + px * 4, 0.2);
-      } else if (shop.kind === 'kiln') {
-        tool.push(x + px, y + px * 3, px * 3, px);
-        hot.push(x + px * 3.5, y + px * 3, 0.55 + 0.45 * Math.abs(stroke));
-      } else {
-        tool.push(x + px, y + px * 3, px * 4, px * 0.7);
-        hot.push(x + px * 5, y + px * 3 - Math.sin(t * 0.9 + hand.key) * px, 0.9);
-      }
+      if (holds === 'carry') stampPiece(mend, kind, x, y, hpx, scatter, made);
+      else if (holds === 'fix') hot.push(x + px * 4, y + px * 7, 0.45);
+    }
+    // ...and the bench around it, which only exists while it is working and only while the storm has
+    // not taken it. The axe goes with the hand that swings it.
+    if (act && state.taken === 0) {
+      craftProps(shop.kind, act, into, t, hand.key, x, y, hpx, groundY, { tool, hot, bough, boughLit });
     }
 
     // Density alone was the whole of presence once, and a hand that only ever got fainter still had
@@ -621,8 +904,10 @@ export function drawHands(ctx, W, H, t, plan, px, places) {
     }
   }
 
-  // The piece goes on last, in front of the hand that is holding it: fingers over, timber under.
+  // The tree being felled goes first of all — it is behind the spirit cutting it — then the piece
+  // last, in front of the hand holding it: fingers over, timber under.
   for (const [cells, colour] of [
+    [bough, JADE[6]], [boughLit, JADE[5]],
     [wisp, LAPIS[2]], [tool, LAPIS[3]], [fill, LAPIS[1]], [lit, LAPIS[0]], [edge, LAPIS[0]],
     [mend.tileDark, JADE[5]], [mend.tile, JADE[3]], [mend.tileLit, JADE[1]],
     [mend.post, LAPIS[4]], [mend.postLit, LAPIS[3]], [mend.bracket, GOLD[3]],
