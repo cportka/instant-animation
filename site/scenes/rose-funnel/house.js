@@ -25,23 +25,30 @@
 import { clamp, rgba } from '../../lib/draw.js';
 import { hash2 } from '../../effects/field.js';
 import { chunk } from '../../effects/pixel.js';
-import { powerAt, vortexAt } from './funnel.js';
+import { bandAt, powerAt, vortexAt } from './funnel.js';
 import { GROUND } from './layout.js';
-import { GOLD } from './palette.js';
+import { GOLD, SPIN } from './palette.js';
 
 /**
- * The one place in this scene that is not on the storm's ramp or the land's.
+ * The house's own colours — and they are the **storm's**, warmed.
  *
- * A terracotta roof and cream walls are warm, low-saturation and *domestic* — they belong to neither
- * the vortex nor the forest nor the temple, which is exactly why the house reads as a small ordinary
- * thing that has found itself in the wrong place. Six colours, used on one object, and nothing else
- * in the frame is allowed them.
+ * The first version was terracotta and cream, on the argument that a domestic palette belonging to
+ * nothing else in the frame is what makes the house read as a small ordinary thing in the wrong
+ * place. That is a good argument for a house standing in a field, and this one is not: it is at the
+ * foot of the tornado, it goes where the tornado goes, and it is being taken. A separate palette said
+ * "a house the storm is passing" when the picture wanted "a house the storm is *making part of
+ * itself*".
+ *
+ * So every colour here sits on `SPIN`, nudged warm and a little desaturated — enough that the roof is
+ * still a roof and the walls are still walls, not enough that it is ever a different substance from
+ * the thing standing over it. `DOOR` is the storm's own darkest step outright, which is what turns a
+ * doorway into a hole rather than a navy rectangle.
  */
-const ROOF = [201, 74, 24];
-const ROOF_DARK = [138, 46, 15];
-const WALL = [238, 224, 203];
-const WALL_SHADE = [188, 170, 146];
-const DOOR = [26, 44, 74];
+const ROOF = [206, 74, 106];
+const ROOF_DARK = [140, 40, 84];
+const WALL = [246, 200, 218];
+const WALL_SHADE = [198, 142, 176];
+const DOOR = SPIN[6];
 /**
  * ...with one exception, and it is the palette's own.
  *
@@ -120,18 +127,48 @@ export function drawHouse(ctx, W, H, t, plan, funnel, px) {
    * destroyed. The windward term then decides which *end* of the roof goes, so the damage always
    * points back at the storm.
    */
-  const gone = (c, r) => {
-    const side = (c * windward + cols) / (2 * cols);
-    const up = r / rows;
-    const wear = side * 0.38 + up * 0.62;
+  const wearAt = (c, r) => ((c * windward + cols) / (2 * cols)) * 0.38 + (r / rows) * 0.62;
+  const gone = (c, r) => (
     // Ragged, not a clean cut: the edge of the damage is hashed per chunk so the house comes apart
     // in splinters rather than being sliced.
-    return wear > standing + hash2(c * 2.7, r * 1.9 + plan.seed) * 0.2 - 0.1;
-  };
+    wearAt(c, r) > standing + hash2(c * 2.7, r * 1.9 + plan.seed) * 0.2 - 0.1
+  );
+
+  // ...and one bucket per ramp step, for the chunks the storm has already claimed.
+  const taken = SPIN.map(() => []);
+
+  /**
+   * How far into the tornado a chunk has got.
+   *
+   * The house is not a building the storm is knocking bits off, it is a building the storm is
+   * **turning into more storm**, and that has to be visible in the colour and not only in the holes.
+   * A claimed chunk stops being house and shows whatever the funnel's surface is showing at that
+   * point on screen — the same helix from the same function, so the bands run *through* the house and
+   * out the other side.
+   *
+   * It is a **frontier**, not a wash: the same `wear` that decides where the holes are, read from
+   * just below the threshold, so the claimed chunks are the band immediately ahead of the damage and
+   * the whole thing sweeps across the house as the storm gets up. Spreading it evenly over the
+   * building was the first try and it dissolved the house outright at forty percent claimed — the
+   * silhouette went, and a house you cannot make out is not being absorbed by anything, it is absent.
+   *
+   * Hashed rather than mixed, because a mix is a gradient and there is not one in this scene. Chunk
+   * by chunk the house changes hands, ragged in exactly the way the damage is.
+   */
+  const claim = (c, r) => clamp((wearAt(c, r) - standing + 0.4) / 0.4, 0, 1);
 
   const put = (cells, c, r) => {
     if (gone(c, r)) return;
-    cells.push(cx + c * px, groundY - (r + 1) * px, px, px);
+    const x = cx + c * px;
+    const y = groundY - (r + 1) * px;
+    if (hash2(c * 1.31 + plan.seed, r * 2.17) < claim(c, r)) {
+      // Its own sweep across the drum, held off the silhouette so the limb darkening never runs to
+      // the bottom of the ramp — this is the *foot* of the storm, where the dust is lit, and a house
+      // dissolving into near-black would read as being deleted rather than taken.
+      taken[bandAt(W, H, t, funnel, (c / cols) * 0.8, y)].push(x, y);
+      return;
+    }
+    cells.push(x, y, px, px);
   };
 
   // Walls: flat cream, with a plinth row at the ground and a shadow row under the eaves.
@@ -202,6 +239,16 @@ export function drawHouse(ctx, W, H, t, plan, funnel, px) {
   // The stack goes on last, over the roof. Emitted into the wall's bucket it was painted *before*
   // the rake it passes behind, and came out one chunk wide for a row and two the next, as if the
   // chimney were growing out of the tiles rather than through them.
+  // The claimed chunks first, so the house's own surviving fabric is drawn over them rather than
+  // under: what is left of the building has to be in front of what it is dissolving into.
+  for (let step = 0; step < SPIN.length; step += 1) {
+    if (!taken[step].length) continue;
+    ctx.fillStyle = rgba(SPIN[step], 1);
+    ctx.beginPath();
+    for (let i = 0; i < taken[step].length; i += 2) chunk(ctx, taken[step][i], taken[step][i + 1], px, px, px);
+    ctx.fill();
+  }
+
   for (const [cells, colour] of [
     [wallShade, WALL_SHADE], [wallCells, WALL], [doorCells, DOOR], [lampCells, LAMP],
     [roofDark, ROOF_DARK], [roofCells, ROOF], [stackCells, WALL_SHADE], [stackCap, ROOF_DARK],

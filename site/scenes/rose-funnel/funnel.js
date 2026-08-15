@@ -155,6 +155,51 @@ export function planFunnel(rng) {
 const spinAt = (up) => 1.9 - up * 1.15;
 
 /**
+ * Which ramp step the funnel's surface is showing, for one chunk of it.
+ *
+ * `u` is the chunk's position across the visible front, from -1 at the left silhouette to +1 at the
+ * right; everything else about the band is a property of the row. Pulled out of the drawing loop so
+ * that the *house* at the storm's foot can ask the same question and get the same answer — a house
+ * that is being absorbed into the tornado has to wear the tornado's own bands, and re-deriving the
+ * helix somewhere else would guarantee that one day it would drift out of step with the thing it is
+ * supposed to be part of.
+ */
+function stepFor(u, up, turn, wobble) {
+  // A helix: turns with the angle, climbs with the height, and advances with time.
+  const band = wrap01(Math.asin(clamp(u, -1, 1)) * TWIST + up * RISE + turn + wobble);
+  let step = Math.floor(band * SPIN.length);
+  // Limb darkening: the surface is turning away from you at the edges, so it goes down the ramp.
+  step += Math.round(Math.abs(u) ** 2.6 * 2.0);
+  // ...and the whole funnel cools with height, which is what puts the reds at the ground where
+  // the dust is and the purples up in the cloud.
+  step += Math.round(up * 1.1);
+  // The body never reaches the last step. That step is the *sky's* value, and a band wearing it
+  // does not read as a dark part of the funnel — it reads as a hole you can see through, which
+  // turns a solid mass into three ribbons floating in front of the storm. The darkest thing in
+  // the frame has to be behind the subject, never in it.
+  return clamp(step, 0, SPIN.length - 2);
+}
+
+/**
+ * ...and the same question asked by something that is not the funnel but is becoming it.
+ *
+ * It takes the drum coordinate directly rather than a screen `x`, and that is the whole design. A
+ * point query looked more natural and was useless: anything standing *beside* the column is past the
+ * silhouette, so its `u` pins to ±1, every chunk of it gets the full limb darkening and the same band
+ * value, and it comes out as one flat near-black patch — a hole in the picture rather than a piece of
+ * storm. Handed its own sweep from -1 to 1, a small object wears a small slice of the same drum:
+ * bands that curve across it, climb with height and turn with the clock, in step with the tornado
+ * because they are computed from it.
+ */
+export function bandAt(W, H, t, plan, u, y) {
+  const topY = H * TOP;
+  const groundY = H * GROUND;
+  const up = clamp((groundY - y) / (groundY - topY), 0, 1);
+  const turn = turnedBy(t) * SPEED * spinAt(up);
+  return stepFor(u, up, turn, noise2(plan.seed + up * 3.1, t * 0.5) * 0.35);
+}
+
+/**
  * Where the vortex is, and how wide, at a given height and time.
  *
  * The one thing anything outside this file is allowed to ask about the funnel. The temple needs it
@@ -252,30 +297,16 @@ export function drawFunnel(ctx, W, H, t, plan) {
     const cols = Math.max(1, Math.round(r / px));
     // The whole column of the funnel turns, and lower rows turn faster.
     const turn = turnedBy(t) * SPEED * spinAt(up);
+    // The band's wander is a property of the height, not of the chunk — hoisted out of the inner
+    // loop, where it was a noise lookup per chunk for a value that was the same all the way across.
+    const wobble = noise2(plan.seed + up * 3.1, t * 0.5) * 0.35;
 
     for (let c = -cols; c <= cols; c += 1) {
-      const u = c / cols;
-      // The angle on the front of the drum this column is showing. Everything else follows from it.
-      const angle = Math.asin(clamp(u, -1, 1));
-      // A helix: turns with the angle, climbs with the height, and advances with time.
-      const band = wrap01(angle * TWIST + up * RISE + turn
-        + noise2(plan.seed + up * 3.1, t * 0.5) * 0.35);
-      let step = Math.floor(band * SPIN.length);
-      // Limb darkening: the surface is turning away from you at the edges, so it goes down the ramp.
-      step += Math.round(Math.abs(u) ** 2.6 * 2.0);
-      // ...and the whole funnel cools with height, which is what puts the reds at the ground where
-      // the dust is and the purples up in the cloud.
-      step += Math.round(up * 1.1);
       // The top of the funnel shreds into the cloud rather than ending in a rim — but only a little.
       // Dropping most of the mouth leaves confetti where the funnel should be widest, and the widest
       // part is the part that has to look attached to the storm.
       if (up > 0.86 && hash2(c * 1.7 + row * 0.3, Math.floor(t * 9)) < (up - 0.86) * 3.2) continue;
-
-      // The body never reaches the last step. That step is the *sky's* value, and a band wearing it
-      // does not read as a dark part of the funnel — it reads as a hole you can see through, which
-      // turns a solid mass into three ribbons floating in front of the storm. The darkest thing in
-      // the frame has to be behind the subject, never in it.
-      bucket[clamp(step, 0, SPIN.length - 2)].push(cx + c * px, y);
+      bucket[stepFor(c / cols, up, turn, wobble)].push(cx + c * px, y);
     }
   }
 

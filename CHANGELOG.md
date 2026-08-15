@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [3.7.0] - 2026-08-15
+## [3.8.0] - 2026-08-15
 
 **"Above the Fog" is finished, and a fourth animation begins.** That is the only thing a MAJOR bump
 means here — see `.claude/CLAUDE.md`.
@@ -189,8 +189,11 @@ re-birth."*
   dither is its only pattern, so coarsening it turns a texture into a lattice — and it is the cheap
   part. The storm and the ground are noise-driven, where a bigger chunk reads as a bigger billow, and
   they are where the time goes. Splitting them took the frame from 14ms to 10.9ms *before* anything
-  was added; the whole scene now runs at 16.4ms with a temple, four kinds of debris, a forest, three
-  workshops, a house and twelve hands in it. The ceiling is 20ms, and it is not a preference: the stage drops
+  was added; the whole scene now runs at 17.2ms with a temple, four kinds of debris, a forest, three
+  workshops, a house dissolving into the storm and twelve hands carrying its pieces about. The band
+  formula also came out of the funnel's inner loop on the way past — the helix's wander is a property
+  of the *height*, and it was being looked up once per chunk for a value that was the same all the way
+  across the row. The ceiling is 20ms, and it is not a preference: the stage drops
   render scale after twelve slow frames but only restores it after three hundred frames under 20ms, so
   a scene sitting above that would degrade once and never recover.
 
@@ -352,6 +355,22 @@ labour was at the other.
   phase) mod its share`, and when it last finished *there* steps back from the last completed circuit
   to the last one whose turn it was. No message passes between the building and the labour, which is
   what keeps the whole scene a pure function of the clock.
+- **And a spirit carries a piece of the exact thing it is going to mend.** It used to carry a blue
+  bar: not a plank, not a tile, a bar, in the hands' own spectral blue — the last place in the scene
+  where a thing was drawn as a placeholder for itself, and it quietly undid the errand work, because a
+  hand flying to a *specific* bay while holding an anonymous stick is a hand that could be going
+  anywhere. Bays run `eaveL, eaveR, wall` up each storey, so a bay's key says what it is, and the
+  piece is drawn in that part's own colours off the temple's own palette: a section of glazed roof in
+  the three-value chord the eaves are drawn with, a dressed timber with its gilt bracket already
+  fitted for a wall, a gilded ring for the spire. You can tell what a hand is carrying, and therefore
+  where it is going, before it arrives — and it leaves the hand on the same frame the building is
+  credited with the mend.
+- **Two tests now hold both correspondences down**, because neither one fails loudly. The building and
+  the labour never talk to each other, so when they drift apart nothing throws: the temple simply
+  starts healing where nobody is standing, and a hand starts carrying a roof tile to a wall. Both of
+  those shipped once. One test walks every mend in a six-minute window and asserts the spirit it names
+  is on an errand to that very bay; another asserts every bay is exactly one spirit's responsibility,
+  and that each kind of piece is drawn only in its own part's colours.
 
 ### The hands are afraid of it
 
@@ -362,26 +381,43 @@ labour was at the other.
   flinch overtakes it and throws it clear. A single outward shove was the first version and it was a
   hand avoiding a region; two forces crossing over is a hand that gets too close, gets tugged, and
   scrambles out. Losing the argument also lifts it, which is the tell that the pull is winning.
-- **Sometimes it loses.** Once a round a spirit asks whether the storm was over its bench when that
-  round turned over — the same closed-form latch the temple's bays use, for the same reason: a spirit
-  halfway up the funnel must not be handed back because the weather improved. If it was, this is the
-  round it is taken: **hauled** across to the column, wound around it, carried up and gone. Hauled
-  rather than placed — assigning it the vortex position outright made it vanish from its bench and
-  reappear on the funnel in one frame, which is a cut, not a capture.
-- **The population breathes.** Twelve *slots*, not twelve hands. A taken slot stands empty long enough
-  to be noticed and then a new spirit is summoned into it, fading up out of nothing with gold
-  gathering into its palm — the one moment in the scene where the accent is spent on a hand. About one
-  spirit is taken every half-minute and a slot is empty a fifth of the time, so the hands you are
-  watching are not the hands you started with.
+- **And it ducks.** The funnel is a trumpet, so its foot is the narrowest part of it and the wind down
+  there is the weakest — a spirit that drops toward the ground genuinely gets out of the storm's reach.
+  That relief is computed rather than asserted: the height a hand asks the vortex about comes from its
+  own `y`, so going low really does make the next frame's dread smaller. It is also the only way past
+  a column standing between a workshop and the temple, since over is not available.
+- **Sometimes it loses, and it takes nine seconds.** Once a round a spirit asks whether the storm was
+  over its bench when that round turned over — the same closed-form latch the temple's bays use, for
+  the same reason: a spirit halfway up the funnel must not be handed back because the weather improved.
+  If it was, this is the round it is taken, in three acts you can watch separately. **Dragged**, over
+  two seconds: reeled off its errand onto a wide orbit that tightens onto the column, still fighting.
+  **Wound up**, over four more, in plain sight. **Shredded** at the top, over another one and a half.
+  The whole event used to run in 2.6 seconds and was over before you could see what had happened.
+- **Kept on the front of the column for all of it.** `sin > 0` is the facing rule everything in this
+  storm obeys, and a spirit given a turn and a half to climb through spent more than half of it behind
+  the funnel — you saw it caught, then a hand appeared and vanished twice somewhere up there, then
+  nothing. Held inside a half turn it sweeps once across the visible face as it rises, right to left,
+  crossing in front of the thing that has it.
+- **The population breathes.** Twelve *slots*, not twelve hands. About one spirit is taken every
+  half-minute and a slot is empty a fifth of the time, so the hands you are watching are not the hands
+  you started with. A new one is summoned into the empty slot with gold gathering into its palm — the
+  one moment in the scene where the accent is spent on a hand.
+- **Arriving and leaving are drawn, not switched.** Density alone used to carry presence, and a hand
+  that only ever got fainter still had to stop existing on some frame, which is the popping. Both ends
+  of a spirit's life now **come apart into drifting chunks**: which chunk goes first is hashed on its
+  own cell, so the hand disperses along a fixed pattern rather than shimmering, and the drift is
+  quadratic so it holds its shape while the first chunks lift off and then goes all at once. One
+  parameter does both jobs, because a summoning is a shredding run backwards — the chunks converge out
+  of the air and settle into a hand.
 - **When the storm is on the temple, the work visibly stops going there.** That is the fear and the
   location-aware repair meeting: the traffic bends around the column, nothing arrives, and the
   building stays down until the storm drags away and the spirits come back.
 
 ### The house at the foot of it
 
-There was a triangle sitting on a rectangle down there. It is now a house — a 45° terracotta roof
-with an overhanging eave, cream walls, one dark door, two lit windows and a chimney — and it
-**travels with the storm**, always at the foot.
+There was a triangle sitting on a rectangle down there. It is now a house — a 45° pitched roof with
+an overhanging eave, one dark door, two lit windows and a chimney — and it **travels with the storm**,
+always at the foot.
 
 That is the decision that makes it work. A house standing somewhere fixed is a building the tornado
 happens to pass; a house that is always at the base is a house being *followed*, and it turns the
@@ -389,6 +425,32 @@ storm's march across the frame into one long act of destruction with a single vi
 track of. It is eaten from the roof down and from the windward side in, ragged rather than sliced, and
 in the lulls it is simply there again — the temple is the thing that is repaired, and giving the house
 its own crew would say the same sentence twice.
+
+**And it is made of the storm.** It was terracotta and cream to begin with, on the argument that a
+domestic palette belonging to nothing else in the frame is what makes a house read as a small ordinary
+thing in the wrong place. That is a good argument for a house standing in a field, and this one is not
+standing in a field: it is at the foot of the tornado, it goes where the tornado goes, and it is being
+taken. A separate palette said "a house the storm is passing" when the picture wanted "a house the
+storm is making part of itself". Every colour now sits on the storm's own ramp, warmed and a little
+desaturated — enough that a roof is still a roof, never enough to be a different substance from the
+thing standing over it — and the door is the ramp's darkest step outright, which is what turns a
+doorway into a hole rather than a navy rectangle.
+
+Past that, chunks of it **stop being house**: they show whatever the funnel's surface is showing, from
+the same helix function the tornado is drawn with, so the bands run through the building and out the
+other side. It is a **frontier** rather than a wash — the same `wear` that decides where the holes
+are, read from just below the threshold, so the claimed chunks are the band immediately ahead of the
+damage and the whole boundary sweeps across the house as the storm gets up. Spread evenly instead, it
+dissolved the house outright at forty percent claimed: the silhouette went, and a house you cannot
+make out is not being absorbed by anything, it is absent.
+
+Two smaller things had to be got right for that to work at all. The band formula moved into one place
+that both the funnel and the house call, because a house wearing a *re-derived* helix is a house that
+will one day drift out of step with the thing it is supposed to be part of. And it takes the drum
+coordinate directly rather than a screen position: anything standing beside the column is past the
+silhouette, so a point query pins it to the limb, every chunk gets the full limb darkening and the
+same band value, and the house came out as one flat near-black patch — a hole, not a piece of storm.
+Handed its own sweep from -1 to 1, a small object wears a small slice of the same drum.
 
 How much of it is left is a pure function of how hard the storm is blowing, and getting to that took
 two wrong models worth keeping a note of. Distance to the storm is a **constant** here — the house is
