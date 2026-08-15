@@ -251,7 +251,13 @@ function spiritAt(hand, t, W, H, funnel, seed) {
   // empty slot long enough to be noticed, then a new one summoned into it. The empty stretch has to
   // be generous — a slot that refills before you have registered it was empty is not a replacement,
   // it is a flicker.
-  const since = age - hand.life * 0.42;
+  //
+  // The moment of capture is pulled *earlier* if the round is too short to finish the whole sequence
+  // afterwards. At two fifths of the way in, a spirit with the shortest life would still have been
+  // half-summoned when its round turned over — and at a round boundary the verdict is re-rolled, so
+  // it would have snapped to fully present in one frame. That is a pop with a one-in-seventy chance
+  // of being seen, which is exactly the kind that survives every review and ships.
+  const since = age - Math.min(hand.life * 0.42, hand.life - (LOST + EMPTY + SUMMON));
   if (since < 0) return { here: 1, taken: 0, shred: 0 };
   if (since < CAUGHT) return { here: 1, taken: since / CAUGHT, shred: 0 };
   if (since < LOST) return { here: 1, taken: 1, shred: (since - CAUGHT) / SHRED };
@@ -266,6 +272,54 @@ function spiritAt(hand, t, W, H, funnel, seed) {
  * function of the circuit number and nothing else — computable from `t` alone, on both sides of the
  * building, without either side telling the other.
  */
+/**
+ * How hard the storm pushes a spirit sideways, as a fraction of its reach.
+ *
+ * `soft` is where the hand sits across the wind field: 0 on the axis, ±1 at the edge of it. The
+ * result is **odd, smooth, and bounded**, and every one of those three is load-bearing.
+ *
+ * The first version was `sign(gap) * dread² * wind * 1.5`, and it had two faults that between them
+ * were the worst artefact in the scene. `wind` reaches nine hundred pixels up near the mouth, so the
+ * shove could be *fourteen hundred* — and `sign()` inverts the instant the storm's axis crosses the
+ * hand, which doubles it. Hands teleported six hundred to two thousand pixels between one frame and
+ * the next, a hundred and twenty times a minute, sometimes clean off the side of the frame. Watching
+ * it, that is not a hand avoiding a tornado; it is a hand disappearing here and reappearing there.
+ *
+ * So: **zero on the axis**, because "which way is out" has no answer there and any function that
+ * commits to one has to flip somewhere. Outward through the middle of the field, where sideways
+ * actually helps. Inward past about two thirds out — the tug the storm has on anything that strays
+ * into its reach, which is the one piece of the old behaviour worth keeping. And **zero again at the
+ * edge**, which is the part that is easy to miss: outside the field there is no force at all, so a
+ * curve that is still pulling hard at `|s| = 1` steps by its whole value the moment a hand crosses
+ * out. That was worth a hundred pixels a frame on its own after the first fix.
+ *
+ * Both zeroes come from the `s(1 - s²)` factor, so they cannot be tuned apart by accident. The way
+ * out of the middle is not sideways in any case — it is **down**, and down has no sign to flip.
+ */
+export function swerveAt(soft, strength) {
+  const s = clamp(soft, -1, 1);
+  return s * (1 - s * s) * (2.4 * strength - 4.3 * s * s);
+}
+
+/**
+ * Which way round the column this errand goes, and how much it has to go round.
+ *
+ * Latched on the circuit, like everything else in this scene that must not change its mind: asked
+ * once, of where the storm was when the errand set out, and held for the whole flight. A side chosen
+ * per frame from where the hand happens to be is a side that inverts the moment the axis crosses the
+ * straight line between workshop and temple — and a hand that reverses its detour mid-flight covers
+ * the whole width of the frame in one frame.
+ */
+function detourFor(hand, t, W, H, funnel, midX) {
+  const round = Math.floor(t / hand.period + hand.phase);
+  const began = (round - hand.phase) * hand.period;
+  const storm = vortexAt(W, H, began, funnel, 0.3);
+  return {
+    side: storm.cx > midX ? -1 : 1,
+    block: 1 - clamp(Math.abs(storm.cx - midX) / Math.max(1, storm.wind), 0, 1),
+  };
+}
+
 export function errandOf(hand, t) {
   const round = Math.floor(t / hand.period + hand.phase);
   const slot = ((round % hand.bays.length) + hand.bays.length) % hand.bays.length;
@@ -295,11 +349,16 @@ export const pieceKindFor = (bayKey, lastKey) => (bayKey >= lastKey ? 'spire' : 
 export const MEND_BUCKETS = ['tileLit', 'tile', 'tileDark', 'postLit', 'post', 'bracket', 'gilt', 'giltLit'];
 export const emptyMend = () => Object.fromEntries(MEND_BUCKETS.map((k) => [k, []]));
 
-export function stampPiece(mend, kind, x, y, px) {
+export function stampPiece(mend, kind, x, y, px, scatter = 0) {
   // Centred on the palm and wider than it, so the grip reads as a grip: fingers over, piece under,
   // and enough of it sticking out either side to have a silhouette of its own.
+  //
+  // It comes apart with whatever is holding it. Gated on the haul instead, it vanished outright a
+  // quarter of the way into a capture — a plank blinking out of a fist is the same pop the hands
+  // themselves used to have, just smaller.
+  if (scatter >= 1) return;
   const at = (w) => x + px * Math.round((HAND_W - w) / 2);
-  const top = y + px * 9;
+  const top = y + px * (9 - scatter * scatter * 6);
   if (kind === 'eave') {
     // The roof's own chord on a piece of the roof: lit ridge, glaze, shaded curl beneath.
     mend.tileLit.push(at(7), top, px * 7, px);
@@ -407,8 +466,14 @@ export function drawHands(ctx, W, H, t, plan, px, places) {
       holds = 'work';
     } else if (u < 0.62) {
       const leg = (u - 0.34) / 0.28;
-      x = bench.x + (site.x - bench.x) * leg;
-      y = bench.y + (site.y - bench.y) * leg - Math.sin(leg * Math.PI) * H * 0.1;
+      // The detour round the column, decided when the errand set out and held for the flight. The
+      // bump is zero at both ends, so the workshop and the bay are still hit exactly.
+      const round = detourFor(hand, t, W, H, plan.funnel, (bench.x + site.x) / 2);
+      const bump = Math.sin(leg * Math.PI);
+      x = bench.x + (site.x - bench.x) * leg + round.side * bump * round.block * W * 0.15;
+      // The arc goes *over* on a clear run and **under** on a blocked one, on the same bump — the
+      // storm's foot is the narrowest part of it, so under is where the way through is.
+      y = bench.y + (site.y - bench.y) * leg - bump * H * 0.1 * (1 - round.block * 1.9);
       curl = 0.85;
       flip = site.x < bench.x;
       holds = 'carry';
@@ -438,35 +503,29 @@ export function drawHands(ctx, W, H, t, plan, px, places) {
     const gap = x - near.cx;
     const dread = 1 - clamp(Math.abs(gap) / Math.max(1, near.wind), 0, 1);
     if (dread > 0) {
-      // Two forces, not one. The spirit shoves itself out of the wind and the wind pulls it back in,
-      // and which wins depends on how deep in it already is. `flinch` is quadratic and `drag` is
-      // shallower than linear, so at the outer edge of the wind the pull is the larger of the two and
-      // the hand is drawn *toward* the column before it has noticed; from about a third of the way in
-      // the flinch overtakes it and throws the hand clear.
-      //
-      // A single outward shove was the first version and it was a hand that simply avoided a region.
-      // Two forces crossing over is a hand that gets too close, gets tugged, and scrambles out — and
-      // it costs one extra `pow`.
+      // Sideways by a **bounded** amount, on a curve that is zero on the axis — see `swerveAt`. The
+      // cap matters as much as the shape: `near.wind` is a fraction of the funnel's own width and runs
+      // to nine hundred pixels up near the mouth, so a shove expressed as a multiple of it is a shove
+      // that can throw a hand off the side of the frame. A twelfth of the frame is more than enough to
+      // read as flinching and cannot teleport anything.
       const strength = 0.5 + hand.nerve * 0.5;
-      const flinch = dread * dread * near.wind * 1.5 * strength;
-      const drag = dread ** 0.8 * near.wind * 0.3;
-      // The sign of `gap` keeps it on the side it was already on, so hands do not swap sides of the
-      // column mid-errand.
-      x += Math.sign(gap || 1) * (flinch - drag);
-      // Losing the argument also means being lifted, which is the tell that the pull is winning.
-      y -= Math.max(0, drag - flinch) * 0.55;
-      // ...and it **ducks**. The funnel is a trumpet, so its foot is the narrowest part of it and the
-      // wind down there is the weakest; a spirit that drops toward the ground genuinely gets out of
-      // the storm's reach, and because `up` is derived from `y` that relief is computed rather than
-      // asserted — go low enough and the next frame's `dread` really is smaller. It is also the only
-      // way past a column standing between a workshop and the temple: over is impossible, so under.
-      y = Math.min(y + dread * dread * px * 11, groundY - hpx * 5);
+      const reach = Math.min(near.wind, W * 0.085);
+      x += swerveAt(gap / Math.max(1, near.wind), strength) * reach;
+      // ...and it **ducks**, which is the real way out and the only one with no sign to flip. The
+      // funnel is a trumpet, so its foot is the narrowest part of it and the wind down there is the
+      // weakest; because `up` is derived from `y`, that relief is computed rather than asserted — go
+      // low enough and the next frame's `dread` really is smaller.
+      y += dread * dread * px * 13;
       // ...and it flinches: fingers spread and the whole thing shakes on a fast clock. How far the
       // fingers go is per-spirit, because when the storm walks onto the temple every hand in the
       // frame flinches at once, and a dozen identical splayed hands in an arc is a stencil.
       curl = clamp(curl - dread * (0.3 + hash2(hand.key, 11) * 0.45), 0, 1);
       y += Math.sin(t * 17 + hand.key * 3) * dread * px * 0.8;
     }
+    // The floor is a property of where a spirit may be, not of whether it is frightened. Applied
+    // inside the flinch it switched on and off with `dread`, and a hand whose errand already took it
+    // below the line stepped up to meet the clamp the instant the storm came within reach.
+    y = Math.min(y, groundY - hpx * 5);
 
     if (state.taken > 0) {
       // Caught, in two acts you can watch separately.
@@ -488,7 +547,10 @@ export function drawHands(ctx, W, H, t, plan, px, places) {
       // and vanished twice somewhere up the column, then nothing. Held inside `(0, π)` it sweeps once
       // across the visible face as it rises — right side to left, crossing in front of the thing that
       // has it, which is the only arrangement where the whole event is legible from one seat.
-      const spin = 0.5 + rise * 2.1 + pull * 0.5 + (hand.key % 3) * 0.12;
+      // Strictly inside `(0, π)` — the per-spirit offset goes at the *start* of the sweep, not on top
+      // of its end. Added to the end it pushed the total to 3.34 radians for one spirit in three, past
+      // π, and those hands blinked out a moment before they came apart. Measured: two in sixty seconds.
+      const spin = 0.42 + (hand.key % 3) * 0.1 + rise * 1.95 + pull * 0.45;
       const orbit = grabbed.r * (1.05 + (1 - pull) ** 1.6 * 2.1);
       const ease = pull * pull * (3 - 2 * pull);
       x += (grabbed.cx + Math.cos(spin) * orbit - x) * ease;
@@ -498,17 +560,23 @@ export function drawHands(ctx, W, H, t, plan, px, places) {
       // Still shaking, and hardest at the moment it is being taken rather than after.
       y += Math.sin(t * 21 + hand.key * 2.3) * (1 - pull) * ease * px;
       flip = Math.cos(spin) < 0;
-      // Behind the column once it is riding it — but not before, or it would blink out mid-haul while
-      // still out in the open. `spin` stops advancing once `rise` reaches 1, so a spirit visible when
-      // it starts to come apart stays visible for all of it.
+      // Behind the column once it is riding it — a guard rather than a case now that `spin` cannot
+      // leave `(0, π)`, and kept because the day somebody widens that sweep is the day a hand starts
+      // being drawn through the funnel it is inside.
       if (rise > 0.05 && Math.sin(spin) < -0.15) continue;
     }
 
-    // What it is holding, now that it is where it is actually going to be drawn. A spirit that is
-    // being carried up the funnel has dropped everything, which is why this is gated on the haul.
-    if (holds && state.taken < 0.25) {
+    // Two things carry presence, and they do different jobs. The dither **density** says how solid
+    // the spirit is; `scatter` says how much of it is still in one place.
+    const solid = 0.2 + 0.5 * state.here * (1 - state.taken * 0.55);
+    const scatter = Math.max(state.shred, 1 - state.here);
+
+    // What it is holding, now that it is where it is actually going to be drawn. A spirit being
+    // hauled up the funnel keeps hold of its piece and loses it the way it loses everything else —
+    // but it has no business still sawing, so the bench work stops the moment it is caught.
+    if (holds && (holds === 'carry' || state.taken === 0)) {
       if (holds === 'carry') {
-        stampPiece(mend, kind, x, y, hpx);
+        stampPiece(mend, kind, x, y, hpx, scatter);
       } else if (holds === 'fix') {
         hot.push(x + px * 4, y + px * 7, 0.45);
       } else if (shop.kind === 'mill') {
@@ -523,13 +591,10 @@ export function drawHands(ctx, W, H, t, plan, px, places) {
       }
     }
 
-    // Two things carry presence, and they do different jobs. The dither **density** says how solid
-    // the spirit is; `scatter` says how much of it is still in one place. Density alone was the whole
-    // of it before, and a hand that only ever got fainter still had to stop existing on some frame —
-    // which is the popping. Now it comes apart into drifting chunks at both ends of its life: apart
-    // as the storm shreds it at the top of the column, together as it is summoned back.
-    const solid = 0.2 + 0.5 * state.here * (1 - state.taken * 0.55);
-    const scatter = Math.max(state.shred, 1 - state.here);
+    // Density alone was the whole of presence once, and a hand that only ever got fainter still had
+    // to stop existing on some frame — which is the popping. It comes apart into drifting chunks at
+    // both ends of its life now: apart as the storm shreds it at the top of the column, together as
+    // it is summoned back.
     stampSpirit(edge, fill, lit, handMask(clamp(curl, 0, 1), dread), x, y, hpx, flip, solid, scatter);
 
     // Being summoned: sparks gathering into the palm. The fade-up alone said "appearing"; the sparks
