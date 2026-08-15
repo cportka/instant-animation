@@ -25,7 +25,7 @@ import { clamp, rgba } from '../../lib/draw.js';
 import { bayerOn } from '../../effects/pixel.js';
 import { shadeAt, waterlineAt } from './layout.js';
 import { DEEP, PATH, SEA } from './palette.js';
-import { deepAt, glowAt } from './deep.js';
+import { deepAt, glowAt, mixAt } from './deep.js';
 
 export function planWater(rng) {
   return {
@@ -37,10 +37,18 @@ export function planWater(rng) {
     // along a row, so an entire row lit or did not and the moonpath came out as a stack of
     // horizontal bars. A roller is a long crest, not an infinite one: it has to break up along its
     // own length or every highlight on it is the same highlight.
+    //
+    // **The pace, which is the thing this scene is easiest to get wrong.** What you feel as speed is
+    // not the roller — it is the shortest swell, because it is the one whose crests cross a glint in
+    // under a second, and the eye reads the *fastest* motion in a picture as the picture's tempo.
+    // The first pass had it at a third of a second and the whole sea skittered; a swell is measured
+    // in seconds per crest, so the long roller breathes over ten and even the surface chop takes
+    // more than one. Slower again and the glints stop flickering, which is the one thing that must
+    // not stop.
     swells: [
-      { k: rng.range(2.6, 3.4), speed: rng.range(0.3, 0.42), tilt: rng.range(0.7, 1.2), amp: 1 },
-      { k: rng.range(6, 8), speed: rng.range(0.5, 0.72), tilt: rng.range(-2.4, -1.4), amp: 0.46 },
-      { k: rng.range(13, 17), speed: rng.range(0.9, 1.3), tilt: rng.range(3.2, 5), amp: 0.34 },
+      { k: rng.range(2.6, 3.4), speed: rng.range(0.15, 0.21), tilt: rng.range(0.7, 1.2), amp: 1 },
+      { k: rng.range(6, 8), speed: rng.range(0.24, 0.34), tilt: rng.range(-2.4, -1.4), amp: 0.46 },
+      { k: rng.range(13, 17), speed: rng.range(0.3, 0.42), tilt: rng.range(3.2, 5), amp: 0.34 },
     ],
   };
 }
@@ -74,30 +82,72 @@ export function surfaceAt(plan, t, xFrac, d) {
   return { h, slope: slope / 9 };
 }
 
+// Scratch for the march below. One row lives here at a time and every slot is written before it is
+// read, so nothing survives a call and the render tests can still sample `t` in any order.
+const SIN = new Float64Array(8);
+const COS = new Float64Array(8);
+const DSIN = new Float64Array(8);
+const DCOS = new Float64Array(8);
+
+/**
+ * The swell along one row of the grid — `surfaceAt` for every column at once, computed the fast way.
+ *
+ * Along a row the phase of every swell is **linear in the column**: `z` is fixed, so all that changes
+ * is the cross term, by the same amount each step. That means the sine and cosine can be advanced by
+ * angle addition — two multiplies apiece — instead of calling a transcendental. Evaluated the obvious
+ * way this scene spent forty-seven milliseconds a frame, nearly all of it in six trig calls per chunk
+ * across forty-seven thousand chunks.
+ *
+ * It is a separate function rather than inlined into the draw loop for one reason: the picture is
+ * only right while this and `surfaceAt` agree to the last decimal, and an optimisation nobody can
+ * test against its own definition is a rewrite waiting to go quietly wrong.
+ *
+ * Fills `out` with `(h, slope)` per column, for `out.length / 2` columns.
+ */
+export function marchRow(plan, t, d, W, px, out) {
+  const cols = out.length >> 1;
+  const z = 1 / (d + 0.045);
+  const spanX = z * 2.6 + 7;
+  const swells = plan.swells;
+  const n = swells.length;
+  for (let i = 0; i < n; i += 1) {
+    const s = swells[i];
+    // Column 0 sits at `xFrac = 0`, which is half a span left of the centre `surfaceAt` measures from.
+    const start = z * s.k - t * s.speed * s.k - 0.5 * spanX * s.tilt + plan.seed;
+    const step = (px / W) * spanX * s.tilt;
+    SIN[i] = Math.sin(start);
+    COS[i] = Math.cos(start);
+    DSIN[i] = Math.sin(step);
+    DCOS[i] = Math.cos(step);
+  }
+  for (let col = 0; col < cols; col += 1) {
+    let h = 0;
+    let slope = 0;
+    for (let i = 0; i < n; i += 1) {
+      const s = swells[i];
+      h += s.amp * SIN[i];
+      slope -= s.amp * s.k * COS[i];
+      const ns = SIN[i] * DCOS[i] + COS[i] * DSIN[i];
+      COS[i] = COS[i] * DCOS[i] - SIN[i] * DSIN[i];
+      SIN[i] = ns;
+    }
+    out[col * 2] = h;
+    out[col * 2 + 1] = slope / 9;
+  }
+}
+
 export function drawWater(ctx, W, H, t, plan, moon, deepPlan, px) {
   const top = waterlineAt(H, px);
   const rows = Math.max(1, Math.ceil((H - top) / px));
   const cols = Math.max(1, Math.ceil(W / px));
   const deep = deepAt(W, H, t, deepPlan, top);
-  const swells = plan.swells;
-  const n = swells.length;
 
   const sea = SEA.map(() => []);
   const path = PATH.map(() => []);
   const lume = DEEP.map(() => []);
+  // One row of swell at a time, filled by `marchRow` and read by the column loop.
+  const swell = new Float64Array(cols * 2);
 
-  // The swell, marched across each row instead of evaluated at every chunk.
-  //
-  // `surfaceAt` above is the definition and this is the same thing computed the fast way. Along a
-  // row the phase of every swell is **linear in the column** — `z` is fixed, so all that changes is
-  // the cross term, by the same amount each step — which means the sine and cosine can be advanced
-  // by angle addition: two multiplies apiece instead of a trig call. Evaluated the obvious way this
-  // scene spent forty-seven milliseconds a frame, nearly all of it in six transcendentals per chunk
-  // across forty-seven thousand chunks. The picture is identical; a test holds the two in agreement.
-  const sin = new Float64Array(n);
-  const cos = new Float64Array(n);
-  const dSin = new Float64Array(n);
-  const dCos = new Float64Array(n);
   // The run being accumulated across the current row: which bucket, which step, and where it began.
   let runInto = null;
   let runStep = -1;
@@ -106,17 +156,7 @@ export function drawWater(ctx, W, H, t, plan, moon, deepPlan, px) {
   for (let row = 0; row < rows; row += 1) {
     const y = top + row * px;
     const d = (row + 0.5) / rows;
-    const z = 1 / (d + 0.045);
-    const spanX = z * 2.6 + 7;
-    for (let i = 0; i < n; i += 1) {
-      const s = swells[i];
-      const start = z * s.k - t * s.speed * s.k - 0.5 * spanX * s.tilt + plan.seed;
-      const step = (px / W) * spanX * s.tilt;
-      sin[i] = Math.sin(start);
-      cos[i] = Math.cos(start);
-      dSin[i] = Math.sin(step);
-      dCos[i] = Math.cos(step);
-    }
+    marchRow(plan, t, d, W, px, swell);
     // The far water is a mirror for the sky and the near water is a hole. That is the single
     // strongest depth cue a sea has, and it is one term: bright at the horizon, falling away fast.
     //
@@ -137,19 +177,24 @@ export function drawWater(ctx, W, H, t, plan, moon, deepPlan, px) {
     const litFrom = moon.cx - spread * 3;
     const litTo = moon.cx + spread * 3;
 
+    // Where the glow crosses this row, in columns — the same idea, applied to the ellipse. Solving
+    // it once a row costs a square root and saves thirty thousand calls a frame that would each have
+    // worked out they were outside and returned zero.
+    let glowFrom = 0;
+    let glowTo = -1;
+    if (deep !== null) {
+      const dy = (y - deep.y) / deep.ry;
+      if (dy > -1 && dy < 1) {
+        const half = Math.sqrt(1 - dy * dy) * deep.rx;
+        glowFrom = Math.max(0, Math.ceil((deep.x - half) / px));
+        glowTo = Math.min(cols - 1, Math.floor((deep.x + half) / px));
+      }
+    }
+
     for (let col = 0; col < cols; col += 1) {
       const x = col * px;
-      let h = 0;
-      let slope = 0;
-      for (let i = 0; i < n; i += 1) {
-        const s = swells[i];
-        h += s.amp * sin[i];
-        slope -= s.amp * s.k * cos[i];
-        const ns = sin[i] * dCos[i] + cos[i] * dSin[i];
-        cos[i] = cos[i] * dCos[i] - sin[i] * dSin[i];
-        sin[i] = ns;
-      }
-      slope /= 9;
+      const h = swell[col * 2];
+      const slope = swell[col * 2 + 1];
 
       // A face is lit when it is tilted to bounce the moon at the eye. Raised to a **high** power,
       // because a specular highlight has almost no shoulder: either the angle is right and it is
@@ -169,21 +214,39 @@ export function drawWater(ctx, W, H, t, plan, moon, deepPlan, px) {
         into = path;
         step = shadeAt((1 - clamp(lit, 0, 1)) * (PATH.length - 1) * 1.25, col, row, PATH.length);
       } else {
-        // Whatever is down there. Two tiers, and the second one is what stops it being a disc: only
-        // the core is drawn on the green ramp, and everything outside it is *sea that has been
-        // lifted* — so the glow fades into the water instead of ending at the edge of an ellipse.
-        const glow = deep === null ? 0 : glowAt(deep, x, y);
-        // The handover between the two tiers is **dithered**, not a threshold. A hard cut put the
-        // green ramp's dark end against lifted sea, and those are far enough apart to draw a rim —
-        // which turned something diffuse rising through water into a coin lying on it.
-        if (glow > 0.2 && bayerOn(col, row, clamp((glow - 0.2) / 0.16, 0, 1))) {
+        // Whatever is down there. Sea and green, mixed chunk by chunk on the same ordered dither
+        // everything else in this scene is drawn with — never a threshold, and never solid. See
+        // `mixAt`: the coverage is what fades, so there is no radius at which the glow ends.
+        const glow = col < glowFrom || col > glowTo ? 0 : glowAt(deep, x, y);
+        // The water this chunk would have been, glow or no glow — and it is lifted a little by the
+        // glow, so the sea inside the bloom is brighter than the sea outside it.
+        const wet = base + h * relief + lit * 3 + glow * 3.5;
+        // ...and how much of the light gets through is decided by the **swell overhead**. Light
+        // rising through moving water is broken up by the surface it has to cross, so the mix
+        // follows the rollers: the glow bands and unbands as crests pass over it, which is a thing
+        // only something underneath could do — and it keeps the coverage changing continuously
+        // across every area the dither is working on, which is what a dither needs to disappear.
+        if (glow > 0 && bayerOn(col, row, mixAt(glow * (0.72 + h * 0.34)))) {
           // Lit from beneath, and the swell keeps rolling over the top of it unlit — which is the
           // whole of what makes the light read as *under* the surface rather than on it.
+          //
+          // The step is chosen to **match the water it is replacing**: same rung of its own ramp as
+          // the sea was of the sea's, so the chunk changes hue and not brightness and the two ramps
+          // mix into a colour rather than into a pattern of dots. The glow's own strength is then
+          // added on top of that — and it is the only thing that ever pushes the green above the
+          // brightest water, so the heart of a bloom glows and the rest of it merely *is* green.
+          const u = clamp(glow / (deep.amp * deep.pulse), 0, 1);
+          const rung = clamp(wet / (SEA.length - 1), 0, 1);
           into = lume;
-          step = shadeAt((1 - glow * (0.85 + h * 0.12)) * (DEEP.length - 1) * 1.1, col, row, DEEP.length);
+          // **Squared**, so the lift is spent almost entirely on the heart. Spread evenly it puts
+          // three steps of brightness across the whole bloom, and a bloom this size is mostly its
+          // own outskirts — every chunk out there stands a long way off the water it sits in, and a
+          // dither between two distant values is a pattern of dots rather than a colour. Squared,
+          // the outskirts are the water's own brightness in a different hue and the middle burns.
+          step = shadeAt((1 - rung) * (DEEP.length - 1) - u * u * 2.2, col, row, DEEP.length);
         } else {
           into = sea;
-          step = shadeAt(base + h * relief + lit * 3 + glow * 5, col, row, SEA.length);
+          step = shadeAt(wet, col, row, SEA.length);
         }
       }
 

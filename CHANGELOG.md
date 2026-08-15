@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [4.0.0] - 2026-08-15
+## [4.1.0] - 2026-08-15
 
 **"The Rose Funnel" is finished, and a fifth animation begins.** That is the only thing a MAJOR bump
 means here — see `.claude/CLAUDE.md`.
@@ -57,15 +57,55 @@ picture is never still.
   with distance it collapses to nothing near the viewer, every near crest becomes one unbroken line,
   and the bottom of the path comes out as four enormous smooth lenses. A constant floor says a roller
   is long, not infinite.
-- **A full moon is a sphere, and that is the one term.** `(1 - d²)` is the cosine of the angle the
+- **A swell is measured in seconds per crest.** What a viewer feels as the speed of this picture is
+  not the long roller — it is the *shortest* swell, because the eye takes the fastest motion in a
+  frame as the frame's tempo, and it is the one whose crests cross a glint. At a third of a second
+  the whole sea skitters. The roller now breathes over ten seconds and even the surface chop takes
+  more than one, which is the difference between water that rolls and water that is in a hurry.
+- **A full moon is a sphere, and that is the one term.** `√(1 - d²)` is the cosine of the angle the
   surface is turned through. On seven steps it gives four visible rings and a disc that looks like a
   target; on six steps resolved by dither it gives a limb that turns away from you continuously — the
-  scene's palette spent on the object that most needs it. Three maria stop it being a light rather
-  than a moon, and the halo is a hashed ring of the sky's own brightest step, tight against the disc,
-  because spread wide it reads as dust on the lens.
+  scene's palette spent on the object that most needs it. The fall-off is gentle, because a full moon
+  is lit from behind the viewer: overdo it and the dark rim you get is a *gibbous* moon drawn wrong.
+- **The maria are what make it a specific object rather than a light**, and they are circles pushed
+  around by noise, because a mare is a lava flood that filled a basin and its edge is a coastline
+  rather than a circumference. Four of them, dealt from fixed quadrants — one large plain running
+  into a second with smaller ones standing apart — because the arrangement is what the eye
+  recognises, and blobs given a free run of the disc average out to a symmetrical smudge in the
+  middle. Too faint and the moon is a cotton ball; too round and it is a golf ball.
+- **The air around the moon belongs to the sky.** The moon draws nothing outside its own circle. The
+  glare is a question the *sky* asks while drawing itself — a lift added to the level it was going to
+  use anyway, on the sky's grid, on the sky's ramp, resolved by the sky's dither — so there is no
+  seam to see because there is no second object. Two steps on the end of the night ramp are all it
+  needs to be brighter than any sky. It is deliberately **wide and weak**: the sky's chunks are three
+  across the water's, and a lift spending eight ramp steps within a moon and a half changes by nearly
+  a whole step per chunk, which dither cannot resolve — that comes out as a chunky mat behind the
+  disc, which is a second object again. Spread over three radii and half the height, every chunk is a
+  fraction of a step from its neighbour, which is the regime ordered dither is for.
 - **The island is the one thing described by outline alone**, at the bottom of every ramp, with a
   single step of rim light on the edge facing the moon and a reflection broken on the same swell the
   water is drawn with.
+
+### The stars are a population, not a texture
+
+A field of dots at different weights reads as one object drawn with more or less ink. Five hundred
+of them differ along four axes at once, and each axis is something you can point at in a real sky.
+
+- **Colour.** Two ramps of seven steps, cold for four fifths of them and amber for the rest. This is
+  the axis that does the most work: the moment a fifth of the field is a different temperature it
+  stops being a texture and becomes individual objects at different ages and distances.
+- **Scintillation, stronger the fainter the star** — which is not a stylistic choice, it is what the
+  atmosphere does — and irregular, on two sines at an irrational ratio so the flicker never settles
+  into a rhythm you can count. The twinkle is in brightness and never in existence: a star that
+  switches off is a dead pixel.
+- **Extinction and the moon's wash.** Low stars are seen through a mile of air, so the field thins
+  toward the horizon rather than stopping at a line; and the sky beside a full moon is empty, on the
+  same falloff the air is lit by, so the hole in the star field and the glow it sits in are the same
+  shape by construction.
+- **A spike on the dozen brightest**, fading outward down the ramp — a cross drawn in one tone is a
+  plus sign. Gated on the star's own magnitude and *not* on the level it is drawn at, because the
+  level moves with the twinkle and a threshold on it makes the arms flick in and out. A dozen is a
+  night sky; sixty is a greetings card.
 
 ### Something down there
 
@@ -78,11 +118,36 @@ still stops you. Warmer would read as a lamp, a boat, somebody signalling; cold 
 and nobody put it there.
 
 It runs on the gallery's epoch pattern: `n` is which one it is, where and how big are hashed off `n`,
-silent for most of a round, about one every fifty seconds and up and gone in fifteen. Two tiers keep
-it from being a coin lying on the water — only the core is drawn on the green ramp and everything
-outside it is *sea that has been lifted*, with the handover dithered rather than thresholded. And the
-swell rolls over the top of it, unlit, which is the whole of what makes the light read as below the
-surface rather than on it.
+silent for most of a round, about one every fifty seconds and up and gone in fifteen.
+
+**It is enormous** — a good fraction of the whole sea, and that size is the point. Something small is
+an object at a known distance, and an object under water is a lamp somebody dropped; something the
+size of the bay has no scale you can pin down, which is the difference between a light source and
+whatever this is. Flattened, because a round glow would give away that it is a sphere of light rather
+than something whose light has crossed a lot of water on the way up. And never through the horizon,
+capped by how much sea there actually is above its centre rather than by a constant that happens to
+work at one aspect ratio.
+
+Four things stop something that big being a green disc lying on the water:
+
+- **The mix is never solid.** Sea and green are dithered chunk by chunk, from one chunk in twenty at
+  the rim to about half at the heart, and never more than that anywhere at any strength. Water you
+  can still see is what puts the light beneath it. It also means the glow has no edge to find: there
+  is no radius at which it stops, the coverage simply runs out.
+- **The green is matched to the sea by luminance.** Matching by *position on the ramp* is the obvious
+  thing and does not work — five steps and ten steps can sit at the same fraction of their own ramps
+  and still be five times apart in brightness. A green that is a different value as well as a
+  different hue announces every chunk of itself individually, and then an ordered dither stops
+  reading as a mixture and starts reading as a **halftone screen**: a regular ruling of dots, the one
+  texture that says "printed" rather than "under water". So the green changes the hue of the water it
+  displaces and almost nothing else, and the lift that makes it glow is spent — squared — almost
+  entirely on the heart.
+- **It is patchy, and drifting**, on a noise field rather than a smooth ellipse, because a smooth
+  falloff hands the dither a *constant* coverage across large areas and that is the halftone again.
+- **The swell overhead decides how much gets through.** Light rising through moving water is broken
+  up by the surface it crosses, so the mix bands and unbands as crests pass over it — a thing only
+  something underneath could do, and the reason the light reads as below the surface rather than on
+  it.
 
 ### Its chrome and its channel change
 
@@ -113,8 +178,20 @@ order of what they were actually worth:
 - **`ctx.rect` rather than `chunk`.** Every coordinate here is `col * px` off a snapped origin, so
   the grid snapping inside `chunk` is four roundings and two clamps spent on numbers that are already
   round.
+- **Runs in the sky too** (3.0ms → 1.3ms), and the sky is the surface that gains most from them: away
+  from the moon the level is constant along a row, so the Bayer matrix repeats every four columns and
+  there are only ever four distinct answers — whole rows come out as one rectangle whenever the
+  dither lands the same way on all four.
+- **Bounded questions.** The glare is asked about only the sky chunks within its reach, the glow only
+  about the water columns the ellipse actually crosses, and a mare's coastline noise only about the
+  chunks inside the circle it could have warped — each of those is a square root solved once a row in
+  place of tens of thousands of calls that would work out they were outside and return zero.
+- **The patchiness is tabulated.** It is a very smooth field asked about tens of thousands of times a
+  frame; 288 samples over the ellipse read back bilinearly is the same picture for a fortieth of the
+  work.
 
-Measured after: **15.9ms** against the 20ms ceiling, with the water at 10.5ms of it.
+Measured after: **15.3ms** on an ordinary frame and **17.4ms** with the glow at full strength, against
+the 20ms ceiling — water 10.6ms, sky 1.8ms, moon 1.6ms, island 1.0ms.
 
 ## [3.9.0] - 2026-08-15
 

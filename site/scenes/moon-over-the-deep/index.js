@@ -73,11 +73,12 @@ export function create({ width, height, seed = meta.id }) {
     draw(ctx, t) {
       ctx.save();
       const px = pixelFor(Math.min(W, H));
-      drawSky(ctx, W, H, t, sky, px);
-      // Before the water, so the moon's own halo is behind everything the water does with it.
+      const disc = moonAt(W, H, moon);
+      // The sky is told where the moon is, because the glare around it is *sky* — drawn on the sky's
+      // grid, on the sky's ramp, by the sky's own dither. Nothing else would join without a seam.
+      drawSky(ctx, W, H, t, sky, px, disc);
       drawMoon(ctx, W, H, t, moon, px);
       drawMeteor(ctx, W, H, t, px);
-      const disc = moonAt(W, H, moon);
       // The sea is drawn over the waterline, so the island — which stands *on* that line — has to
       // come after it, and its reflection after that.
       drawWater(ctx, W, H, t, water, disc, deep, px);

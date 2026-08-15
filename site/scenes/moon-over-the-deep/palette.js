@@ -31,6 +31,18 @@ export const NIGHT = [
 ];
 
 /**
+ * The sky again, with two steps on the end that nothing but the moon's glare ever reaches.
+ *
+ * The air around a full moon is genuinely lit, and the first attempt at that drew it as a separate
+ * object: a scatter of pale chunks on a hashed threshold, ringing the disc. Hash noise has no
+ * structure, so what it produced was a halo of loose specks at random radii — dust on the lens, and
+ * it swallowed the moon's silhouette on the way. The fix is to stop drawing a halo at all. The sky
+ * already knows how to be a continuous value resolved by dither; the moon just *lifts* it, on this
+ * ramp, and two extra steps are the whole of what the glare needs to be brighter than any sky.
+ */
+export const GLARE = [...NIGHT, [39, 58, 114], [51, 74, 141]];
+
+/**
  * The water. Ten steps, and the reason there are ten.
  *
  * A sea is one colour lit at a thousand angles, so it is the surface in this scene with the most
@@ -89,13 +101,61 @@ export const PATH = [
  * possibly do — which is exactly right for something that happens once in a while and should stop
  * you when it does. Green rather than a warmer colour because warmth would read as a lamp, a boat,
  * somebody signalling; a cold green reads as *alive*, and nobody put it there.
+ *
+ * **Value-matched to the sea, which is the whole of why it blends.** These five are pitched at the
+ * same brightnesses as the ten of `SEA`, so a chunk of green standing in for a chunk of blue changes
+ * the *hue* there and almost nothing else. That sounds like a small thing and it is the difference
+ * between the glow working and not. A brighter green — the first attempt was a mint — is a different
+ * value as well as a different hue, so every chunk of it announces itself individually and the
+ * ordered dither stops reading as a mixture and starts reading as a **halftone screen**: a regular
+ * ruling of dots, which is the one texture that says "printed" rather than "under water".
+ *
+ * Matched by **luminance**, which is worth saying because matching by position on the ramp is the
+ * obvious thing and does not work: five steps and ten steps can sit at the same fractions of their
+ * own ramps and still be five times apart in brightness, and they were. These are calibrated against
+ * `SEA` two rungs at a time — this ramp's bottom is the sea's bottom, its top is the sea's top — so
+ * the green displacing a chunk of blue is within one sea step of the brightness it replaced.
+ *
+ * They look far too dark written down. That is the point: what makes the glow visible is the hue,
+ * and the brightness is carried entirely by the lift the water gets underneath it.
  */
 export const DEEP = [
-  [184, 255, 232],
-  [111, 230, 200],
-  [56, 185, 162],
-  [29, 125, 116],
-  [17, 74, 76],
+  [42, 150, 128],
+  [24, 96, 84],
+  [13, 58, 52],
+  [7, 32, 30],
+  [3, 14, 15],
+];
+
+/**
+ * The stars — two ramps, seven steps each, because stars differ in **colour** as well as brightness.
+ *
+ * A field drawn in one colour is a field of dots at different brightnesses, and the eye reads that
+ * as one object rendered with more or less ink. The moment a fifth of them are amber the field stops
+ * being a texture and becomes a *population*: individuals at different distances, ages and
+ * temperatures, which is what a real sky looks like and is most of why you can find shapes in one.
+ *
+ * Both ramps end a step above the sky's own top, so the faintest stars are the merest lift off the
+ * background — visible only once your eye has settled, which is exactly how faint stars behave.
+ */
+export const STAR_COLD = [
+  [255, 255, 255],
+  [227, 237, 255],
+  [193, 211, 246],
+  [154, 176, 223],
+  [114, 137, 190],
+  [80, 100, 150],
+  [52, 68, 112],
+];
+
+export const STAR_WARM = [
+  [255, 250, 236],
+  [255, 236, 206],
+  [248, 215, 174],
+  [220, 182, 146],
+  [180, 146, 120],
+  [138, 112, 98],
+  [96, 79, 76],
 ];
 
 /** The island, and the one step of moonlight that finds its ridge. */
