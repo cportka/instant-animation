@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [3.8.1] - 2026-08-15
+## [3.9.0] - 2026-08-15
 
 **"Above the Fog" is finished, and a fourth animation begins.** That is the only thing a MAJOR bump
 means here — see `.claude/CLAUDE.md`.
@@ -189,7 +189,7 @@ re-birth."*
   dither is its only pattern, so coarsening it turns a texture into a lattice — and it is the cheap
   part. The storm and the ground are noise-driven, where a bigger chunk reads as a bigger billow, and
   they are where the time goes. Splitting them took the frame from 14ms to 10.9ms *before* anything
-  was added; the whole scene now runs at 15.0ms with a temple, four kinds of debris, a forest, three
+  was added; the whole scene now runs at 15.2ms with a temple, four kinds of debris, a forest, three
   workshops, a house dissolving into the storm and twelve hands carrying its pieces about. The band
   formula also came out of the funnel's inner loop on the way past — the helix's wander is a property
   of the *height*, and it was being looked up once per chunk for a value that was the same all the way
@@ -253,11 +253,62 @@ storm walks past. One comparison, a whole extra read.
   than the one below, each with a lit crown. It is the pagoda's own trick, which is no coincidence:
   a pagoda is a stylised tree. The far band sits a chunk lower and a step darker, which is all the
   depth a treeline needs.
-- **Each craft is visibly a different job.** The circuit is four acts — work, carry, fix, return — and
-  the work is where the crafts differ: the sawmill drives a toothed blade back and forth and throws
-  dust, the kiln works tongs with a tile glowing in their mouth, the glass bench turns a pipe with a
-  gather on the end of it, slowly, because glass is slow. The workshops gained pitched roofs,
-  chimneys and lit mouths, each breathing on its own rhythm.
+### The crafts are something you watch happen
+
+The circuit is four acts — work, carry, fix, return — and *work* used to be one station and a wiggle:
+a spirit held its place for three or four seconds, jiggled, and was then holding a finished piece.
+Nothing was made on screen, which is the whole point of having crafts at all. It read as hands
+gathering in a corner and waiting.
+
+- **Work is now three acts, and the spirit walks its bench between them.** The mill **fells** a tree,
+  **hauls** the log in, and **saws** it into a beam. The kiln **throws** clay, **fires** it, and
+  **draws** it out. The forge **smelts**, **pours** and **hammers**. The glass bench **gathers**,
+  **blows** and **shapes**. Each act has its own station a few chunks along the bench, and walking
+  between marked places is what reads as a process rather than as waiting.
+- **The gesture carries the craft.** A hand that swings on a slow heavy arc is chopping; one that
+  shuttles fast and flat with no vertical in it is sawing; one that leans a single slow lean is
+  pouring, because a pour happens once and does not cycle; one that barely moves is blowing glass.
+  All of it is `curl` and two offsets — everything a hand built from a pose parameter can do, and
+  nothing the old fixed sprite could have done at all.
+- **The material changes in the hand.** `made` runs 0 to 1 across the three acts and the thing being
+  held changes with it: clay goes into the kiln dull, comes out gold, and cools to glaze; a log
+  arrives round and rough and leaves dressed with its bracket fitted; a gather swells and becomes a
+  lantern. It is the same few rectangles either way — what costs nothing is deciding *which* few.
+- **A tree really is cut down.** The mill's first act is out among the trees with an axe: a conifer in
+  the same tiers the forest is drawn in, leaning further with every stroke, chips coming off the cut,
+  and down by the end of the act. It is the one place the timber visibly comes from somewhere.
+- **The workshops** kept their pitched roofs, chimneys and lit mouths, each breathing on its own
+  rhythm — except the sawmill, which now has no fire and no plume, because it never had anything to
+  burn.
+
+### The bench follows the errand
+
+A spirit's craft used to be a fixed property of the spirit — slot index modulo three — so a hand
+could spend its whole working life at the glass bench and then carry a roof tile to the temple. That
+is the same incoherence the anonymous blue plank was: the errand said one thing and the labour said
+another. **The craft now follows the errand**, so a hand bound for an eave spends its shift at the
+kiln and one bound for a wall is at the mill.
+
+It also fixes the clustering, which is what made it worth doing. Two of the three benches sat at 0.72
+and 0.87 of the frame, so most errands started in one corner whatever they were for. There are now
+**four benches spread across the frame**, and which one a spirit is at is decided by what the building
+needs — the traffic is spread by construction rather than by luck.
+
+Getting the shares even took a second pass, because **a pagoda is mostly roof**. Mapping every eave to
+tile handed the kiln two thirds of all errands and left the forge with one bay in twenty-two; the
+sawmill stood empty for the better part of a minute at a time, which is no way to show somebody a
+sawmill. The answer was to say what is true of the building: every part takes **two** materials. An
+eave is glazed tile *and* the gilt bracket course beneath it; a wall is posts *and* the lattice
+windows with a lamp behind them. Bays run `eaveL, eaveR, wall` up each storey, so the eaves split by
+side and the walls by storey, and the four benches come out at roughly 32, 36, 18 and 14 percent of
+the work. A test refuses to let any craft fall below a tenth.
+
+**And two teleports came with it, both caught by the same trace as last time.** A spirit's home bench
+changes between circuits now, so the return leg had it flying back to the bench it left and then
+starting work four hundred pixels away; it now flies home to the bench of its *next* errand, which is
+where it will actually be standing. And the carry leg departed from the middle of the bench rather
+than from the last station of the shift, which is a thirty-five pixel jump for every craft whose last
+act is not centred.
 
 ### A taller temple, and enough room inside it to build something
 
@@ -359,12 +410,12 @@ labour was at the other.
   bar: not a plank, not a tile, a bar, in the hands' own spectral blue — the last place in the scene
   where a thing was drawn as a placeholder for itself, and it quietly undid the errand work, because a
   hand flying to a *specific* bay while holding an anonymous stick is a hand that could be going
-  anywhere. Bays run `eaveL, eaveR, wall` up each storey, so a bay's key says what it is, and the
-  piece is drawn in that part's own colours off the temple's own palette: a section of glazed roof in
-  the three-value chord the eaves are drawn with, a dressed timber with its gilt bracket already
-  fitted for a wall, a gilded ring for the spire. You can tell what a hand is carrying, and therefore
-  where it is going, before it arrives — and it leaves the hand on the same frame the building is
-  credited with the mend.
+  anywhere. A bay's key says what it is, and the piece is drawn in that part's own colours off the
+  temple's own palette: a section of glazed roof in the three-value chord the eaves are drawn with, a
+  gilt dougong block for the bracket course, a dressed timber for a wall, a lattice lantern with the
+  light shut inside it, a gilded ring for the spire. You can tell what a hand is carrying, and
+  therefore where it is going and which bench it came from, before it arrives — and it leaves the hand
+  on the same frame the building is credited with the mend.
 - **Two tests now hold both correspondences down**, because neither one fails loudly. The building and
   the labour never talk to each other, so when they drift apart nothing throws: the temple simply
   starts healing where nobody is standing, and a hand starts carrying a roof tile to a wall. Both of

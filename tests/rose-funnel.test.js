@@ -51,18 +51,36 @@ test('a bay is only ever credited to a spirit that is standing at it', () => {
 });
 
 test('a spirit carries a piece of the part it is going to mend', () => {
-  // Bays run eaveL, eaveR, wall up each storey, and the last place is the spire.
+  // Bays run eaveL, eaveR, wall up each storey, and the last place is the spire. Every part takes two
+  // materials, which is what keeps four benches busy: tile and bracket course for the roofs, timber
+  // and lantern for the walls.
   const last = BAYS - 1;
   assert.equal(pieceKindFor(0, last), 'eave');
-  assert.equal(pieceKindFor(1, last), 'eave');
+  assert.equal(pieceKindFor(1, last), 'bracket');
   assert.equal(pieceKindFor(2, last), 'wall');
+  assert.equal(pieceKindFor(5, last), 'lantern');
   assert.equal(pieceKindFor(last, last), 'spire');
 
-  // ...and each kind is drawn in that part's own colours and no other part's. A roof tile made of
-  // timber is the bug this guards, and it is invisible in a still.
+  // No craft may be starved. A pagoda is mostly roof, so mapping every eave to tile handed the kiln
+  // two thirds of the errands and left the sawmill empty for most of a minute — which is a bench
+  // nobody ever sees working.
+  const share = {};
+  for (let bay = 0; bay <= last; bay += 1) {
+    const kind = pieceKindFor(bay, last);
+    share[kind] = (share[kind] || 0) + 1;
+  }
+  for (const kind of ['eave', 'bracket', 'wall', 'lantern']) {
+    assert.ok(share[kind] / (last + 1) > 0.1, `${kind} is only ${share[kind]} of ${last + 1} bays — its bench would stand idle`);
+  }
+
+  // ...and each **finished** kind is drawn in that part's own colours and no other part's. A roof
+  // tile made of timber is the bug this guards, and it is invisible in a still. The half-made states
+  // are deliberately allowed to glow gold, because that is what hot means.
   const only = {
     eave: ['tileLit', 'tile', 'tileDark'],
+    bracket: ['bracket', 'gilt'],
     wall: ['postLit', 'post', 'bracket'],
+    lantern: ['post', 'giltLit'],
     spire: ['gilt', 'giltLit'],
   };
   for (const [kind, allowed] of Object.entries(only)) {
@@ -73,9 +91,20 @@ test('a spirit carries a piece of the part it is going to mend', () => {
     for (const bucket of used) {
       assert.ok(allowed.includes(bucket), `${kind}: drawn into ${bucket}, which belongs to another part`);
     }
-    for (const bucket of MEND_BUCKETS) {
-      assert.ok(mend[bucket].length % 4 === 0, `${kind}: ${bucket} is not whole x,y,w,h quads`);
-      for (const v of mend[bucket]) assert.ok(Number.isFinite(v), `${kind}: ${bucket} holds a non-finite value`);
+  }
+
+  // And every stage of every craft puts *something* legible in the hand — an empty grip halfway
+  // through making a thing is the "hands just wait and then have a piece" this round set out to fix.
+  for (const kind of Object.keys(only)) {
+    for (const made of [0, 0.2, 0.5, 0.8, 1]) {
+      const mend = emptyMend();
+      stampPiece(mend, kind, 100, 100, 4, 0, made);
+      const cells = MEND_BUCKETS.reduce((n, b) => n + mend[b].length, 0);
+      assert.ok(cells > 0, `${kind} at made=${made}: the hand is empty`);
+      for (const bucket of MEND_BUCKETS) {
+        assert.ok(mend[bucket].length % 4 === 0, `${kind}: ${bucket} is not whole x,y,w,h quads`);
+        for (const v of mend[bucket]) assert.ok(Number.isFinite(v), `${kind}: ${bucket} holds a non-finite value`);
+      }
     }
   }
 });
