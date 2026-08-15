@@ -91,7 +91,7 @@ test('the moon draws inside its own circle and nowhere else', () => {
   // emits is on the disc, so there is nothing it can scatter.
   const { moon } = plans();
   for (const [W, H] of VIEWPORTS) {
-    const px = pixelFor(Math.min(W, H));
+    const px = pixelFor(W, H);
     const disc = moonAt(W, H, moon);
     const rec = createRecordingContext({ width: W, height: H });
     drawMoon(rec.ctx, W, H, 12, moon, px);
@@ -108,6 +108,76 @@ test('the moon draws inside its own circle and nowhere else', () => {
         `${W}x${H}: a chunk at ${far.toFixed(0)}px is outside a moon of radius ${disc.r.toFixed(0)}px`);
     }
     assert.ok(rects > 200, `${W}x${H}: only ${rects} chunks — that is not a moon`);
+  }
+});
+
+test('the moon is a lit face and not a halftone screen', () => {
+  // The failure this catches shipped, and it shipped looking like *two different moons*.
+  //
+  // Ordered dither resolves the space between two ramp steps by mixing them on a fixed 4×4 matrix.
+  // That reads as a value only while the fraction is *changing* across the area; hold one fraction
+  // flat over a wide region and the matrix stops being invisible and starts being a ruling — a mesh
+  // of alternating chunks. Whether a viewer can see that ruling depends entirely on how crisply the
+  // frame is rasterised, so it appeared and disappeared as the stage moved its render scale, and the
+  // moon looked like it was switching between two graphics.
+  //
+  // Nothing about the drawing fails, so the measurement has to be spatial: take the brightest step
+  // and ask how far it runs. Solid white face → long runs. Halftone → runs of one, everywhere.
+  const { moon } = plans();
+  for (const [W, H] of VIEWPORTS) {
+    const px = pixelFor(W, H);
+    const rec = createRecordingContext({ width: W, height: H });
+    drawMoon(rec.ctx, W, H, 12, moon, px);
+
+    // Rebuild the disc: which step each chunk landed on, in the order the fills happened.
+    const stepAt = new Map();
+    let step = -1;
+    for (const op of rec.ops) {
+      if (op.startsWith('set:fillStyle')) step += 1;
+      const m = /^rect\(([-\d.]+),([-\d.]+),/.exec(op);
+      if (m) stepAt.set(`${Math.round(Number(m[1]) / px)},${Math.round(Number(m[2]) / px)}`, step);
+    }
+    assert.ok(stepAt.size > 200, `${W}x${H}: only ${stepAt.size} chunks on the disc`);
+
+    let brightest = 0;
+    let runs = 0;
+    for (const [key, at] of stepAt) {
+      if (at !== 0) continue;
+      brightest += 1;
+      // A run starts where the chunk to the left is not also the brightest step.
+      const [col, row] = key.split(',').map(Number);
+      if (stepAt.get(`${col - 1},${row}`) !== 0) runs += 1;
+    }
+    const share = brightest / stepAt.size;
+    const meanRun = brightest / Math.max(1, runs);
+    assert.ok(share > 0.15,
+      `${W}x${H}: only ${(share * 100).toFixed(0)}% of the moon is the top step — the face is a mixture, not a face`);
+    assert.ok(meanRun > 2.4,
+      `${W}x${H}: the brightest step runs ${meanRun.toFixed(2)} chunks at a time, which is a dither lattice and not a lit surface`);
+  }
+});
+
+test('the frame stays inside its chunk budget at every shape', () => {
+  // What a frame costs is chunks, and the chunk grid used to be sized off the short edge alone —
+  // which sounds like the rule that keeps the art the same coarseness everywhere, and is, for the
+  // one axis it measures. The horizon is a fraction of the *height*, so on a tall frame the short
+  // edge is the width while nearly all the drawing is down the long side: a phone drew sixty per
+  // cent more chunks than a monitor, on the weakest hardware that runs this.
+  //
+  // The cost of overrunning is not a slow frame. The stage backs its render scale off after twelve
+  // long frames and restores it after three hundred short ones, so a scene sitting near the line
+  // **oscillates** between two resolutions every few seconds, for no reason a viewer can see.
+  const shapes = [
+    [1440, 900], [1920, 1080], [2560, 1440], [390, 844], [375, 667], [412, 915],
+    [834, 1194], [1024, 768], [360, 1200], [1600, 400],
+  ];
+  for (const [W, H] of shapes) {
+    const px = pixelFor(W, H);
+    const chunks = Math.ceil((H - waterlineAt(H, px)) / px) * Math.ceil(W / px);
+    assert.ok(chunks <= 30000, `${W}x${H}: ${chunks} water chunks at px=${px}`);
+    // ...and not so coarse that the art stops being the art. Sixty chunks across the short edge is
+    // already blockier than this scene wants; below that it is a different picture.
+    assert.ok(Math.min(W, H) / px > 60, `${W}x${H}: px=${px} leaves only ${Math.round(Math.min(W, H) / px)} chunks across`);
   }
 });
 
@@ -135,7 +205,7 @@ test('the glow stays under the water', () => {
   // ratio stops working at another — so it is checked at five of them, over forty rounds.
   const { deep } = plans();
   for (const [W, H] of VIEWPORTS) {
-    const horizon = waterlineAt(H, pixelFor(Math.min(W, H)));
+    const horizon = waterlineAt(H, pixelFor(W, H));
     for (let t = 0; t < 40 * 51; t += 3.7) {
       const it = deepAt(W, H, t, deep, horizon);
       if (it === null) continue;

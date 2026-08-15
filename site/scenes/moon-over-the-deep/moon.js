@@ -49,11 +49,15 @@ export function planMoon(rng) {
     // not a face. The moon's pattern is one large mare in the north-west running into a second, with
     // smaller ones standing apart from it; that arrangement is what the eye recognises, and it is a
     // composition rather than a distribution, so it is written down rather than sampled.
+    // The depths are reckoned from a face that starts *below* the top of the ramp, not at it — so a
+    // plain has to be worth half a step more than it looks like it should be, or it comes out as a
+    // suggestion of a smudge. Deep enough to reach the third and fourth steps is what makes them
+    // read as grey plains rather than as a slightly less white part of a white thing.
     maria: [
-      { dx: rng.range(-0.36, -0.14), dy: rng.range(-0.44, -0.2), r: rng.range(0.44, 0.56), depth: 2 },
-      { dx: rng.range(-0.04, 0.18), dy: rng.range(-0.28, -0.04), r: rng.range(0.34, 0.44), depth: 1.75 },
-      { dx: rng.range(0.18, 0.44), dy: rng.range(0.04, 0.26), r: rng.range(0.2, 0.3), depth: 1.45 },
-      { dx: rng.range(-0.44, -0.22), dy: rng.range(0.16, 0.38), r: rng.range(0.14, 0.24), depth: 1.15 },
+      { dx: rng.range(-0.36, -0.14), dy: rng.range(-0.44, -0.2), r: rng.range(0.44, 0.56), depth: 3 },
+      { dx: rng.range(-0.04, 0.18), dy: rng.range(-0.28, -0.04), r: rng.range(0.34, 0.44), depth: 2.5 },
+      { dx: rng.range(0.18, 0.44), dy: rng.range(0.04, 0.26), r: rng.range(0.2, 0.3), depth: 2 },
+      { dx: rng.range(-0.44, -0.22), dy: rng.range(0.16, 0.38), r: rng.range(0.14, 0.24), depth: 1.6 },
     ],
   };
 }
@@ -88,8 +92,15 @@ export function drawMoon(ctx, W, H, t, plan, px) {
       // at the edge. A full moon is lit from behind the viewer, so almost none of that fall-off is
       // shadow: the ball is bright nearly to its own edge and then stops. Overdo it and you get a
       // dark rim, which is a *gibbous* moon drawn wrong.
+      //
+      // **And it starts below zero, which is the whole of what keeps the face white.** `shadeAt`
+      // clamps a negative level to step 0 and dithers nothing there; leave the bright middle sitting
+      // a third of a step *above* white instead and every chunk of it is a mixture of two steps at
+      // the same fraction — which is not a texture, it is a halftone screen, and whether you can see
+      // its ruling depends on how crisply the frame happens to be rasterised. That is what made this
+      // moon look like two different moons.
       const curve = (1 - d * d) ** 0.5;
-      let level = (1 - curve ** 0.6) * 2.3;
+      let level = (1 - curve ** 0.6) * 2.6 - 0.5;
       // The plains.
       //
       // Circles, warped. A mare is a lava flood that filled an impact basin, so its edge is a
@@ -111,10 +122,18 @@ export function drawMoon(ctx, W, H, t, plan, px) {
         const md = raw * coast;
         if (md < 1) level += (1 - md * md) ** 0.7 * m.depth;
       }
-      // Two scales of mottle under everything: broad highland brightness, then a fine grain that
-      // stops any large area being exactly one step.
-      level += noise2(x / (r * 0.34) + plan.seed, y / (r * 0.34)) * 0.42;
-      level += noise2(x / (r * 0.085), y / (r * 0.085) + plan.seed) * 0.2;
+      // Two scales of mottle: broad highland brightness, then a fine grain over it.
+      //
+      // **Signed, and wide.** Both halves matter and both were wrong. A noise field runs 0..1, so
+      // adding it raw is a third of a step of *bias* on every chunk in the picture — that is what
+      // put the whole bright face off white. And the amplitude has to be worth more than a step, so
+      // that where the mottle does show it carries the level *through* a boundary rather than
+      // hovering beside one: a grain that sweeps across two steps reads as mottling, because the
+      // dither density changes from chunk to chunk, while the same grain at half the amplitude
+      // holds one density across the area and rules a screen over it. Narrow mottle is the halftone;
+      // wide mottle is the cure.
+      level += (noise2(x / (r * 0.34) + plan.seed, y / (r * 0.34)) - 0.5) * 1.15;
+      level += (noise2(x / (r * 0.085), y / (r * 0.085) + plan.seed) - 0.5) * 0.35;
       // ...and the very edge always goes a little down the ramp, so the silhouette is a clean circle
       // however the mottling fell. A moon with a ragged outline is a moon with weather.
       level += clamp((d - 0.94) / 0.06, 0, 1) * 1.3;

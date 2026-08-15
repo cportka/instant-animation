@@ -13,17 +13,6 @@ import { bayerOn } from '../../effects/pixel.js';
 export const HORIZON = 0.42;
 
 /**
- * The chunk grid, off the short edge so the art is the same coarseness on a phone as on a monitor.
- *
- * Deliberately **finer than the older scenes**: the Rose Funnel is drawn at `S / 132` because its
- * first word is "pixelated" and it wants each chunk to be a visible decision. This one is at `S / 175`
- * — about three quarters that — because a long ramp resolved by dither needs enough chunks per step to
- * make the dither read as a value rather than as a checkerboard. Coarse chunks and deep ramps fight
- * each other; that is most of what separates the look of one machine from the next.
- */
-export const pixelFor = (S) => Math.max(2, Math.round(S / 175));
-
-/**
  * The waterline in pixels, snapped to the fine grid — **the** waterline, asked for in one place.
  *
  * The sky and the sea both have to end and begin exactly here, and they are drawn on grids that are
@@ -32,6 +21,51 @@ export const pixelFor = (S) => Math.max(2, Math.round(S / 175));
  * hard black rule across the horizon.
  */
 export const waterlineAt = (H, px) => Math.round((H * HORIZON) / px) * px;
+
+/**
+ * How many chunks of water this scene will draw at a given grid, which is what a frame costs.
+ *
+ * Very nearly all of the frame is this number: the sea is drawn per chunk and everything else in
+ * the picture is a rounding error beside it.
+ */
+const waterChunks = (W, H, px) =>
+  Math.max(1, Math.ceil((H - waterlineAt(H, px)) / px)) * Math.max(1, Math.ceil(W / px));
+
+/**
+ * The most water chunks this scene is willing to draw, whatever shape the frame is.
+ *
+ * Set at what a 1440×900 window already asks for, because that is the size this scene was composed
+ * and tuned at and it should come through untouched.
+ */
+const CHUNK_BUDGET = 30000;
+
+/**
+ * The chunk grid: off the short edge, then made coarser until the frame is affordable.
+ *
+ * Deliberately **finer than the older scenes**: the Rose Funnel is drawn at `S / 132` because its
+ * first word is "pixelated" and it wants each chunk to be a visible decision. This one is at `S / 175`
+ * — about three quarters that — because a long ramp resolved by dither needs enough chunks per step to
+ * make the dither read as a value rather than as a checkerboard. Coarse chunks and deep ramps fight
+ * each other; that is most of what separates the look of one machine from the next.
+ *
+ * **The short edge alone is not enough, and the reason is worth writing down.** It sounds like the
+ * rule that keeps the art the same coarseness everywhere, and for the axis it measures it is. But the
+ * chunk count is a product of *both* axes, and the horizon is a fraction of the **height** — so on a
+ * tall frame the short edge is the width while almost all of the drawing is down the long side. A
+ * 390×844 phone came out at forty-eight thousand water chunks against a 1440×900 monitor's thirty
+ * thousand: sixty per cent more work, on the weakest hardware that runs this, for a picture nobody
+ * would call more detailed.
+ *
+ * What that cost is not is a slow frame you can shrug at. The stage backs the render scale off when
+ * frames run long and restores it after five good seconds, so a scene sitting near the threshold does
+ * not degrade — it **oscillates**, and the picture visibly changes resolution every few seconds for
+ * no reason the viewer can see. Staying inside a budget is what keeps the stage's hand off the dial.
+ */
+export function pixelFor(W, H) {
+  let px = Math.max(2, Math.round(Math.min(W, H) / 175));
+  while (px < 24 && waterChunks(W, H, px) > CHUNK_BUDGET) px += 1;
+  return px;
+}
 
 /** ...and the grid the sky is drawn on: three chunks to the water's one. */
 export const backPixel = (px) => px * 3;
