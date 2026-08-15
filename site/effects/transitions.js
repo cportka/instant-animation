@@ -21,7 +21,7 @@ import { bayerOn, block, chunk, hash01, pixelSize, snap } from './pixel.js';
 import { lobe } from './volume.js';
 
 /** Every change a scene may ask for by name. `meta.transition` must be one of these. */
-export const TRANSITIONS = ['tape', 'pixel', 'vapour', 'funnel'];
+export const TRANSITIONS = ['tape', 'pixel', 'vapour', 'funnel', 'tide'];
 
 /** Everything the changes need decided once. The stage owns one of these for the whole gallery. */
 export function makeChannelChange(rng) {
@@ -54,7 +54,105 @@ export function channelChange(kind, ctx, W, H, t, violence, seamY, change, tape 
   if (kind === 'pixel') pixelChange(ctx, W, H, t, violence, seamY, tape);
   else if (kind === 'vapour') vapourChange(ctx, W, H, t, violence, seamY, change);
   else if (kind === 'funnel') funnelChange(ctx, W, H, t, violence, seamY, tape);
+  else if (kind === 'tide') tideChange(ctx, W, H, t, violence, seamY, tape);
   else tapeChange(ctx, W, H, t, violence, seamY, change, tape);
+}
+
+/* ------------------------------------------------------------------ tide ---- */
+
+/** The sea's own ramp, short enough to carry as a literal. */
+const TIDE = ['#3a539c', '#1e326d', '#16275c', '#0b163c', '#050a22', '#01020a'];
+const GLINT = ['#ffffff', '#cfe0fb', '#7d9bd8'];
+
+/**
+ * Arriving at *Moon Over the Deep*: the picture floods.
+ *
+ * Every other change in the gallery is something happening **to** the frame — torn, chunked, wound,
+ * fogged. This one is the frame **going under**, and the difference matters because the scene it
+ * introduces has a waterline in it: what settles at the end of the move is a horizon, so the move
+ * should be the moment that horizon arrives.
+ *
+ * Rows below the line are displaced sideways by the same rolling swell the water is drawn with — a
+ * long roller and a short one, phase advancing with the clock — so the outgoing picture is not
+ * covered up, it is **refracted**, which is what looking at something through moving water does. And
+ * they are pulled down the sea's own ramp with depth, so the further under a row is the more of it
+ * has become sea and the less of it is still whatever it used to be.
+ *
+ * Then the surface itself: a scatter of glints along the line, on the same specular condition the
+ * moonpath uses — bright where the swell's slope would bounce a light at you. It is the scene's one
+ * unmistakable signature, and putting it on the seam means the thing you recognise is already there
+ * before the picture has finished settling.
+ */
+function tideChange(ctx, W, H, t, violence, seamY, tape) {
+  const px = pixelSize(W, H);
+  const scale = deviceScale(ctx, W, H);
+  const source = tape ? tape.source : ctx.canvas;
+  const line = snap(seamY, px);
+  const bandHeight = px * 2;
+
+  // Refraction: everything under the line slides on the swell, and nothing above it moves at all.
+  for (let top = line; top < H; top += bandHeight) {
+    const height = Math.min(bandHeight, H - top);
+    if (height < 1) continue;
+    const under = (top - line) / Math.max(1, H - line);
+    const roll = Math.sin(under * 7.5 - t * 2.1) + 0.45 * Math.sin(under * 19 - t * 3.4);
+    const dx = snap(roll * W * 0.055 * violence * (0.35 + under * 0.9), px);
+    if (dx === 0) continue;
+    ctx.drawImage(
+      source,
+      0,
+      Math.round(top * scale.sy),
+      Math.max(1, Math.round(W * scale.sx)),
+      Math.max(1, Math.round(height * scale.sy)),
+      dx,
+      top,
+      W,
+      height,
+    );
+  }
+
+  // ...and drowns. Depth takes a row down the ramp, dithered, so the fade is a sequence of steps
+  // rather than a wash — which is the whole language of the scene being arrived at.
+  const cols = Math.ceil(W / px) + 1;
+  const rows = Math.ceil((H - line) / px);
+  const bucket = TIDE.map(() => []);
+  for (let r = 0; r < rows; r += 1) {
+    const under = r / Math.max(1, rows);
+    const sink = clamp(violence * (0.25 + under * 1.5), 0, 1);
+    for (let c = 0; c < cols; c += 1) {
+      if (!bayerOn(c, r, sink)) continue;
+      const shade = clamp(Math.round(under * (TIDE.length - 1) + Math.sin(c * 0.3 - r * 0.5 - t * 2) * 0.6), 0, TIDE.length - 1);
+      bucket[shade].push(c * px, line + r * px);
+    }
+  }
+  for (let step = 0; step < TIDE.length; step += 1) {
+    const cells = bucket[step];
+    if (!cells.length) continue;
+    ctx.fillStyle = TIDE[step];
+    ctx.beginPath();
+    for (let i = 0; i < cells.length; i += 2) chunk(ctx, cells[i], cells[i + 1], px, px, px);
+    ctx.fill();
+  }
+
+  // The surface, and the moon already on it.
+  const glints = GLINT.map(() => []);
+  for (let c = 0; c < cols; c += 1) {
+    for (let r = -2; r <= 5; r += 1) {
+      const away = Math.abs(r) / 5;
+      const slope = Math.cos(c * 0.22 - t * 3.1) * 0.6 + Math.cos(c * 0.07 - t * 1.5);
+      const lit = clamp(slope, 0, 1) ** 3 * (1 - away) * violence;
+      if (lit < 0.12 || !bayerOn(c, r, lit)) continue;
+      glints[clamp(Math.round((1 - lit) * 2.4), 0, GLINT.length - 1)].push(c * px, line + r * px);
+    }
+  }
+  for (let step = 0; step < GLINT.length; step += 1) {
+    const cells = glints[step];
+    if (!cells.length) continue;
+    ctx.fillStyle = GLINT[step];
+    ctx.beginPath();
+    for (let i = 0; i < cells.length; i += 2) chunk(ctx, cells[i], cells[i + 1], px, px, px);
+    ctx.fill();
+  }
 }
 
 /* ------------------------------------------------------------------ tape ---- */

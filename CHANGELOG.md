@@ -8,6 +8,114 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
+## [4.0.0] - 2026-08-15
+
+**"The Rose Funnel" is finished, and a fifth animation begins.** That is the only thing a MAJOR bump
+means here — see `.claude/CLAUDE.md`.
+
+### The fifth animation — "Moon Over the Deep"
+
+From *"a stark, highly-stylized, 32-bit pixel style full moon over the water with an island in the
+background, the water gently rolling under a clear night sky, and a faint glow that occasionally
+comes from deep below"*.
+
+Four things in that brief and they pull in different directions, which is what makes it a
+composition rather than a checklist.
+
+- **Stark wants almost nothing in frame; 32-bit wants depth in every surface.** Those sound opposed
+  and are not. Starkness is about how many *objects* there are, and bit depth is about how many
+  *values* each one gets. So there are four things in this picture — a moon, a sea, an island, a sky
+  — and every one of them is described by a ten-step ramp read continuously.
+- **`shadeAt` is the whole scene in one function.** Every surface picks a *continuous position on a
+  ramp*; the integer part is the step and the fraction is resolved by ordered dither against the
+  chunk's own grid position. A surface two thirds of the way between step 4 and step 5 gets a stable
+  two-thirds mix of the two — an apparent value that is not in the palette at all. Nothing here picks
+  a colour; it picks a height, and this decides what that means.
+- **It is the same dither doing the opposite job.** The Rose Funnel is 16-bit by construction — seven
+  steps, hard edges, and an explicit ban on interpolation, because "a ramp read continuously *is* a
+  gradient". A generation later the scarce thing was different: what a 32-bit machine could suddenly
+  afford was depth in a single hue. So the ramps here are long and finely spaced and the dither
+  *joins* two steps rather than breaking a surface up. Both are pixel art; they are pixel art from
+  different decades, and the grid is finer to match — `S / 175` against `S / 132`, because coarse
+  chunks and deep ramps fight each other.
+
+### The moon is the subject and the path is the animation
+
+Nothing in this scene travels. The moon hangs, the island sits, the stars hold their places — and the
+picture is never still.
+
+- **The glints are derived, not drawn.** Every point on the water has a wave slope, and a point is
+  bright when its face is tilted to bounce the moon at the viewer. That single condition produces the
+  narrow-at-the-horizon, wide-toward-you taper, the break-up into separate dashes, and their flicker
+  as the swell turns each face through the angle — none of it authored anywhere. The specular is
+  raised to a high power because a highlight has almost no shoulder: at a gentle exponent the whole
+  lit half of every roller comes up and the path is a row of soft lily pads.
+- **Perspective is one division.** The screen row is `d` from 0 at the horizon to 1 at the bottom, and
+  the distance out to sea is `1 / d`. How compressed the swell is, how wide the path is, how much sky
+  the water is reflecting and how tall a wave face reads are all functions of that one number.
+- **A crest has a coherence length.** The cross-wave term is *not* pure perspective: scaled purely
+  with distance it collapses to nothing near the viewer, every near crest becomes one unbroken line,
+  and the bottom of the path comes out as four enormous smooth lenses. A constant floor says a roller
+  is long, not infinite.
+- **A full moon is a sphere, and that is the one term.** `(1 - d²)` is the cosine of the angle the
+  surface is turned through. On seven steps it gives four visible rings and a disc that looks like a
+  target; on six steps resolved by dither it gives a limb that turns away from you continuously — the
+  scene's palette spent on the object that most needs it. Three maria stop it being a light rather
+  than a moon, and the halo is a hashed ring of the sky's own brightest step, tight against the disc,
+  because spread wide it reads as dust on the lens.
+- **The island is the one thing described by outline alone**, at the bottom of every ramp, with a
+  single step of rim light on the edge facing the moon and a reflection broken on the same swell the
+  water is drawn with.
+
+### Something down there
+
+*Faint*, *occasionally* and *deep* are three separate decisions.
+
+The moon owns the top of every ramp and nothing else is allowed up there, so the glow works at the
+bottom: it lifts water that was almost black to water that is merely dark. It is the **only hue in
+the frame** — a cold green where everything else is on one blue axis — which is how something dim
+still stops you. Warmer would read as a lamp, a boat, somebody signalling; cold green reads as alive,
+and nobody put it there.
+
+It runs on the gallery's epoch pattern: `n` is which one it is, where and how big are hashed off `n`,
+silent for most of a round, about one every fifty seconds and up and gone in fifteen. Two tiers keep
+it from being a coin lying on the water — only the core is drawn on the green ramp and everything
+outside it is *sea that has been lifted*, with the handover dithered rather than thresholded. And the
+swell rolls over the top of it, unlit, which is the whole of what makes the light read as below the
+surface rather than on it.
+
+### Its chrome and its channel change
+
+Both required of a new animation, and both built out of this scene's own primitives.
+
+- **`moon` chrome** — one chevron drawn three times, two pixels apart, in three steps of moonlight.
+  Every other glyph in the gallery is a shape in a colour; this one is a shape in a *ramp*, which is
+  the entire idea of the scene. Two-pixel steps rather than the funnel's four, because this grid is
+  finer and a glyph that lied about its resolution would be the one tell that mattered.
+- **`tide` channel change** — the picture floods. Every other change is something happening *to* the
+  frame; this one is the frame **going under**, which matters because the scene it introduces has a
+  waterline in it. Rows below the line are displaced by the same rolling swell the water is drawn
+  with, so the outgoing picture is refracted rather than covered, then pulled down the sea's own ramp
+  with depth. Then glints scatter along the seam on the same specular condition the moonpath uses —
+  the thing you recognise is already there before the picture has settled.
+
+### Fifteen milliseconds, and where they went
+
+The obvious implementation cost **47ms a frame**, nearly three times the ceiling. Three fixes, in
+order of what they were actually worth:
+
+- **Runs, not chunks** (20.5ms → 10.5ms). Most of a row lands on the same step — flat troughs, dark
+  near water, everything outside the path — so neighbouring columns merge into one rectangle. Asking
+  the rasteriser for thirty thousand quads a frame is the single biggest cost in the scene.
+- **The swell marches** (47ms → 39ms). Along a row the phase of every swell is linear in the column,
+  so sine and cosine advance by angle addition — two multiplies instead of a transcendental. Six trig
+  calls per chunk across forty-seven thousand chunks is what that removed.
+- **`ctx.rect` rather than `chunk`.** Every coordinate here is `col * px` off a snapped origin, so
+  the grid snapping inside `chunk` is four roundings and two clamps spent on numbers that are already
+  round.
+
+Measured after: **15.9ms** against the 20ms ceiling, with the water at 10.5ms of it.
+
 ## [3.9.0] - 2026-08-15
 
 **"Above the Fog" is finished, and a fourth animation begins.** That is the only thing a MAJOR bump
