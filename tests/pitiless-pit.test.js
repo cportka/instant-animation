@@ -1,0 +1,227 @@
+// The Pitiless Pit — the promises that are not visible in a frame.
+//
+// Two of these are claims the animation makes about *itself*: that it is 8-bit, which is a statement
+// about how many colours reach the canvas rather than a mood; and that white is the eruption's alone,
+// which is what makes the eruption an event rather than a brightening. Both would rot silently — a
+// seventeenth colour added to a palette file looks like an improvement, and nothing anywhere would
+// fail.
+//
+// The rest are about the **two clocks**, which are the whole architecture of the scene. Everything
+// that descends is drawn from a flowed clock that stops during an eruption; everything about the
+// eruption is drawn from wall time. If those ever disagree the picture does not break, it just
+// quietly stops doing the one thing the brief asked for — "a complete stop to everything going down".
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+import { createRng } from '../site/lib/rng.js';
+import { createRecordingContext } from './helpers/recording-context.mjs';
+import { create, meta } from '../site/scenes/pitiless-pit/index.js';
+import { ERUPT, PERIOD, eruptionAt, flowAt, planClock, surgeAt } from '../site/scenes/pitiless-pit/clock.js';
+import { MOUTH, U_EDGE, depthAt, edgeOf, scaleAt } from '../site/scenes/pitiless-pit/layout.js';
+import { FALL, FLARE, GROUND, KERB, MOTE, SHAFT, STREAK } from '../site/scenes/pitiless-pit/palette.js';
+
+const clock = () => planClock(createRng(meta.id));
+
+const VIEWPORTS = [[1440, 900], [1920, 1080], [390, 844], [834, 1194]];
+
+/** Draw one frame and hand back every fill colour and rectangle that reached the canvas. */
+function frame(W, H, t) {
+  const rec = createRecordingContext({ width: W, height: H });
+  create({ width: W, height: H, seed: meta.id }).draw(rec.ctx, t, 1 / 60);
+  rec.assertClean(`${W}x${H} at t=${t}`);
+  const colours = new Set();
+  const byColour = new Map();
+  let colour = null;
+  for (const op of rec.ops) {
+    const set = /^set:fillStyle\((.*)\)$/.exec(op);
+    if (set) {
+      colour = set[1];
+      colours.add(colour);
+      continue;
+    }
+    const rect = /^(?:rect|fillRect)\((.*)\)$/.exec(op);
+    if (rect) {
+      if (!byColour.has(colour)) byColour.set(colour, []);
+      byColour.get(colour).push(rect[1]);
+    }
+  }
+  return { colours, byColour };
+}
+
+test('the pit is drawn in sixteen colours and never a seventeenth', () => {
+  // 8-bit is a claim about arithmetic, and this is the arithmetic. Counted through the real draw
+  // rather than by reading the palette file, because what matters is what reaches the canvas.
+  const declared = new Set();
+  for (const c of [GROUND, KERB, STREAK, MOTE, FLARE, ...SHAFT, ...FALL.flat()]) {
+    declared.add(`rgba(${c[0]}, ${c[1]}, ${c[2]}, 1)`);
+  }
+  assert.equal(declared.size, 16, `the palette declares ${declared.size} colours, not sixteen`);
+
+  const seen = new Set();
+  for (const [W, H] of VIEWPORTS) {
+    for (const t of [0, 3.5, 19, 41.5, 60, 73.5, 76, 79, 95, 120]) {
+      for (const c of frame(W, H, t).colours) seen.add(c);
+    }
+  }
+  for (const c of seen) {
+    assert.ok(declared.has(c), `${c} reached the canvas and is not in the palette`);
+  }
+  assert.ok(seen.size <= 16, `${seen.size} colours reached the canvas`);
+});
+
+test('white belongs to the eruption and to nothing else', () => {
+  // The palette's one rule. White is not the brightest thing in the picture — it is a colour the
+  // picture has never contained, which is the whole of why the eruption lands as an event rather
+  // than as the pit getting brighter. One structural colour creeping up to white would cost
+  // nothing visually and take the entire effect with it.
+  const white = `rgba(${FLARE[0]}, ${FLARE[1]}, ${FLARE[2]}, 1)`;
+  const plan = clock();
+  let quiet = 0;
+  let loud = 0;
+  for (let t = 0; t < 2.5 * PERIOD; t += 1.7) {
+    const { colours } = frame(1440, 900, t);
+    if (eruptionAt(t, plan).on) {
+      if (colours.has(white)) loud += 1;
+    } else {
+      assert.ok(!colours.has(white), `white on the canvas at t=${t.toFixed(1)}, which is a quiet moment`);
+      quiet += 1;
+    }
+  }
+  assert.ok(quiet > 20, 'not enough quiet frames checked');
+  assert.ok(loud > 3, 'the eruption never actually put any white on the canvas');
+});
+
+test('the flowed clock stops dead for an eruption and never for anything else', () => {
+  // The scene's architecture in one assertion. `flowAt` runs at one second per second except while
+  // the pit is erupting, when it does not run at all — and the freeze has to be *exactly* as wide
+  // as the eruption, or things go on falling into a pit that has stopped taking them.
+  const plan = clock();
+  const step = 0.05;
+  for (let t = 0; t < 4 * PERIOD; t += step) {
+    const here = flowAt(t, plan);
+    const next = flowAt(t + step, plan);
+    const moved = next - here;
+    assert.ok(moved >= -1e-9, `time ran backwards at t=${t.toFixed(2)}`);
+    // Either it advanced by the full step, or it did not advance at all. Nothing in between —
+    // an eruption that eased the flow to a halt would be a slow-down, not a stop.
+    const erupting = eruptionAt(t, plan).on && eruptionAt(t + step, plan).on;
+    if (erupting) {
+      assert.ok(Math.abs(moved) < 1e-9, `the flow moved ${moved} during an eruption at t=${t.toFixed(2)}`);
+    } else if (!eruptionAt(t, plan).on && !eruptionAt(t + step, plan).on) {
+      assert.ok(Math.abs(moved - step) < 1e-9, `the flow moved ${moved} rather than ${step} at t=${t.toFixed(2)}`);
+    }
+  }
+});
+
+test('the flowed clock is continuous, so nothing ever jumps', () => {
+  // Only the *derivative* is allowed to jump. If `flowAt` itself had a step in it — which is what
+  // any "subtract the eruption once it is over" arithmetic gives you if it is written slightly
+  // wrong — every block, line and mote in the picture would teleport at the instant the pit
+  // resumed, which is the exact bug the second clock exists to make impossible.
+  const plan = clock();
+  const step = (t, eps) => flowAt(t + eps, plan) - flowAt(t - eps, plan);
+
+  // Straddle the two instants per round where the derivative changes, rather than sweeping and
+  // hoping to land on one. A sweep at any sane resolution walks straight past a discontinuity that
+  // is one point wide — which is exactly what happened the first time this test was written, and it
+  // passed against a `flowAt` that jumped by a full seven and a half seconds every round.
+  for (let n = 0; n < 5; n += 1) {
+    const opens = (n - plan.phase) * PERIOD;
+    for (const edge of [opens, opens + ERUPT]) {
+      const gap = step(edge, 1e-6);
+      assert.ok(gap >= -1e-9 && gap < 1e-4,
+        `the flow jumped by ${gap} across the boundary at t=${edge.toFixed(4)}`);
+    }
+  }
+
+  for (let t = 0; t < 4 * PERIOD; t += 0.013) {
+    const gap = step(t, 5e-5);
+    assert.ok(gap >= -1e-9 && gap < 1e-3, `the flow jumped by ${gap} at t=${t.toFixed(3)}`);
+  }
+});
+
+test('everything going down is frozen for the whole eruption', () => {
+  // End to end, through the real draw: the things that fall in are the one part of the picture with
+  // a position you can point at, so if the stop is working they are in the same place at the start
+  // of an eruption and five seconds later.
+  const plan = clock();
+  let n = 0;
+  while (!eruptionAt(n, plan).on) n += 0.25;
+  const start = n + 0.3;
+  const later = n + ERUPT - 1.2;
+  assert.ok(eruptionAt(start, plan).on && eruptionAt(later, plan).on, 'both samples must be inside one eruption');
+
+  const a = frame(1440, 900, start).byColour;
+  const b = frame(1440, 900, later).byColour;
+  let checked = 0;
+  for (const hue of FALL) {
+    for (const c of hue) {
+      const key = `rgba(${c[0]}, ${c[1]}, ${c[2]}, 1)`;
+      if (!a.has(key) && !b.has(key)) continue;
+      assert.deepEqual(b.get(key) ?? [], a.get(key) ?? [],
+        `the blocks in ${key} moved between t=${start.toFixed(2)} and t=${later.toFixed(2)}`);
+      checked += 1;
+    }
+  }
+  assert.ok(checked > 0, 'no blocks were on screen to check');
+});
+
+test('the surge rises, holds and is drawn back down', () => {
+  assert.equal(surgeAt(-1), 0);
+  assert.equal(surgeAt(0), 0);
+  assert.equal(surgeAt(ERUPT), 0);
+  assert.equal(surgeAt(ERUPT + 5), 0);
+  let peak = 0;
+  for (let age = 0; age < ERUPT; age += 0.01) {
+    const s = surgeAt(age);
+    assert.ok(s >= 0 && s <= 1, `surge ${s} at age ${age.toFixed(2)}`);
+    peak = Math.max(peak, s);
+  }
+  assert.ok(peak > 0.999, 'the eruption never reaches full pressure');
+  // Up fast and down slow: something bursting out and something settling back are not the same
+  // shape, and a symmetrical envelope reads as a lamp on a dimmer.
+  assert.ok(surgeAt(1) > surgeAt(ERUPT - 1), 'the eruption fades faster than it arrives');
+});
+
+test('the shaft is a geometric series, so it has no bottom', () => {
+  // `scaleAt` and `depthAt` are exact inverses, which several things depend on — the eruption
+  // launches particles at depths the shaft computed, and the descent wraps over a span the frame
+  // decides. And the series never reaches zero: what stops the drawing is a ring becoming narrower
+  // than one chunk, which is a fact about the screen and not about the pit.
+  assert.ok(Math.abs(scaleAt(0) - MOUTH) < 1e-12, 'depth zero is the mouth');
+  assert.ok(Math.abs(scaleAt(U_EDGE) - 1) < 1e-12, 'the frame edge is where the scale is one');
+  for (const s of [1, 0.62, 0.3, 0.05, 0.004]) {
+    assert.ok(Math.abs(scaleAt(depthAt(s)) - s) < 1e-12, `round trip failed at scale ${s}`);
+  }
+  let last = Infinity;
+  for (let u = -5; u < 400; u += 0.5) {
+    const s = scaleAt(u);
+    assert.ok(s < last, `the shaft stopped shrinking at depth ${u}`);
+    assert.ok(s > 0, `the shaft reached zero at depth ${u}`);
+    last = s;
+  }
+});
+
+test('a ring is the frame, and going round one is a closed walk', () => {
+  // Every descent is a point at a fixed place around the ring, scaled. That only puts things on
+  // straight rays converging on the vanishing point if the ring really is the frame's own
+  // rectangle — and only enters from off-screen if the outermost one *is* the frame edge.
+  const out = [0, 0];
+  let prev = null;
+  for (let p = 0; p <= 1.0001; p += 1 / 512) {
+    edgeOf(p, out);
+    const [x, y] = out;
+    assert.ok(Math.abs(Math.max(Math.abs(x), Math.abs(y)) - 1) < 1e-12,
+      `p=${p.toFixed(4)} lands at (${x}, ${y}), which is not on the unit frame`);
+    if (prev) {
+      // Continuous the whole way round, including across the corners and the seam at p=0.
+      assert.ok(Math.hypot(x - prev[0], y - prev[1]) < 0.05, `the ring jumps at p=${p.toFixed(4)}`);
+    }
+    prev = [x, y];
+  }
+  edgeOf(0, out);
+  const start = [out[0], out[1]];
+  edgeOf(1, out);
+  assert.deepEqual([out[0], out[1]], start, 'once round the ring must come back to where it began');
+});

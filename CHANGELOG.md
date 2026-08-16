@@ -8,6 +8,129 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
+## [5.0.0] - 2026-08-16
+
+**"Moon Over the Deep" is finished, and a sixth animation begins.** That is the only thing a MAJOR
+bump means here — see `.claude/CLAUDE.md`.
+
+### The sixth animation — "The Pitiless Pit"
+
+From *"an abstract pitiless pit that goes down. The view is of the pit and lines from the ground
+travel down the pit, pixels travel down the pit, blocks and abstract shapes fall in. Every 1-2
+minutes there is a complete stop to everything going down into the pit and the pit explodes forth
+pure white pixels for 5-10 seconds in a great flurry."*
+
+**Pitiless is a word about withholding**, so the design is mostly a list of things this animation
+refuses to do.
+
+- **The pit has no bottom, and the geometry says so.** Depth is a geometric series: a ring at depth
+  `u` is drawn at `RATIO ** u`, so every step down is the same *proportion* smaller rather than the
+  same number of pixels. The sequence never reaches zero. However far you follow it there is another
+  ring, and the only thing that ever stops the drawing is a ring becoming narrower than one chunk —
+  a fact about the screen, not about the pit.
+- **The pit has no colour.** Every structural thing in frame is one desaturated blue-grey; the only
+  saturated colours belong to the blocks going in, and they are not blended, faded or tinted on the
+  way down. Each simply switches to its own darker twin once it is far enough in. The pit does not
+  transform what it takes.
+- **Nothing comes back, nothing lands, nothing piles up**, and the pit is not moved by any of it.
+  There is no floor to hit and no sound of hitting it.
+
+### Two clocks, and the animation is the difference between them
+
+"A complete stop to everything going down" is easy to describe and awkward to build, because this
+gallery forbids the obvious implementation: the render tests draw each scene at eight timestamps
+**out of order**, so a `paused` flag set on one frame and cleared on another is not a bug waiting to
+happen, it is a test failure waiting to be understood.
+
+So the pause is not an event that happens to the scene. It is a **second clock**. `flowAt(t)` is the
+time that has flowed into the pit — wall time with every eruption cut out of it — and it runs at one
+second per second except during one, when it does not run at all. Everything that descends is drawn
+from it and has never heard of eruptions; everything about the eruption is drawn from `t` and has
+never heard of the descent.
+
+The join is what makes it work: `flowAt` is **continuous** and only its *derivative* jumps. There is
+therefore no discontinuity anywhere in the picture — every block, line and mote is exactly where it
+was a frame ago at the instant the stop begins, and again at the instant it ends. It simply stops,
+and then it simply starts. The interval cannot vary, and that is a consequence rather than a choice:
+flowed time is wall time minus the eruptions already finished, which is a closed form only while
+every eruption is the same length. What varies instead is everything about how one *looks*.
+
+### 8-bit, which is a claim about arithmetic
+
+The third pixel scene in the gallery and the third budget, which is the whole point of having all
+three:
+
+- **The Rose Funnel is 16-bit** — seven steps a surface, hard edges, and interpolation banned,
+  because a ramp read continuously *is* a gradient.
+- **Moon Over the Deep is 32-bit** — ten steps down one hue, close enough that ordered dither *joins*
+  two of them into an apparent value that is not in the palette at all.
+- **The Pitiless Pit is 8-bit, and it does neither.** No ramp to walk and no dither anywhere. Where
+  the moon scene resolves the space between two steps, this **rounds**. Sixteen colours, counted
+  rather than gestured at, on a chunk grid of `S / 96` — nearly twice the moon's.
+
+### What is in it
+
+- **The shaft is twenty-odd `fillRect`s, outside in.** No annulus arithmetic, no clipping, no path
+  with a hole in it — concentric flat bands *are* what a shaft looks like from directly above, and
+  the drawing is short because the shape is simple. The bands march down with the flowed clock;
+  because the spacing is a constant ratio, sliding the ladder one unit deeper leaves it identical, so
+  the march never wraps and no band is born or destroyed where it can be seen.
+- **Everything that descends is one object at three sizes** — lines with a length, loose pixels, and
+  blocks — and each falls in a straight line on screen for free, because a point at a fixed place
+  around the ring simply scales toward the centre and scaling a point is a ray.
+- **Perspective decides how many survive.** Every ray converges on the same point, so a population
+  spread evenly through depth is spread over a screen area that shrinks geometrically — drawn in
+  full, the far half of the shaft is a solid speckled slab exactly where the picture most needs to be
+  empty. Keeping the *screen* density constant means the survivor count has to fall like the scale
+  does, which is one line of arithmetic and is also the truthful thing to draw: they are not fading
+  out, they are gone.
+- **A sprite runs out of resolution before the pit runs out of depth**, so a block drops to a smaller
+  sprite twice on the way down and then is not there. Held at one chunk a cell it could never get
+  smaller than four chunks across, and the blocks pile up around the vanishing point at a size the
+  shaft left behind long ago.
+- **Quarter-turns, never a fraction of one.** A sprite that rotates smoothly is the single loudest
+  way to break this style; 8-bit hardware could flip a tile and nothing else.
+
+### What comes back up
+
+Once every ninety-six seconds, for seven and a half, the pit gives — and what it gives back is not
+what went in. Everything that went down had a colour, a shape and a direction; what comes out is pure
+white, single pixels, in numbers, all of it moving outward at once. **White appears nowhere else in
+the palette**, so it is not merely brighter than the picture: it is a colour the picture has never
+contained.
+
+The particles ride the shaft's own coordinate backwards, and because the depth scale is geometric a
+constant rate is an *accelerating* rush — slow while still deep, then tearing across the ground. None
+of it is simulated; every particle is a closed-form function of which eruption it belongs to, its own
+index, and the age of the round.
+
+The white front behind them stops well short of the mouth, and that is the difference between a
+picture and a flash. Let it reach the lip and every band goes white at once: the pit becomes a flat
+white rectangle, the shaft is gone, and the pixels pouring out of it — the actual event — are white
+on white and cannot be seen at all.
+
+### Its chrome and its channel change
+
+Both required of a new animation, and both built out of this scene's own primitives.
+
+- **`pit` chrome** — one chevron drawn three times, four pixels apart, in three flat colours. The
+  same construction as the `moon` glyph and the opposite argument: there the three copies are close
+  steps of one ramp, because that scene describes a surface with many values; here they are far apart
+  and four pixels out, because this scene has a handful of flat colours and rings receding into a
+  hole. Bigger steps than any other glyph in the gallery, because this is the coarsest grid in it.
+- **`pit` channel change** — the picture is swallowed and white is thrown back out over it. The mouth
+  opens ring by ring over whatever you were looking at, each a flat colour with a hard edge, and
+  white pixels pour out of the middle along the same rays the scene's own eruption uses. It opens on
+  the **seam** rather than the frame centre: that is where the two pictures are being pushed past
+  each other, so the join is what gives way.
+
+### Two milliseconds
+
+The cheapest scene in the gallery by an order of magnitude — **1.5ms** on a 1440×900 monitor and
+2.1ms with the pit erupting, against a 20ms ceiling; 0.9ms and 1.2ms on a phone. That is not an
+optimisation, it is the style: a shaft is twenty rectangles, a mote is one chunk, and there is no
+dither pass anywhere because there is no dither.
+
 ## [4.1.1] - 2026-08-15
 
 **"The Rose Funnel" is finished, and a fifth animation begins.** That is the only thing a MAJOR bump

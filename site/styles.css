@@ -192,6 +192,38 @@ body {
   fill: #1e326d;
 }
 
+/* The `pit` chrome: one chevron drawn three times, four pixels apart, in three flat colours.
+
+   The same construction as the `moon` glyph above and the opposite argument, which is the point.
+   There the three copies are close steps of one ramp two pixels apart, because that scene describes
+   a surface with many values. Here they are four pixels apart and the three colours are nowhere
+   near each other, because this scene has no ramp at all — it has a handful of flat colours, hard
+   edges between them, and rings receding into a hole. The chevron is that hole: a shape with a lit
+   near edge and two darker copies behind it, which is exactly what the pit does to everything.
+
+   Bigger steps than any other glyph in the gallery, because this grid is the coarsest in the
+   gallery. Every one of these has to tell the truth about the resolution of the scene it belongs
+   to; a glyph that lied about that would be the one tell that mattered. */
+.nav[data-chrome='pit'] .nav__glyph--pit {
+  display: block;
+}
+
+.nav[data-chrome='pit'] {
+  color: #ccd4e8;
+}
+
+.nav__pit-bright rect {
+  fill: currentColor;
+}
+
+.nav__pit-mid rect {
+  fill: #7a86a8;
+}
+
+.nav__pit-deep rect {
+  fill: #3d4560;
+}
+
 /* Two animations on each: the float they always had, which never stops, and `peek`, which runs
    exactly **once**. The chevrons introduce themselves a moment after the page arrives and are then
    never seen again unless you reach for them.
@@ -256,13 +288,15 @@ body {
    nothing alike, but neither of them may move by half a pixel. */
 .nav[data-chrome='pixel'].nav--down,
 .nav[data-chrome='funnel'].nav--down,
-.nav[data-chrome='moon'].nav--down {
+.nav[data-chrome='moon'].nav--down,
+.nav[data-chrome='pit'].nav--down {
   animation-name: float-down-pixel, peek;
 }
 
 .nav[data-chrome='pixel'].nav--up,
 .nav[data-chrome='funnel'].nav--up,
-.nav[data-chrome='moon'].nav--up {
+.nav[data-chrome='moon'].nav--up,
+.nav[data-chrome='pit'].nav--up {
   animation-name: float-up-pixel, peek;
 }
 
