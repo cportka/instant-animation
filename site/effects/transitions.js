@@ -17,11 +17,12 @@
 
 import { TAU, clamp, wrap01 } from '../lib/draw.js';
 import { chromaSplit, deviceScale, makeTearBands, seam, tearBands } from './vhs.js';
+import { INK as CUT_INK, VOID as CUT_VOID, cellFor, scanFill, snapTo } from './onebit.js';
 import { bayerOn, block, chunk, hash01, pixelSize, snap } from './pixel.js';
 import { lobe } from './volume.js';
 
 /** Every change a scene may ask for by name. `meta.transition` must be one of these. */
-export const TRANSITIONS = ['tape', 'pixel', 'vapour', 'funnel', 'tide', 'pit'];
+export const TRANSITIONS = ['tape', 'pixel', 'vapour', 'funnel', 'tide', 'pit', 'cut'];
 
 /** Everything the changes need decided once. The stage owns one of these for the whole gallery. */
 export function makeChannelChange(rng) {
@@ -56,7 +57,101 @@ export function channelChange(kind, ctx, W, H, t, violence, seamY, change, tape 
   else if (kind === 'funnel') funnelChange(ctx, W, H, t, violence, seamY, tape);
   else if (kind === 'tide') tideChange(ctx, W, H, t, violence, seamY, tape);
   else if (kind === 'pit') pitChange(ctx, W, H, t, violence, seamY);
+  else if (kind === 'cut') cutChange(ctx, W, H, t, violence, seamY, tape);
   else tapeChange(ctx, W, H, t, violence, seamY, change, tape);
+}
+
+/* ------------------------------------------------------------------- cut ---- */
+
+/** The section's sides, its train, and how much bigger each one is than the one behind it. */
+const CUT_SIDES = 7;
+const CUT_TRAIN = 11;
+const CUT_RATIO = 1.44;
+
+/** Scratch for the two rings of one section. Rewritten per section, never escapes the call. */
+const CUT_OUTER = new Float64Array(CUT_SIDES * 2);
+const CUT_BORE = new Float64Array(CUT_SIDES * 2);
+const CUT_RINGS = [CUT_OUTER, CUT_BORE];
+
+/**
+ * The `cut` change: the picture is sliced, the slices fall away down and to the side, and what is
+ * behind them is black and white and nothing else.
+ *
+ * *The Long Cut* is one promise — the frame contains `#000000` and `#ffffff` and no third value —
+ * and one motion, which is sections of a solid arriving at the eye while drifting out of the corner.
+ * So the change is those two things and refuses everything else. Where the pixel change rolls its
+ * dice per band and shreds the frame along random lines, this shear is **monotonic**: every slab
+ * moves further than the one above it, so the picture comes apart as a stack being pushed over
+ * rather than as a fault. A cut is not a tear.
+ *
+ * Then the gap each slab leaves is filled flat, alternating black and white slab by slab, which is
+ * the scene's own answer to having no tones to separate things with. And the sections themselves
+ * come through it: a train of bored heptagons on a geometric scale, growing out of a point on the
+ * seam and falling as they grow, rasterised on the same one-bit grid the scene draws itself on — so
+ * nothing anti-aliased and nothing grey ever reaches the frame, including here.
+ *
+ * It opens on the **seam** because that is the line the two pictures are already being pushed past
+ * each other on: the cut happens where the frame is already coming apart.
+ */
+function cutChange(ctx, W, H, t, violence, seamY, tape) {
+  const S = Math.min(W, H);
+  const cell = cellFor(ctx, W, H, 140);
+  const scale = deviceScale(ctx, W, H);
+  const source = tape ? tape.source : ctx.canvas;
+  const slab = cell * 6;
+  const slabs = Math.ceil(H / slab);
+
+  // The shear. Further down the frame is further fallen, so the slabs open out rather than jitter.
+  for (let i = 0; i < slabs; i += 1) {
+    const top = i * slab;
+    const height = Math.min(slab, H - top);
+    if (height < 1) continue;
+    const off = snapTo(((i + 1) / slabs) ** 1.5 * violence * S * 0.95, cell);
+    if (off > 0) {
+      ctx.drawImage(
+        source,
+        0,
+        Math.round(top * scale.sy),
+        Math.max(1, Math.round(W * scale.sx)),
+        Math.max(1, Math.round(height * scale.sy)),
+        off * 0.62,
+        top + off * 0.3,
+        W,
+        height,
+      );
+      // ...and the ground it came off, in one of the two colours. Alternating, because that is the
+      // only way this scene has ever had of telling one slab from the next.
+      ctx.fillStyle = i % 2 === 0 ? CUT_INK : CUT_VOID;
+      ctx.fillRect(0, snapTo(top, cell), snapTo(off * 0.62, cell), snapTo(height, cell) || cell);
+    }
+  }
+
+  // The sections, furthest first. A constant advance through a geometric scale is a rush, which is
+  // the one thing the scene's own train and this share exactly.
+  const advance = wrap01(t * 0.55);
+  const ax = W * 0.34;
+  const ay = seamY;
+  for (let i = 0; i < CUT_TRAIN; i += 1) {
+    const r = S * 0.045 * violence * CUT_RATIO ** (i + advance);
+    if (r < cell * 0.5 || r > S * 1.9) continue;
+    // Falling as it grows: the drift is fixed in the world and the scale magnifies it, which on a
+    // geometric train means the near sections leave by the corner and the far ones sit on the axis.
+    const cx = ax + r * 0.86;
+    const cy = ay + r * 1.04;
+    const spin = i * 0.42 + advance * 0.42 + t * 0.05;
+    for (let j = 0; j < CUT_SIDES; j += 1) {
+      const pull = 0.64 + 0.36 * hash01(j * 7.3 + i * 2.1);
+      const a = spin + (j / CUT_SIDES) * TAU;
+      CUT_OUTER[j * 2] = cx + Math.cos(a) * r * pull;
+      CUT_OUTER[j * 2 + 1] = cy + Math.sin(a) * r * pull * 1.08;
+      // The bore, pulled in along the same rays — the containment argument the scene relies on.
+      CUT_BORE[j * 2] = cx + (CUT_OUTER[j * 2] - cx) * 0.46;
+      CUT_BORE[j * 2 + 1] = cy + (CUT_OUTER[j * 2 + 1] - cy) * 0.46;
+    }
+    ctx.fillStyle = i % 2 === 0 ? CUT_INK : CUT_VOID;
+    ctx.beginPath();
+    if (scanFill(ctx, CUT_RINGS, cell, W, H) > 0) ctx.fill();
+  }
 }
 
 /**

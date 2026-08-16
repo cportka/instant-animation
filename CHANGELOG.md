@@ -8,6 +8,118 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
+## [6.0.0] - 2026-08-16
+
+**"The Pitiless Pit" is finished, and a seventh animation begins.** That is the only thing a MAJOR
+bump means here — see `.claude/CLAUDE.md`.
+
+### The seventh animation — "The Long Cut"
+
+From *"stark monochromatic black and white — slices towards the camera, falling down and to the
+side."*
+
+**Monochromatic is treated as arithmetic rather than as mood.** Every animation in this gallery
+makes one claim about how many values it is allowed and then keeps it: sixteen-bit is seven flat
+steps with hard edges, thirty-two-bit is ten with dither resolving the space between, eight-bit is a
+fixed table of thirty-two colours and no ramp at all. This one says **one bit** — `#000000` and
+`#ffffff`, and nothing in between anywhere in the frame at any moment. Sampled across two minutes of
+animation at a range of window sizes, the count of pixels that are neither is zero.
+
+That is a harder promise than it sounds, because a canvas anti-aliases and there is no way to ask it
+not to. So the scene never hands the canvas a diagonal.
+
+- **`site/effects/onebit.js` — two colours and a rasteriser written out longhand.** A scanline
+  polygon fill, even-odd, with holes, in about forty lines: it walks each shape row by row, decides
+  which cells of a grid have their *centres* inside it, and emits those cells as axis-aligned
+  rectangles. The staircase on every edge is not a style laid over the picture; it is what the
+  picture is made of.
+- **The grid is a whole number of *device* pixels, not of CSS pixels.** Snapping to CSS integers
+  looks perfect at 1× and 2× and puts a grey seam down every edge at 1.5×, where an edge lands
+  halfway through a hardware pixel and the browser resolves it the only way it can. `cellFor` asks
+  the backing store what a device pixel is and rounds to a multiple of it, which is what makes "two
+  colours" true of the output rather than of the intention.
+- **Depth has nothing left to work with, and that is the interesting part.** Every other scene here
+  separates near from far with tone; there is no dimmer white. So the slices **alternate** — even
+  white, odd black, all the way down the train — and occlusion and size carry the whole read. A
+  stack of same-coloured slices is one silhouette; alternated, the same stack is a solid.
+- **Every slice is keylined in the other colour.** Alternating polarity separates a slice from its
+  neighbours and does nothing to separate a black slice from the black field, so the first build was
+  a single white blob drifting about with every second slice invisible. Each is now drawn twice: the
+  silhouette grown outward with its hole shrunk inward, then the slice over the top. The rim is a
+  fixed width in screen pixels, so it is a hairline on the near sections and most of the far ones —
+  and because a slice's rim is the colour of the slice *behind* it, it can only be seen where it
+  overhangs onto something further back. The keyline appears exactly where one is needed, with no
+  test of what is underneath.
+
+### Nothing in it accelerates
+
+**"Towards the camera"** is a train of cross-sections at regular intervals in space moving at a
+constant rate. The picture accelerates because constant speed through `1 / z` is a slow lean at the
+far end and a plunge at the near one — which is what coming at you *means*, and the brief asked for
+slices coming towards the camera rather than for slices getting bigger.
+
+**"Falling down and to the side"** is the same argument once more: each slice drifts at a constant
+rate in the world from the moment it is cut, and the projection turns that into a fall out of the
+bottom-right corner with no gravity term anywhere. Two consequences had to be worked out rather than
+tuned:
+
+- **A slice has to outrun its own radius, or it never leaves.** The drift must carry a slice's
+  centre further from the axis than the widest section the solid can make; below that there is no
+  depth at all at which the thing is gone — it just grows around the eye and then blinks out when
+  the clip catches it. The first build did exactly that, on a beat, in the middle of the frame.
+- **The reach is fixed by the departure, so it is spent late.** Spread evenly, a slice is halfway to
+  the corner before it is big enough to look at and the frame empties out. Held back as a fourth
+  power, the same total drift lets a slice come most of the way down the train nearly on the axis
+  and then leave in a rush — which is also what falling looks like.
+
+**The path is composed for the window; the solid is not.** Sections are sized in world units against
+the short edge, so the solid is the same object on a phone and on a monitor. The fall is stretched by
+the frame's aspect so it aims at the far *corner* — a fixed world direction runs off the right of a
+wide window with the bottom half empty, and off the bottom of a tall one with the right-hand side
+empty, and both looked like a mistake. The two stretches cancel exactly: a near slice lands on the
+same point of the frame in every window whatever its shape.
+
+### One solid, and the slices are slices of it
+
+The shape of slice `k` is a function of `k` and of nothing else — a bored, twisting, seven-sided
+column whose girth, spin, stretch and bore all drift slowly along its length. Two neighbouring slices
+are two cuts a finger apart through the same lump, which is what makes the train an object rather
+than a shuffle of cards. Seven sides because an even polygon has every edge parallel to the one
+opposite and keeps agreeing with itself under rotation; seven never does. The seed's one job is to
+decide *where along the column* this run came in.
+
+The bore is pulled in along the same rays as the section's own vertices, and that is a containment
+proof before it is an aesthetic choice: even-odd gives a hole for free and gives no warning when the
+hole stops being inside anything, so a bore corner crossing a short side would hang a solid lobe off
+the edge of the shape. Along the rays it cannot — every bore edge lies in a triangle the section
+contains — which is what lets the hole run all the way from a pinhole to a thin shell. An
+independently rotated or offset bore has no such argument and would have to be kept small enough to
+be dull.
+
+### Its chrome and its channel change
+
+- **`chrome: 'cut'`** — one chevron nested three deep, white, black, white. The third glyph built out
+  of a repeated chevron and the only one where the repeats are not a ramp but the same two colours
+  taking turns, which is exactly what the scene does. It also makes the chevron legible over a frame
+  that is sometimes entirely white and sometimes entirely black: there is no arrangement of these two
+  colours in which nothing shows.
+- **`transition: 'cut'`** — the picture is sliced into slabs that fall away down and to the side, the
+  gap each one leaves is filled flat in alternating black and white, and the sections come through
+  it on the same one-bit grid. Where the pixel change rolls its dice per band and shreds the frame
+  along random lines, this shear is monotonic: every slab moves further than the one above it, so the
+  picture comes apart as a stack being pushed over. A cut is not a tear.
+
+### Tests
+
+`tests/long-cut.test.js` — eight, each verified to fail on the bug it guards. The frame is two
+colours and no third; nothing is drawn off the device pixel grid at 1×, 1.5×, 2× or 3×; the cell is a
+whole number of device pixels however coarse it was asked to be; `scanFill` fills exactly the cells
+whose centres are inside the shape, checked against a brute-force point-in-polygon at four grid
+sizes; the bore never escapes the section, vertices and edges alike, over three hundred slices; a
+slice paints nothing by the time it is culled, at four window shapes; the fall lands on the same
+place in the frame whatever shape the frame is; and every slice on screen is painted, with the two
+colours alternating down the train.
+
 ## [5.3.0] - 2026-08-16
 
 **"Moon Over the Deep" is finished, and a sixth animation begins.** That is the only thing a MAJOR

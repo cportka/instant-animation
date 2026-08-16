@@ -224,6 +224,34 @@ body {
   fill: #3d4560;
 }
 
+/* The `cut` chrome: one chevron nested three deep, white, black, white.
+
+   The third glyph built out of a repeated chevron and the only one where the repeats are not a ramp
+   or a set of flat tones but the **same two colours taking turns**, which is precisely what the
+   scene they belong to does. That animation has one bit to spend: alternating polarity by depth is
+   the only thing separating one slice from the next in it, and a glyph that shaded these three
+   copies from bright to dark would be advertising a tonal range the picture does not have.
+
+   It also makes the chevron legible on a frame that is sometimes entirely white and sometimes
+   entirely black — the same property the scene relies on, arrived at for the same reason. Over
+   black the two white copies read and the middle one disappears; over white the middle one reads
+   and the others do. There is no arrangement of these two colours in which nothing shows. */
+.nav[data-chrome='cut'] .nav__glyph--cut {
+  display: block;
+}
+
+.nav[data-chrome='cut'] {
+  color: #ffffff;
+}
+
+.nav__cut-face rect {
+  fill: currentColor;
+}
+
+.nav__cut-void rect {
+  fill: #000000;
+}
+
 /* Two animations on each: the float they always had, which never stops, and `peek`, which runs
    exactly **once**. The chevrons introduce themselves a moment after the page arrives and are then
    never seen again unless you reach for them.
@@ -289,14 +317,16 @@ body {
 .nav[data-chrome='pixel'].nav--down,
 .nav[data-chrome='funnel'].nav--down,
 .nav[data-chrome='moon'].nav--down,
-.nav[data-chrome='pit'].nav--down {
+.nav[data-chrome='pit'].nav--down,
+.nav[data-chrome='cut'].nav--down {
   animation-name: float-down-pixel, peek;
 }
 
 .nav[data-chrome='pixel'].nav--up,
 .nav[data-chrome='funnel'].nav--up,
 .nav[data-chrome='moon'].nav--up,
-.nav[data-chrome='pit'].nav--up {
+.nav[data-chrome='pit'].nav--up,
+.nav[data-chrome='cut'].nav--up {
   animation-name: float-up-pixel, peek;
 }
 
