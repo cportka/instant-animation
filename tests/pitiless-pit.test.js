@@ -18,11 +18,19 @@ import { createRng } from '../site/lib/rng.js';
 import { createRecordingContext } from './helpers/recording-context.mjs';
 import { create, meta } from '../site/scenes/pitiless-pit/index.js';
 import { ERUPT, PERIOD, eruptionAt, flowAt, planClock, surgeAt } from '../site/scenes/pitiless-pit/clock.js';
-import { MOUTH, U_EDGE, depthAt, edgeOf, scaleAt } from '../site/scenes/pitiless-pit/layout.js';
+import { MOUTH, U_EDGE, depthAt, edgeOf, pxAt, scaleAt } from '../site/scenes/pitiless-pit/layout.js';
+import { WAYS, dissolveCell } from '../site/scenes/pitiless-pit/dissolve.js';
+import { planDescent } from '../site/scenes/pitiless-pit/descent.js';
 import { TEAR_SLIDE, corruptAt, tearAt } from '../site/scenes/pitiless-pit/glitch.js';
 import { FALL, FLARE, GROUND, KERB, MOTE, SHAFT, STREAK } from '../site/scenes/pitiless-pit/palette.js';
 
 const clock = () => planClock(createRng(meta.id));
+
+/** The scene's plans in the order `create()` draws them, so the seeds line up. */
+const plans = () => {
+  const rng = createRng(meta.id);
+  return { clock: planClock(rng), descent: planDescent(rng) };
+};
 
 const VIEWPORTS = [[1440, 900], [1920, 1080], [390, 844], [834, 1194]];
 
@@ -281,6 +289,103 @@ test('the surge rises, holds and is drawn back down', () => {
   // Up fast and down slow: something bursting out and something settling back are not the same
   // shape, and a symmetrical envelope reads as a lamp on a dimmer.
   assert.ok(surgeAt(1) > surgeAt(ERUPT - 1), 'the eruption fades faster than it arrives');
+});
+
+test('the grid sharpens with depth and stops at one device pixel', () => {
+  // The scene's one exception to its own coarseness. Above the mouth and at it, the grid is the
+  // 8-bit grid; below, every band is finer than the one outside it — and it stops at exactly the
+  // finest thing the display can draw, because there is nothing finer to reach for.
+  for (const finest of [1, 0.5]) {
+    assert.equal(pxAt(-3, 9, finest), 9, 'the ground is drawn on the ordinary grid');
+    assert.equal(pxAt(0, 9, finest), 9, 'and so is the mouth');
+    let last = 9;
+    let floored = false;
+    for (let u = 0.25; u < 60; u += 0.25) {
+      const grid = pxAt(u, 9, finest);
+      assert.ok(grid <= last + 1e-12, `the grid got coarser going down, at depth ${u}`);
+      assert.ok(grid >= finest, `the grid went below one device pixel (${grid} < ${finest}) at depth ${u}`);
+      if (grid === finest) floored = true;
+      last = grid;
+    }
+    assert.ok(floored, `the grid never reached the display's own resolution (finest ${finest})`);
+    // ...and it has to sharpen *faster* than the ring shrinks, or the pit merely stays as detailed
+    // as it was rather than getting more so.
+    assert.ok(pxAt(6, 9, finest) / 9 < scaleAt(6) / scaleAt(0), 'the grid is not outpacing perspective');
+  }
+});
+
+test('the bottom of the pit is drawn at the display resolution', () => {
+  // End to end, through the real draw, at two backing-store sizes — which is the only way to check
+  // the claim that actually matters. The thing to assert is not that some rectangle is exactly one
+  // device pixel wide: the innermost *ring* stops a couple of chunks across, so its width is a small
+  // multiple of the grid rather than the grid itself. What has to be true is that the pit **goes
+  // further when the display has more pixels to go on**, ends far finer than the 8-bit chunk it
+  // started at, and does its sharpening down the hole rather than anywhere else.
+  const deepest = (backing) => {
+    const rec = createRecordingContext({ width: backing, height: backing * 0.625 });
+    create({ width: 1440, height: 900, seed: meta.id }).draw(rec.ctx, 41.5, 1 / 60);
+    rec.assertClean(`pit at a ${backing}px backing store`);
+    let small = Infinity;
+    let where = null;
+    for (const op of rec.ops) {
+      const m = /^fillRect\(([-\d.]+),([-\d.]+),([-\d.]+),/.exec(op);
+      if (!m) continue;
+      const size = Number(m[3]);
+      if (size < small) {
+        small = size;
+        where = [Number(m[1]), Number(m[2])];
+      }
+    }
+    return { small, where };
+  };
+
+  const px = 9;
+  const retina = deepest(2880);
+  const plain = deepest(1440);
+
+  assert.ok(retina.small < plain.small,
+    `the pit reached ${retina.small}px on a doubled backing store and ${plain.small}px on a plain one — it is ignoring the display`);
+  assert.ok(retina.small <= px / 4,
+    `the deepest thing drawn is ${retina.small}px against an ordinary chunk of ${px} — the pit barely sharpened`);
+  // ...and the sharpening belongs to the bottom of the pit. A sub-chunk rectangle out on the ground
+  // would mean the ramp had inverted and the coarse 8-bit grid was no longer the rule everywhere
+  // else, which is the thing this exception is an exception *to*.
+  assert.ok(Math.hypot(retina.where[0] - 720, retina.where[1] - 450) < 60,
+    `the finest rectangle is at ${retina.where}, which is not the bottom of the pit`);
+});
+
+test('all seven ways of going are dealt, and every one of them finishes', () => {
+  assert.equal(WAYS.length, 7);
+  assert.equal(new Set(WAYS).size, 7, 'two of the ways have the same name');
+
+  // Dealt round robin, so every way is on screen rather than merely implemented. A free draw from
+  // seven leaves two or three of them unused on any given seed.
+  const { blocks } = plans().descent;
+  const dealt = new Set(blocks.map((b) => b.way));
+  assert.equal(dealt.size, 7, `only ${dealt.size} of the seven ways were dealt to a block`);
+
+  // ...and each one empties the sprite by the time it is done. The block stops being drawn at 1
+  // whatever is left of it, so a way that only gets three quarters through ends in exactly the pop
+  // these exist to remove — and a dissolution that is 80% finished looks finished in review. Four
+  // of the seven were written that way first and this is what caught them.
+  const out = [0, 0];
+  for (const way of WAYS) {
+    for (let seed = 0; seed < 64; seed += 1) {
+      for (let col = 0; col < 4; col += 1) {
+        for (let row = 0; row < 4; row += 1) {
+          assert.equal(dissolveCell(way, col, row, 1, seed / 64, 0.6, 0.8, out), null,
+            `${way} still has cells at the end of its dissolve`);
+          // ...and nothing has happened yet before it starts.
+          assert.notEqual(dissolveCell(way, col, row, 0, seed / 64, 0.6, 0.8, out), null,
+            `${way} has already begun at zero`);
+          // `Math.abs`, because a displacement of zero in the negative direction is `-0` and
+          // strict equality is `Object.is`, which does not think that is zero.
+          assert.equal(Math.abs(out[0]), 0, `${way} displaces a cell before the dissolve starts`);
+          assert.equal(Math.abs(out[1]), 0, `${way} displaces a cell before the dissolve starts`);
+        }
+      }
+    }
+  }
 });
 
 test('the shaft is a geometric series, so it has no bottom', () => {

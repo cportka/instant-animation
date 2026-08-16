@@ -16,18 +16,19 @@ import { rgba } from '../../lib/draw.js';
 import { ERUPT, surgeAt } from './clock.js';
 import { TEAR_BANDS, TEAR_SLIDE, tearAt } from './glitch.js';
 import { FLARE, GROUND, KERB, SHAFT } from './palette.js';
-import { MOUTH, bottomDepth, scaleAt, snapTo } from './layout.js';
+import { MOUTH, bottomDepth, finestOf, pxAt, scaleAt, snapTo } from './layout.js';
 
 /** How fast the bands slide down, in depths per flowed second. */
 const MARCH = 0.62;
 
 /** How many depths it takes to fall one step down the palette. */
-const GLOOM = 3.4;
+const GLOOM = 3.0;
 
 /** The shallowest the eruption's white front ever reaches. */
 const THROAT = 6.5;
 
 export function drawShaft(ctx, W, H, flow, erupt, px) {
+  const finest = finestOf(ctx, W);
   const cx = snapTo(W / 2, px);
   const cy = snapTo(H / 2, px);
   const halfW = W / 2;
@@ -53,7 +54,7 @@ export function drawShaft(ctx, W, H, flow, erupt, px) {
   ctx.fillStyle = rgba(KERB, 1);
   fillRing(ctx, cx, cy, halfW * kerb, halfH * kerb, px, H, tear);
 
-  const deepest = bottomDepth(W, H, px);
+  const deepest = bottomDepth(W, H, finest);
   // Where the white has climbed to. Below this depth the shaft is gone and what is there is the
   // thing coming up; above it, the shaft is still the shaft. It rushes out from the vanishing point
   // and is drawn back into it, so the eruption has a *front* rather than simply being switched on.
@@ -76,7 +77,12 @@ export function drawShaft(ctx, W, H, flow, erupt, px) {
     // the ground and the shaft always meet exactly at the lip whatever the march is doing.
     const top = u < 0 ? 0 : u;
     const s = top === 0 ? MOUTH : scaleAt(top);
-    if (s * Math.min(W, H) < px * 2) break;
+    // Each band on its own grid, finer than the one outside it — see `pxAt`. Mixed grids are safe
+    // here and nowhere else: the rings are drawn outside in and every one of them is a *filled*
+    // rectangle covering the middle of the last, so a band on a finer grid can only ever land on top
+    // of one already painted. There is no seam to leave, because there is no edge between them.
+    const grid = pxAt(top, px, finest);
+    if (s * Math.min(W, H) < grid * 2) break;
 
     let colour;
     if (top >= white) {
@@ -85,12 +91,19 @@ export function drawShaft(ctx, W, H, flow, erupt, px) {
       // Deeper is darker, and every other band is one step darker again. The gloom is what makes it
       // a pit; the alternation is what makes the descent visible, because a shaft that only darkens
       // with depth is a still picture however fast you slide it.
+      //
+      // The base is held one short of the bottom so **the stripe never runs out of room**. Clamped
+      // at the last step instead, both halves of the alternation collapse onto the same black from
+      // about a third of the way down — and with the grid sharpening all the way to the display's
+      // own resolution, that would mean the finest, most detailed part of the whole picture is a
+      // hundred bands of identical black. The pit would get sharper and sharper at nothing. Two
+      // steps apart forever is enough: the deep shaft is a shimmer of ever-finer rings, and how fine
+      // they have become is the thing you are meant to be able to see.
       const stripe = (((j - base) % 2) + 2) % 2;
-      const step = Math.min(SHAFT.length - 1, Math.floor(top / GLOOM) + stripe);
-      colour = SHAFT[step];
+      colour = SHAFT[Math.min(SHAFT.length - 2, Math.floor(top / GLOOM)) + stripe];
     }
     ctx.fillStyle = rgba(colour, 1);
-    fillRing(ctx, cx, cy, halfW * s, halfH * s, px, H, tear);
+    fillRing(ctx, cx, cy, halfW * s, halfH * s, grid, H, tear);
   }
 }
 

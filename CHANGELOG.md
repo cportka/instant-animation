@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [5.1.0] - 2026-08-16
+## [5.2.0] - 2026-08-16
 
 **"Moon Over the Deep" is finished, and a sixth animation begins.** That is the only thing a MAJOR
 bump means here — see `.claude/CLAUDE.md`.
@@ -97,6 +97,75 @@ three:
 - **Quarter-turns, never a fraction of one.** A sprite that rotates smoothly is the single loudest
   way to break this style; 8-bit hardware could flip a tile and nothing else.
 
+### The pit is the one place the grid is allowed to change
+
+Everywhere else in this scene the chunk is a constant — `S / 96`, coarse, the same at the top of the
+frame as at the bottom, because that is what 8-bit means and a picture that quietly gets finer where
+it feels like it is not obeying a constraint, it is decorating one.
+
+**The pit is the exception, and the exception has a reason.** Depth is the only thing this scene has;
+the shaft recedes forever and the whole animation is about what goes down it. So the grid goes down
+with it. Each band is drawn finer than the one outside it — *faster* than perspective alone would
+shrink it — until at the bottom a chunk is **one device pixel**, and the last square of the pit is
+drawn at the display's own resolution rather than the picture's.
+
+It inverts what distance normally does, and that is what makes it read. Everything else in the world
+gets coarser as it goes away; this gets sharper, so the bottom of the pit is the most detailed thing
+on the screen and there is no depth at which looking harder stops rewarding you. The rule that
+nothing is ever half a chunk over still holds exactly: down there the chunk has *become* the screen's
+own grid, so the two rules are the same rule.
+
+Three things follow from it, and each one had to be dealt with:
+
+- **The pit got much deeper.** It used to run out at about twenty-three bands, where a ring became
+  narrower than a chunk. Now the chunk is shrinking faster than the ring, so the two only stop racing
+  when the grid hits the display's resolution and can go no finer — past forty bands, at a 1440×900
+  window on a doubled backing store.
+- **`maxDpr` went from 1 to 2**, and had to. At a capped ratio of one there is no such thing as a
+  device pixel to reach: "max screen resolution" would mean the CSS grid and the deepest square would
+  be as coarse as the lip. The rest of the picture gets something out of it too — a chunk that lands
+  on exact device pixels has harder edges than one the browser has to stretch, and hard edges are the
+  entire style.
+- **The gloom had to stop bottoming out.** The shaft's stripe used to clamp at the last palette step,
+  so from a third of the way down both halves of the alternation collapsed onto the same black. With
+  the grid now sharpening all the way to the display's resolution, that would have meant the finest,
+  most detailed part of the whole picture was a hundred bands of identical black — the pit getting
+  sharper and sharper at nothing. Held one step short instead, the deep shaft is a shimmer of
+  ever-finer rings, and how fine they have become is the thing you are meant to be able to see.
+
+### Seven ways to stop existing
+
+Everything that went down this pit used to end the same way: it reached the depth perspective had
+allotted it and was not drawn on the next frame. That is *correct* — the pit takes things and nothing
+comes back — and it was also the one moment where the picture cheated, because the taking was over
+before you could see it happen. A thing you watched for eight seconds disappeared between two frames.
+
+Each item now comes apart in its own way over the last stretch of its fall, and there are seven so
+that watching two go at once is watching two different events: **glitch**, where rows are read from
+further and further off until the sprite is a stack of unrelated slices; **wave**, a travelling ripple
+that shakes it apart from the crest inward; **data mosh**, where cells stop being drawn where they are
+and start being drawn where they were going, smeared along their own direction of travel; **liquid**,
+every column draining at its own rate; **crumble**, from the corners inward; **collapse**, falling
+into itself faster than perspective is shrinking it; and **shear**, alternate rows sliding apart into
+strips that run off on their own.
+
+They are all **structural**, which they have to be — this scene has no alpha, no dither and sixteen
+flat colours, so nothing here can fade. A thing can only leave by being moved, repeated, or not
+drawn, and that turns out to be a rich enough alphabet because those are exactly the three ways an
+8-bit machine could destroy a sprite too.
+
+Two details that took a second pass. They are **dealt round robin** rather than drawn at random:
+fourteen blocks each picking freely from seven ways leaves two or three of the seven undealt on any
+given seed — implemented, tested, and never once on screen. And **every one of them has to have
+emptied the sprite by the end**, which four of the seven did not: the block stops being drawn at the
+end of its dissolve whatever is left of it, so a way that only gets three quarters through finishes
+in exactly the pop the feature exists to remove. A dissolution that is eighty per cent done looks
+finished in review, so this one is checked rather than eyeballed.
+
+The motes need none of it. A single chunk on a grid that sharpens with depth already shrinks the
+whole way down and leaves as one device pixel — the plainest of the seven ways to go, and the pit
+gives it to the things too small to have any other.
+
 ### When it goes wrong
 
 A glitch is the easiest thing in this gallery to do badly, because the obvious implementation is
@@ -166,11 +235,12 @@ Both required of a new animation, and both built out of this scene's own primiti
 
 ### Two milliseconds
 
-The cheapest scene in the gallery by an order of magnitude — **1.4ms** on a 1440×900 monitor and
-2.4ms with the pit erupting and the raster in pieces, against a 20ms ceiling; 0.5ms and 1.2ms on a
-phone. That is not an optimisation, it is the style: a shaft is twenty rectangles, a mote is one
-chunk, and there is no dither pass anywhere because there is no dither. Tearing it costs a
-rectangle per band per ring, and only while it is torn.
+The cheapest scene in the gallery by an order of magnitude — **1.1ms** on a 1440×900 monitor and
+1.8ms with the pit erupting and the raster in pieces, against a 20ms ceiling; 0.4ms and 0.9ms on a
+phone. That is not an optimisation, it is the style: a shaft is forty-odd rectangles, a mote is one
+chunk, and there is no dither pass anywhere because there is no dither. Doubling the sharpening depth
+nearly doubled the ring count and cost nothing worth measuring; tearing costs a rectangle per band
+per ring, and only while it is torn.
 
 ## [4.1.1] - 2026-08-15
 

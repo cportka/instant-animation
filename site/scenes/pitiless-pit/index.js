@@ -51,8 +51,15 @@ export const meta = {
   transition: 'pit',
   // The nav arrows wear the scene: a chevron of three flat bars, receding.
   chrome: 'pit',
-  // Sixteen colours on a coarse grid. Twice the pixels would be the same picture drawn four times.
-  maxDpr: 1,
+  // **The one scene in the gallery that asks for every pixel the display has**, and the only one
+  // with a reason to. Everywhere else here the grid is a coarse constant, so rendering at twice the
+  // pixels would be the same picture drawn four times over — which is why this said `1` until the
+  // pit learned to sharpen with depth. Now the bottom of the shaft is drawn at *one device pixel* a
+  // chunk, and at a capped ratio of 1 there would be no such thing to reach: "max screen resolution"
+  // would mean the CSS grid, and the deepest square would be as coarse as the lip. The rest of the
+  // picture gets something out of it too — a chunk that lands on exact device pixels has harder
+  // edges than one the browser has to stretch, and hard edges are the entire style.
+  maxDpr: 2,
 };
 
 export function create({ width, height, seed = meta.id }) {
