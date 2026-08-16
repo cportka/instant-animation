@@ -6,10 +6,17 @@
 // **Pitiless is the word the whole thing is built around**, and it is a word about *withholding*.
 // So the design is mostly a list of things this animation refuses to do. The pit has no bottom — the
 // depth scale is a geometric series, so there is always another ring and the drawing stops only when
-// the screen runs out of pixels, never when the pit runs out of pit. The pit has no colour: every
-// structural thing in frame is one desaturated blue-grey, and the only saturated colours belong to
-// the blocks going in. Nothing that goes down ever comes back, nothing lands, nothing piles up, and
-// the pit is not moved by any of it. There is no floor to hit and no sound of hitting it.
+// the screen runs out of pixels, never when the pit runs out of pit. The pit has no colour: the hole
+// and the plane it sits in are one desaturated blue-grey, and every hue in the frame belongs to
+// something the pit has not taken yet — the blocks falling in, and the things crawling on the
+// border toward it. Nothing that goes down ever comes back, nothing lands, nothing piles up, and the
+// pit is not moved by any of it. There is no floor to hit and no sound of hitting it.
+//
+// **The border is not scenery.** It is dark, it is the widest thing in frame, and it is crawling:
+// close to a hundred small forms, no two the same, each generated from a hash rather than picked
+// from a table, each permanently part-way through one of the seven distortions, each taking a minute
+// and a half to reach the edge. A hole with things crawling toward it is not a hole with a
+// distraction beside it — it is a hole with a reason.
 //
 // **And then it gives, and what it gives back is white.** Once every ninety-six seconds everything
 // descending stops — not slows, stops — and for seven and a half seconds pure white pixels pour out
@@ -26,13 +33,14 @@
 // cannot survive that.
 //
 // **8-bit** is a claim about arithmetic. The chunk grid is `S / 96` — nearly twice the moon scene's
-// — the palette is sixteen fixed colours, and there is no dither anywhere and no ramp to walk. Where
-// Moon Over the Deep resolves the space between two steps, this rounds. See `palette.js`.
+// — the palette is thirty-two fixed colours, and there is no dither anywhere and no ramp to walk.
+// Where Moon Over the Deep resolves the space between two steps, this rounds. See `palette.js`.
 
 import { createRng } from '../../lib/rng.js';
 import { pixelFor } from './layout.js';
 import { eruptionAt, flowAt, planClock } from './clock.js';
 import { drawShaft } from './shaft.js';
+import { drawCrawl, planCrawl } from './crawl.js';
 import { drawDescent, planDescent } from './descent.js';
 import { drawFlare } from './flare.js';
 
@@ -66,6 +74,7 @@ export function create({ width, height, seed = meta.id }) {
   const rng = createRng(seed);
   const clock = planClock(rng);
   const descent = planDescent(rng);
+  const crawl = planCrawl(rng);
 
   let W = width;
   let H = height;
@@ -86,6 +95,9 @@ export function create({ width, height, seed = meta.id }) {
       // The shaft first, because everything else is *in* it: the ground, the lip, and the bands
       // marching down — which also carry the white front on their way back up.
       drawShaft(ctx, W, H, flow, erupt, px);
+      // The border, which is crawling. On the flowed clock like everything else, so when the pit
+      // stops taking, the crawling stops with it.
+      drawCrawl(ctx, W, H, flow, crawl, px);
       // Then the traffic, on the flowed clock, which is frozen for the duration of an eruption.
       drawDescent(ctx, W, H, flow, descent, px);
       // ...and last, over everything, whatever is coming out.

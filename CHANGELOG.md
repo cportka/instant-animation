@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [5.2.0] - 2026-08-16
+## [5.3.0] - 2026-08-16
 
 **"Moon Over the Deep" is finished, and a sixth animation begins.** That is the only thing a MAJOR
 bump means here — see `.claude/CLAUDE.md`.
@@ -96,6 +96,77 @@ three:
   shaft left behind long ago.
 - **Quarter-turns, never a fraction of one.** A sprite that rotates smoothly is the single loudest
   way to break this style; 8-bit hardware could flip a tile and nothing else.
+
+### The border crawls
+
+The ground used to be a flat fill with a note saying it was flat on purpose — *not the subject, and
+anything happening on it would be something to look at instead of the hole.* That was true of a
+picture with nothing on the ground. It stopped being true the moment the ground had a population,
+because a hole with things crawling toward it is not a hole with a distraction beside it: it is a
+hole with a **reason**, and the eye still ends up looking down it.
+
+Close to a hundred small forms on the border, and every one of them is:
+
+- **different** — there is no sprite table. A form is generated from a hash and **mirrored down its
+  middle**, and that one line is what separates a creature from a smear: an unmirrored hash over
+  twenty-five cells is noise the eye reads as damage, while folded in half it reads as a thing with a
+  left and a right, and the shapes that come out look designed even though nothing designed them;
+- **changing** — a new form every few seconds, with no transition. The shape is simply different on
+  the next beat, which is what the churn is for: something already coming apart has nowhere to pop
+  *from*;
+- **shifting, distorting, glitching** — continuously, each in its own way, borrowed from the same
+  seven that take things apart at the bottom of the pit. Out here they are applied *partially and
+  forever* rather than run to completion: a crawler sits permanently part-way dissolved, breathing in
+  and out of shape on its own clock. The same alphabet used as a state instead of as an ending;
+- **moving toward the pit**, at a fiftieth of the speed of anything falling. A minute and a half to
+  cross, which is roughly one eruption — and at the lip it is taken like everything else.
+
+They are the one place in the scene where perspective is deliberately **not** applied. The ground is
+a plane seen from straight above, so everything on it is the same distance from the eye and does not
+get smaller for being further out; only what goes over the lip is allowed to shrink.
+
+And they run on the flowed clock. When the pit stops taking, the crawling stops with it.
+
+### More of everything, and thirty-two colours to do it in
+
+The palette was sixteen, which is a C64's. It is thirty-two now, which is a Master System's — and the
+NES could put twenty-five of its fifty-four on screen at once, so the number moved and the constraint
+did not, which is the only part that matters. A fixed table with a size, no blending, no dither, and
+nothing outside it can reach the canvas. A palette that grows whenever something needs a colour is
+not a palette.
+
+The extra sixteen went to eight for the crawlers — eight different hues rather than eight steps of
+one, because the whole point of them is that they are not all the same thing — six more for the
+things falling in, and two more steps of shaft. The things that fall in also doubled their repertoire
+of forms, from six bitmaps to twelve.
+
+The crawlers are pitched deliberately **between** the ground and the blocks: bright enough to be
+legible on the plane, much duller than anything falling. That gap is doing composition work. The
+blocks are events — a thing arrives, falls, is destroyed — and have to stay the loudest colours in
+frame; the crawlers are a *condition*, something the border is simply covered in, and a condition
+that shouts is an event.
+
+### Contrast, and where the foreboding actually comes from
+
+The lip is now the brightest structural thing in the picture and the ground is the darkest, and the
+two of them meeting is most of it. A pale hard rim around a black hole is a different object from a
+grey rim around a grey hole: the eye reads the rim as an edge you could stand on and the dark inside
+it as something that goes down a long way, and it does that on contrast alone without anything being
+drawn.
+
+Below the lip, seven steps each about a third darker than the last, with the hue turning on the way
+down — from a cold steel at the rim through a bruised indigo into a red-violet that is very nearly
+black. Going down is not only getting darker, it is getting *warmer in the wrong way*, which is the
+difference between a dark place and a place you would not go.
+
+**The steps are spaced by area, not by depth**, and that took two failed attempts to work out. A
+ring's area goes as the square of its scale, so bands near the mouth are enormous in pixels and bands
+further down are slivers — spend one palette step per unit of depth and the two brightest steps are
+three quarters of the hole *however steeply the colours themselves fall*. Twice this came out as a
+pale picture frame with a dark stamp in the middle, and twice the fix looked like it should have been
+darker colours. Putting the boundaries at `k ** 1.6` spaces them by roughly equal area instead: the
+first step is a thin bright ring just inside the lip, and each one after is allowed to be deeper
+because there is less and less of it to see.
 
 ### The pit is the one place the grid is allowed to change
 
@@ -235,9 +306,10 @@ Both required of a new animation, and both built out of this scene's own primiti
 
 ### Two milliseconds
 
-The cheapest scene in the gallery by an order of magnitude — **1.1ms** on a 1440×900 monitor and
-1.8ms with the pit erupting and the raster in pieces, against a 20ms ceiling; 0.4ms and 0.9ms on a
-phone. That is not an optimisation, it is the style: a shaft is forty-odd rectangles, a mote is one
+The cheapest scene in the gallery by an order of magnitude — **2.2ms** on a 1440×900 monitor and
+3.1ms with the pit erupting and the raster in pieces, against a 20ms ceiling; 1.1ms and 1.6ms on a
+phone. A hundred crawlers, each of them twenty-five cells asked one at a time whether they exist,
+doubled it and it is still not close to mattering. That is not an optimisation, it is the style: a shaft is forty-odd rectangles, a mote is one
 chunk, and there is no dither pass anywhere because there is no dither. Doubling the sharpening depth
 nearly doubled the ring count and cost nothing worth measuring; tearing costs a rectangle per band
 per ring, and only while it is torn.

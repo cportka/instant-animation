@@ -21,8 +21,22 @@ import { MOUTH, bottomDepth, finestOf, pxAt, scaleAt, snapTo } from './layout.js
 /** How fast the bands slide down, in depths per flowed second. */
 const MARCH = 0.62;
 
-/** How many depths it takes to fall one step down the palette. */
-const GLOOM = 3.0;
+/**
+ * How the shaft walks down its palette — and it is **not** one step per fixed depth.
+ *
+ * A ring's area goes as the square of its scale, so bands near the mouth are enormous in pixels and
+ * bands further down are slivers. Spend one palette step per unit of depth and the two brightest
+ * steps are three quarters of the hole however steeply the colours themselves fall: what you get is
+ * a pale picture frame with a dark stamp in the middle, which is what the first two attempts at this
+ * looked like.
+ *
+ * Putting the boundaries at `k ** 1.6` instead spaces them by roughly equal *area*: the first step
+ * is a thin bright ring just inside the lip, and each one after it is allowed to be deeper because
+ * there is less and less of it to see. The pit is then dark in the same proportion it is dark in,
+ * rather than in the proportion the depth coordinate happens to use.
+ */
+const GLOOM = 0.72;
+const CROWD = 0.625;
 
 /** The shallowest the eruption's white front ever reaches. */
 const THROAT = 6.5;
@@ -34,8 +48,9 @@ export function drawShaft(ctx, W, H, flow, erupt, px) {
   const halfW = W / 2;
   const halfH = H / 2;
 
-  // The ground: the plane the pit is in. Flat, because it is not the subject and anything happening
-  // on it would be something to look at instead of the hole.
+  // The ground: the plane the pit is in, and the darkest thing in the picture. Flat *here* — what
+  // happens on it is `crawl.js`, drawn over the top of this, and it happens on a plain dark field
+  // precisely so the things doing it can be seen.
   ctx.fillStyle = rgba(GROUND, 1);
   ctx.fillRect(0, 0, W, H);
 
@@ -100,7 +115,7 @@ export function drawShaft(ctx, W, H, flow, erupt, px) {
       // steps apart forever is enough: the deep shaft is a shimmer of ever-finer rings, and how fine
       // they have become is the thing you are meant to be able to see.
       const stripe = (((j - base) % 2) + 2) % 2;
-      colour = SHAFT[Math.min(SHAFT.length - 2, Math.floor(top / GLOOM)) + stripe];
+      colour = SHAFT[Math.min(SHAFT.length - 2, Math.floor((top / GLOOM) ** CROWD)) + stripe];
     }
     ctx.fillStyle = rgba(colour, 1);
     fillRing(ctx, cx, cy, halfW * s, halfH * s, grid, H, tear);
