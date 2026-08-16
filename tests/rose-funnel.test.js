@@ -10,6 +10,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createRng } from '../site/lib/rng.js';
+import { GOLD } from '../site/scenes/rose-funnel/palette.js';
+import { create, meta } from '../site/scenes/rose-funnel/index.js';
+import { planCycle } from '../site/scenes/rose-funnel/cycle.js';
+import { planFunnel, vortexAt } from '../site/scenes/rose-funnel/funnel.js';
+import { createRecordingContext } from './helpers/recording-context.mjs';
 import {
   FIX_AT, MEND_BUCKETS, emptyMend, errandOf, pieceKindFor, planHands, stampPiece, swerveAt, tendingAt,
 } from '../site/scenes/rose-funnel/hands.js';
@@ -153,4 +158,111 @@ test('the fix happens at the moment the piece leaves the hand', () => {
   // `FIX_AT` is the phase the hand is credited at, and it is also the phase the piece stops being
   // drawn. If they ever part company the temple heals a beat before or after anyone let go.
   assert.ok(FIX_AT > 0.62 && FIX_AT < 0.82, 'FIX_AT must fall inside the fixing leg of the circuit');
+});
+
+/* --------------------------------------------------------- the two compositions ---- */
+
+// The scene has two arrangements, and they differ by what is standing in front of the storm. The
+// generic suite already checks that they render *differently*; these check that they differ in the
+// three specific ways the composition blocks claim, because "differently" is satisfied by one chunk
+// of one colour moving and would go on passing after any of them quietly stopped working.
+
+const marching = meta.variants[0];
+const alone = meta.variants[1];
+
+test('the storey count is the whole temple, and zero of them is how it is removed', () => {
+  // The second composition does not delete the building's parts one call at a time — it asks for a
+  // building with nothing in it, and every population that depends on the temple sizes itself out
+  // of existence from that one number. If this ever stops being true, removing the temple becomes a
+  // list of things to remember, and the next thing added to the scene will be forgotten.
+  const bays = (storeys) => planCycle(createRng('rose-funnel'), storeys).bays.length;
+  assert.equal(bays(9), 9 * 3 + 1, 'nine storeys is three bays each and the sōrin');
+  assert.equal(bays(0), 1, 'no storeys leaves only the sōrin, which is nothing to damage');
+  assert.equal(marching.ground.storeys, 9);
+  assert.equal(alone.ground.storeys, 0);
+});
+
+test('one composition marches and the other stands', () => {
+  // "Centres the tornado" as a measurement rather than as an adjective: across four minutes the
+  // storm's foot has to stay near the middle in one arrangement and cross most of the frame in the
+  // other. Nearly still rather than pinned — a tornado nailed to the centre line is a diagram —
+  // so the standing one is allowed to wander, just not far.
+  const W = 1440;
+  const H = 900;
+  const spread = (storm) => {
+    const plan = planFunnel(createRng('rose-funnel'), storm);
+    let low = Infinity;
+    let high = -Infinity;
+    for (let t = 0; t < 240; t += 0.5) {
+      const { cx } = vortexAt(W, H, t, plan, 0);
+      low = Math.min(low, cx);
+      high = Math.max(high, cx);
+    }
+    return { swing: (high - low) / W, off: Math.max(Math.abs(low - W / 2), Math.abs(high - W / 2)) / W };
+  };
+
+  const goes = spread(marching.storm);
+  const stays = spread(alone.storm);
+  const dead = spread({ ...alone.storm, march: 0 });
+  assert.ok(goes.swing > 0.45, `the marching storm only crosses ${(goes.swing * 100).toFixed(0)}% of the frame`);
+  assert.ok(stays.swing < goes.swing * 0.4, `the standing storm wanders ${(stays.swing * 100).toFixed(0)}% of the frame`);
+  assert.ok(stays.off < 0.1, `the standing storm gets ${(stays.off * 100).toFixed(0)}% of the frame from centre`);
+  // Nearly still rather than *pinned*, and the difference has to be measurable or it is a comment.
+  // A tornado with the march taken all the way out still leans and snakes, so it is never literally
+  // motionless — the claim is that this composition keeps a march, and the way to check that is to
+  // ask the same plan with the march removed and find it wanders visibly less.
+  assert.ok(
+    stays.swing > dead.swing * 1.15,
+    `the standing storm swings ${(stays.swing * 100).toFixed(1)}% against ${(dead.swing * 100).toFixed(1)}% with no march at all — it is pinned to the centre line, which is a diagram`,
+  );
+});
+
+test('the standing column is wider, because nothing else is left to give it a scale', () => {
+  // With the temple gone there is nothing in frame to measure the storm against but the frame, so a
+  // funnel left the same width reads as smaller. The widening is the composition's, not the clock's:
+  // asked at the same instant, one has to be wider than the other by the declared factor.
+  const wide = planFunnel(createRng('rose-funnel'), alone.storm);
+  const plain = planFunnel(createRng('rose-funnel'), marching.storm);
+  const want = alone.storm.size / marching.storm.size;
+  assert.ok(want > 1.05, 'the second composition declares no widening at all');
+  for (let t = 0; t < 90; t += 3) {
+    for (const up of [0.15, 0.5, 0.9]) {
+      const ratio = vortexAt(1440, 900, t, wide, up).r / vortexAt(1440, 900, t, plain, up).r;
+      assert.ok(
+        Math.abs(ratio - want) < 1e-9,
+        `at t=${t}, up=${up} the column is ${ratio.toFixed(3)}× the marching storm rather than ${want}`,
+      );
+    }
+  }
+});
+
+test('nothing of the temple reaches the frame in the second composition', () => {
+  // The darkest gold is the joinery — the temple's brackets, and the gilt a spirit carries back up
+  // to mend one. Nothing else in the scene draws with it: the storm has no gold, the house's lamps
+  // are two steps brighter, and the sky's cold lobes walk the lapis ramp rather than this one. So it
+  // is the one question that can be asked from outside: *is the building there.* It has to be in
+  // every frame of the first arrangement — the plinth's bracket course is structural, so the temple
+  // is always standing however damaged — and in none of the second.
+  const fillOf = ([r, g, b]) => `set:fillStyle(rgba(${r}, ${g}, ${b}, 1))`;
+  const joinery = fillOf(GOLD[3]);
+  const lamplight = fillOf(GOLD[1]);
+  const paints = (variant, t) => {
+    const recorder = createRecordingContext({ width: 1280, height: 800 });
+    const scene = create({ width: 1280, height: 800, seed: meta.id, variant });
+    scene.draw(recorder.ctx, t, 1 / 60);
+    return recorder.ops;
+  };
+
+  for (const t of [0, 7.3, 11.6, 40, 96.5]) {
+    const withTemple = paints(marching, t);
+    const without = paints(alone, t);
+    assert.ok(withTemple.includes(joinery), `t=${t}: the temple is missing from the composition that has one`);
+    assert.ok(!without.includes(joinery), `t=${t}: the temple is still being drawn in the composition that removed it`);
+    // ...and the little house is still standing, which is what makes this a re-composition rather
+    // than a deletion. Lamplight is drawn by the house and by the workshops out on the treeline and
+    // by nothing else that survives the change, so finding it in the arrangement with no temple in
+    // it means the storm still has a landscape — and one thing in frame with a known size — to be
+    // too big for. A storm alone on an empty plain has nothing to be measured against at all.
+    assert.ok(without.includes(lamplight), `t=${t}: the second composition kept nothing but the storm`);
+  }
 });

@@ -46,21 +46,69 @@ export const meta = {
   transition: 'funnel',
   // The nav arrows wear the scene: a chevron cut out of chunk, in the ramp's hot pink.
   chrome: 'funnel',
+  // ...and re-arranging it is the storm taking the arrangement away: the old composition is pulled
+  // off the frame in chunks that orbit the axis and climb out of the top of the picture.
+  dissolve: 'updraft',
   // The whole scene is snapped to a chunk grid derived from the short edge, so rendering it at
   // twice the pixels produces exactly the same picture with more expensive rectangles.
   maxDpr: 1,
+  /**
+   * Two compositions, and they are a question about what the scene is *about*.
+   *
+   * The first is a storm with something in its way — a temple being taken apart faster than the
+   * hands can heal it, which is the version the brief grew into, and everything in the lower half of
+   * the frame is either the building, what has come off it, or somebody trying to put it back. The
+   * funnel marches across the frame because it has somewhere to be.
+   *
+   * The second takes all of that away and leaves the thing the brief actually asked for: *a
+   * pixelated tornado swirling up reds, pinks and purples*, alone, centred, with nothing to destroy
+   * and nothing to look at but the column. It is not the first one with pieces deleted — a storm on
+   * an empty plain would be a picture with a hole in it. It stands still (the march is nearly off,
+   * not off) and it is **half again as wide**: the temple was what gave the first composition its
+   * scale, and a funnel left the same width on an empty plain reads as *smaller*, because the only
+   * thing left to measure it against is a frame edge it is nowhere near.
+   *
+   * Index 0 is the arrangement every existing link already resolves to.
+   */
+  variants: [
+    {
+      id: 'over-the-temple',
+      title: 'Over the Temple',
+      storm: { march: 1, size: 1, stand: 0.5 },
+      ground: { storeys: 9 },
+    },
+    {
+      id: 'the-column',
+      title: 'The Column',
+      // Barely marching rather than pinned: a tornado nailed to the centre line is a diagram. It
+      // still snakes and leans on its own two slow clocks, and the eighth of a march left keeps it
+      // from ever quite settling on the axis it is standing on.
+      storm: { march: 0.12, size: 1.16, stand: 0.5 },
+      ground: { storeys: 0 },
+    },
+  ],
 };
 
-export function create({ width, height, seed = meta.id }) {
+export function create({ width, height, seed = meta.id, variant = meta.variants[0] }) {
   const rng = createRng(seed);
   // Sky first, so the storm is the same for a given seed however many motes the funnel asks for.
   const sky = planSky(rng);
   const pagoda = planPagoda(rng);
-  const funnel = planFunnel(rng);
+  const funnel = planFunnel(rng, variant.storm);
   // Nine storeys' worth of bays, whatever the frame turns out to hold. The plan cannot depend on the
   // viewport — a resize must not re-roll which parts of the temple the storm has taken — so it is
   // built for the most storeys there can ever be and the shorter frames simply use fewer.
-  const cycle = planCycle(rng, 9);
+  //
+  // A composition with **no** storeys is how the temple is removed, and the storey count does most
+  // of the work on its own: no storeys means no bays, no bays means nothing to damage, nothing to
+  // heal, nothing to come off and nobody to come and put it back — so the debris and the hands size
+  // themselves out of existence from this one number rather than from a flag.
+  //
+  // The building itself still has to be told, because its geometry is not made of bays: a pagoda
+  // with nothing wrong with it is still a pagoda. That is the one thing `standing` gates, and it
+  // gates the two populations that would otherwise be flying pieces to a temple that is not there.
+  const cycle = planCycle(rng, variant.ground.storeys);
+  const standing = variant.ground.storeys > 0;
   const debris = planDebris(rng, cycle.bays.length);
   // The hands need the size of the temple, because every bay is dealt out to one of them and a bay
   // nobody is answerable for would be a hole that never closes.
@@ -90,11 +138,15 @@ export function create({ width, height, seed = meta.id }) {
       // the hidden-surface work and nothing has to be sorted or clipped.
       const R = sizeRef(W, H);
       // The forest and the workshops belong to the ground, so they go down with it — behind the
-      // temple, on the background's coarse grid, where a bigger chunk reads as further away.
+      // temple, on the background's coarse grid, where a bigger chunk reads as further away. They
+      // stand in **both** compositions: they are the land, not the building, and a storm with an
+      // empty green strip under it has nothing left to be tall against.
       drawWorks(ctx, W, H, t, works, px);
       // The little house, always at the storm's foot, coming apart wherever the wind reaches it.
+      // It stays for the same reason — with the temple gone it is the only thing in frame with a
+      // known size, which is the entire job of a house in a landscape.
       drawHouse(ctx, W, H, t, house, funnel, px);
-      drawPagoda(ctx, W, H, t, pagoda, px, R, cycle, funnel, works);
+      if (standing) drawPagoda(ctx, W, H, t, pagoda, px, R, cycle, funnel, works);
       drawFunnel(ctx, W, H, t, funnel);
       // The wind is outside the column, so it goes over it — and the ground litter it has picked up
       // rides the same field, climbing until it is gone.
@@ -103,11 +155,13 @@ export function create({ width, height, seed = meta.id }) {
       // Everything that has come off the building, drawn *after* the storm: it is the nearest thing
       // in the frame, and debris hidden behind the tornado that threw it is the one arrangement that
       // makes no sense from any angle.
-      const places = bayPlaces(W, H, t, pagoda, px, R);
-      drawDebris(ctx, W, H, t, debris, cycle, funnel, px, (bay) => places[cycle.bays.indexOf(bay)]);
-      // ...and the hands last of all, because they are the only thing in the frame that is not being
-      // thrown about by the storm, and they have to be legible against everything that is.
-      drawHands(ctx, W, H, t, works, px, places);
+      if (standing) {
+        const places = bayPlaces(W, H, t, pagoda, px, R);
+        drawDebris(ctx, W, H, t, debris, cycle, funnel, px, (bay) => places[cycle.bays.indexOf(bay)]);
+        // ...and the hands last of all, because they are the only thing in the frame that is not
+        // being thrown about by the storm, and they have to be legible against everything that is.
+        drawHands(ctx, W, H, t, works, px, places);
+      }
       // Last, and additive: the flash has to sit over the funnel, because a strike behind it would
       // be a light source the subject is blocking, and the subject is the brightest thing here.
       drawLightning(ctx, W, H, t, sky);

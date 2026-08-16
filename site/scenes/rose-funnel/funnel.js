@@ -101,13 +101,19 @@ const marchAt = (t) => Math.sin(t * 0.041) * 0.62 + Math.sin(t * 0.017 + 2.3) * 
  * wanders a little and the top wanders more, because the top is in the part of the storm that is
  * actually moving.
  *
+ * The **march** is the only part of that the composition owns. Turned down it is what centres the
+ * storm — and it is turned *down* rather than off, because a tornado pinned to the middle of the
+ * frame is a diagram. The lean and the snake are properties of a tornado and stay whatever the
+ * arrangement is; the march is where it is going, and one composition is about it not going
+ * anywhere.
+ *
  * @param up  0 at the ground, 1 at the cloud
  */
-function axisAt(up, t, W) {
+function axisAt(up, t, W, plan) {
   const lean = Math.sin(t * 0.19) * 0.5 + Math.sin(t * 0.073 + 1.9) * 0.5;
   const snake = noise2(up * 2.4, t * 0.28) - 0.5;
   // The march moves the whole storm; the lean and the snake bend it about wherever that has put it.
-  return W * (0.5 + marchAt(t) * 0.3
+  return W * (plan.stand + marchAt(t) * 0.3 * plan.march
     + lean * 0.07 * up ** 1.4 + snake * 0.11 * up ** 0.8 + Math.sin(t * 0.11) * 0.012);
 }
 
@@ -138,10 +144,19 @@ function radiusAt(up, t, S, plan) {
   return S * flare * swell * bulge * (0.42 + powerAt(t) * 0.78);
 }
 
-export function planFunnel(rng) {
+/**
+ * @param storm  the composition's stance: how far the funnel marches, how wide it stands, and
+ *               which fraction of the frame it marches about
+ */
+export function planFunnel(rng, storm = { march: 1, size: 1, stand: 0.5 }) {
   return {
-    base: rng.range(0.036, 0.052),
-    mouth: rng.range(0.26, 0.34),
+    ...storm,
+    // Widened by the composition rather than by the frame. With the temple gone there is nothing
+    // left in the picture to give the storm a scale, so the storm has to be the thing that is too
+    // big for it — a funnel the same width standing on an empty plain reads as *smaller*, because
+    // the only thing it can now be measured against is the frame edge it is nowhere near.
+    base: rng.range(0.036, 0.052) * storm.size,
+    mouth: rng.range(0.26, 0.34) * storm.size,
     // The funnel carries no debris of its own any more. It used to have a hundred and fifty motes
     // orbiting it, and the moment there was a temple underneath being torn apart, they became the
     // same idea drawn twice — two orbiting populations doing one job, at which point the orbit stops
@@ -219,7 +234,7 @@ export function vortexAt(W, H, t, plan, up) {
   // most of what it does, it does to things it never touches — so everything that asks about the
   // storm gets both numbers: `r` is the body, `wind` is the field, and the field is what does damage
   // at a distance and what drags loose things off the ground and into the column.
-  return { cx: axisAt(up, t, W), r, wind: r * (2.2 + powerAt(t) * 1.4) };
+  return { cx: axisAt(up, t, W, plan), r, wind: r * (2.2 + powerAt(t) * 1.4) };
 }
 
 /**
@@ -298,7 +313,7 @@ export function drawFunnel(ctx, W, H, t, plan) {
     // `up` is 0 at the ground and 1 at the cloud, which is what every profile function here wants:
     // the narrow end is the end touching the ground, and the mouth is up in the storm.
     const up = (groundY - y) / (groundY - topY);
-    const cx = axisAt(up, t, W);
+    const cx = axisAt(up, t, W, plan);
     const r = radiusAt(up, t, R, plan);
     const cols = Math.max(1, Math.round(r / px));
     // The whole column of the funnel turns, and lower rows turn faster.
@@ -336,7 +351,7 @@ export function drawFunnel(ctx, W, H, t, plan) {
  * by everything and shaded by nothing.
  */
 function drawSkirt(ctx, W, H, S, t, plan, px, groundY) {
-  const cx = axisAt(0, t, W);
+  const cx = axisAt(0, t, W, plan);
   const spread = S * (plan.base * 5);
   const rows = 13;
   // Bucketed on the same ramp as everything else rather than filled in one flat tone. A single
