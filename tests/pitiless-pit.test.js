@@ -22,14 +22,15 @@ import { MOUTH, U_EDGE, depthAt, edgeOf, pxAt, scaleAt } from '../site/scenes/pi
 import { WAYS, dissolveCell } from '../site/scenes/pitiless-pit/dissolve.js';
 import { planDescent } from '../site/scenes/pitiless-pit/descent.js';
 import { TEAR_SLIDE, corruptAt, tearAt } from '../site/scenes/pitiless-pit/glitch.js';
-import { FALL, FLARE, GROUND, KERB, MOTE, SHAFT, STREAK } from '../site/scenes/pitiless-pit/palette.js';
+import { CRAWL, FALL, FLARE, GROUND, KERB, MOTE, SHAFT, STREAK } from '../site/scenes/pitiless-pit/palette.js';
+import { planCrawl } from '../site/scenes/pitiless-pit/crawl.js';
 
 const clock = () => planClock(createRng(meta.id));
 
 /** The scene's plans in the order `create()` draws them, so the seeds line up. */
 const plans = () => {
   const rng = createRng(meta.id);
-  return { clock: planClock(rng), descent: planDescent(rng) };
+  return { clock: planClock(rng), descent: planDescent(rng), crawl: planCrawl(rng) };
 };
 
 const VIEWPORTS = [[1440, 900], [1920, 1080], [390, 844], [834, 1194]];
@@ -58,14 +59,19 @@ function frame(W, H, t) {
   return { colours, byColour };
 }
 
-test('the pit is drawn in sixteen colours and never a seventeenth', () => {
+test('the pit is drawn in thirty-two colours and never a thirty-third', () => {
   // 8-bit is a claim about arithmetic, and this is the arithmetic. Counted through the real draw
   // rather than by reading the palette file, because what matters is what reaches the canvas.
+  //
+  // The number moved from sixteen — a C64's whole palette — to thirty-two, which is a Master
+  // System's, when the ground acquired a population that could not all be the same colour. What
+  // matters is that there is still a fixed table with a size, and that nothing outside it can reach
+  // the canvas; a palette that grows whenever something needs a colour is not a palette.
   const declared = new Set();
-  for (const c of [GROUND, KERB, STREAK, MOTE, FLARE, ...SHAFT, ...FALL.flat()]) {
+  for (const c of [GROUND, KERB, STREAK, MOTE, FLARE, ...SHAFT, ...CRAWL, ...FALL.flat()]) {
     declared.add(`rgba(${c[0]}, ${c[1]}, ${c[2]}, 1)`);
   }
-  assert.equal(declared.size, 16, `the palette declares ${declared.size} colours, not sixteen`);
+  assert.equal(declared.size, 32, `the palette declares ${declared.size} colours, not thirty-two`);
 
   const seen = new Set();
   for (const [W, H] of VIEWPORTS) {
@@ -76,7 +82,7 @@ test('the pit is drawn in sixteen colours and never a seventeenth', () => {
   for (const c of seen) {
     assert.ok(declared.has(c), `${c} reached the canvas and is not in the palette`);
   }
-  assert.ok(seen.size <= 16, `${seen.size} colours reached the canvas`);
+  assert.ok(seen.size <= 32, `${seen.size} colours reached the canvas`);
 });
 
 test('white belongs to the eruption and to nothing else', () => {
@@ -386,6 +392,52 @@ test('all seven ways of going are dealt, and every one of them finishes', () => 
       }
     }
   }
+});
+
+test('the border crawls, and everything on it is heading for the pit', () => {
+  // The ground was a flat fill with a note saying it was flat on purpose. It has a population now,
+  // and the population has to keep three promises: it stays *on the border* rather than wandering
+  // over the hole, it is genuinely varied rather than one sprite repeated, and all of it is moving
+  // the same way — inward. A crawler drifting outward would read as the pit letting something go,
+  // which is the one thing this animation never does.
+  const { things } = plans().crawl;
+  assert.ok(things.length > 60, `${things.length} crawlers is a sparse border, not a crawling one`);
+
+  // Varied along every axis it has. Each of these is a proportion rather than a switch, so each can
+  // silently collapse to one value without anything failing.
+  assert.equal(new Set(things.map((c) => c.hue)).size, CRAWL.length, 'not every crawler colour is used');
+  assert.equal(new Set(things.map((c) => c.way)).size, WAYS.length, 'not every way of distorting is out there');
+  assert.ok(new Set(things.map((c) => c.span)).size >= 3, 'the crawlers are all the same size');
+  for (const c of things) {
+    assert.ok(c.speed > 0, 'a crawler that is not moving is scenery');
+    assert.ok(c.churn > 0, 'a crawler that is not distorting is a sprite');
+  }
+
+  // ...and slow. Everything else in this picture crosses in a handful of seconds; if these did too
+  // they would be traffic rather than a condition the border is in.
+  const slowest = Math.max(...things.map((c) => c.speed));
+  assert.ok(1 / slowest > 60, `the fastest crawler crosses in ${(1 / slowest).toFixed(0)}s, which is not a crawl`);
+});
+
+test('nothing crawling ever gets over the lip', () => {
+  // They are on the ground, which is a plane with a hole in it. The pit takes them at the edge; it
+  // does not let them walk out over it. Checked through the real draw, because the arithmetic that
+  // stops them is a single interpolation bound and it would be very easy to point at the mouth.
+  const { byColour } = frame(1440, 900, 41.5);
+  // The lip's outer edge, which is as far in as the ground goes.
+  const inner = 0.672;
+  let checked = 0;
+  for (const c of CRAWL) {
+    for (const r of byColour.get(`rgba(${c[0]}, ${c[1]}, ${c[2]}, 1)`) ?? []) {
+      const [x, y] = r.split(',').map(Number);
+      // Outside the lip's rectangle on at least one axis, allowing a sprite's own width of slack.
+      const outX = Math.abs(x - 720) > 720 * inner - 60;
+      const outY = Math.abs(y - 450) > 450 * inner - 60;
+      assert.ok(outX || outY, `a crawler is at ${x},${y}, which is over the pit rather than beside it`);
+      checked += 1;
+    }
+  }
+  assert.ok(checked > 100, `only ${checked} crawler chunks on screen`);
 });
 
 test('the shaft is a geometric series, so it has no bottom', () => {
