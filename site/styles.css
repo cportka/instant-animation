@@ -252,6 +252,36 @@ body {
   fill: #000000;
 }
 
+/* The `noon` chrome: one chevron cut into three bands, at three grids and in three palettes.
+
+   Every other glyph in this gallery tells the truth about *one* resolution, because the scene it
+   belongs to has one. This scene has nine at a time, so its glyph has to disagree with itself: the
+   outer arms are eight-pixel blocks, the middle steps are four, the tip is two, and each band is a
+   colour out of a different one of the six ramps the square deals from. It is the only chevron here
+   that is not one shape in one grid — which is precisely the claim the animation makes.
+
+   Reading outward from the point, it is also a resolution *ramp*, so the glyph says which way the
+   coarseness runs: fine where the arrow is pointing, coarse where it came from. */
+.nav[data-chrome='noon'] .nav__glyph--noon {
+  display: block;
+}
+
+.nav[data-chrome='noon'] {
+  color: #efa953;
+}
+
+.nav__noon-coarse rect {
+  fill: #c05fd0;
+}
+
+.nav__noon-mid rect {
+  fill: #54c6c0;
+}
+
+.nav__noon-fine rect {
+  fill: currentColor;
+}
+
 /* Two animations on each: the float they always had, which never stops, and `peek`, which runs
    exactly **once**. The chevrons introduce themselves a moment after the page arrives and are then
    never seen again unless you reach for them.
@@ -318,7 +348,8 @@ body {
 .nav[data-chrome='funnel'].nav--down,
 .nav[data-chrome='moon'].nav--down,
 .nav[data-chrome='pit'].nav--down,
-.nav[data-chrome='cut'].nav--down {
+.nav[data-chrome='cut'].nav--down,
+.nav[data-chrome='noon'].nav--down {
   animation-name: float-down-pixel, peek;
 }
 
@@ -326,7 +357,8 @@ body {
 .nav[data-chrome='funnel'].nav--up,
 .nav[data-chrome='moon'].nav--up,
 .nav[data-chrome='pit'].nav--up,
-.nav[data-chrome='cut'].nav--up {
+.nav[data-chrome='cut'].nav--up,
+.nav[data-chrome='noon'].nav--up {
   animation-name: float-up-pixel, peek;
 }
 

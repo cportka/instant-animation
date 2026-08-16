@@ -2,7 +2,7 @@
 
 An instant animation generator. Animate anything you can describe.
 
-**Version:** 6.2.0 · **Live:** https://cportka.github.io/instant-animation/
+**Version:** 7.0.0 · **Live:** https://cportka.github.io/instant-animation/
 
 Describe something. It becomes a hand-drawn canvas animation and joins the gallery. There is no
 text on the site — the animation *is* the page. The only chrome is a soft chevron floating at each
@@ -36,6 +36,7 @@ being re-composed rather than two pictures. Compositions have their own addresse
 
 | Animation | From the description |
 | --- | --- |
+| **The Square at Noon** | *a living pixelated town-square western — detailed wind and dust with tumbleweeds, plants, rare scurrying and crawling desert animals, a wooden town with old-timey facades and swinging bar doors that blow open and closed with the wind, and horses in a stable — not locked to any one bit style, but a variety of pixel sizes, resolutions and colours, extremely psychedelic* |
 | **The Long Cut** | *stark monochromatic black and white — slices towards the camera, falling down and to the side* |
 | **The Pitiless Pit** | *an abstract pitiless pit that goes down — lines from the ground travel down the pit, pixels travel down the pit, blocks and abstract shapes fall in, and every minute or two everything stops and the pit erupts pure white pixels in a great flurry* |
 | **Moon Over the Deep** | *a stark, highly-stylized, 32-bit pixel style full moon over the water with an island in the background, the water gently rolling under a clear night sky, and a faint glow that occasionally comes from deep below* |
@@ -62,6 +63,9 @@ site/
     draw.js           shared geometry and colour helpers
     gallery.js        the rings: which scene an index lands on when you walk off the end,
                       and how an address names a scene and one of its compositions
+    knobs.js          a scene's live parameters: defaults, the bend curve every knob is
+                      shaped with, and the guarantee that a knob is a value and not an event
+    panel.js          the rack of colour knobs itself — pointer, keyboard and reset
 
   effects/            shared animation code — nothing but looks
     vhs.js            tracking bands, shred, chroma split, stuck macroblocks, tape dropouts
@@ -115,7 +119,9 @@ Node 20+. There are no dependencies to install.
 Nothing is written on the page, so the description has to reach a screen reader another way: the
 canvas carries it as its label, and scene changes are announced through a live region. The
 chevrons are real buttons with accessible names. Navigation works from the keyboard (`↑` `↓`
-`Space` `Home` `End`, and `←` `→` between compositions). Where an animation has more than one
+`Home` `End`, and `←` `→` between compositions); `Space` opens the rack of knobs, whose swatches
+carry no text on purpose and so each name themselves to a screen reader instead, and which is
+driven from the arrow keys once one is focused. Where an animation has more than one
 composition the live region says so, and names both the tap and the arrow keys — a tap-only
 affordance is otherwise undiscoverable without sight. Visitors who ask for reduced motion get a still
 frame held at the moment each scene reads best, the chevrons stop bobbing, and the channel change is
@@ -130,7 +136,8 @@ SemVer, with two repo-specific rules:
   `1.0.0` finished *Asleep Among the Stars* and started *Westbound on Grizzly Peak*; `2.0.0`
   finished that one and started *Above the Fog*; `3.0.0` finished that one and started *The Rose
   Funnel*; `4.0.0` finished that one and started *Moon Over the Deep*; `5.0.0` finished that one and
-  started *The Pitiless Pit*. If a bump can't name both, it isn't a MAJOR.
+  started *The Pitiless Pit*; `6.0.0` finished that one and started *The Long Cut*; `7.0.0` finished
+  that one and started *The Square at Noon*. If a bump can't name both, it isn't a MAJOR.
 - **Changes fold into the current version** rather than minting a new number each round, so
   `CHANGELOG.md` describes what the project *is* rather than logging every intermediate state it
   passed through. A new section opens when an animation is finished, not on any other signal —

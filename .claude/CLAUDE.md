@@ -192,6 +192,7 @@ catch yourself about to write the word "tag" in a message to the owner, don't.
   | `4.0.0` | The Rose Funnel | Moon Over the Deep |
   | `5.0.0` | Moon Over the Deep | The Pitiless Pit |
   | `6.0.0` | The Pitiless Pit | The Long Cut |
+  | `7.0.0` | The Long Cut | The Square at Noon |
 
   Add a row when you cut one. If you are about to bump MAJOR and cannot fill in both columns, it
   is not a MAJOR. If you are starting a new animation and are *not* about to bump MAJOR, you have

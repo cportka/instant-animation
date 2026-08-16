@@ -8,6 +8,149 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
+## [7.0.0] - 2026-08-16
+
+**"The Long Cut" is finished, and an eighth animation begins.** That is the only thing a MAJOR bump
+means here — see `.claude/CLAUDE.md`.
+
+### The eighth animation — "The Square at Noon"
+
+From *"a living pixelated town-square western — detailed wind and dust with tumbleweeds, plants,
+rare but sometimes scurrying or crawling through desert animals, a wooden town with old-timey
+facades and swinging bar-doors that blow open and closed with the changes in the wind, horses in a
+stable. This pixelated scene should not be locked to any one bit style but rather use a variety of
+different sizes of pixels and combinations of resolution and colours in order to make things
+extremely psychedelic."*
+
+**The last sentence is the animation and the rest is the subject.** Every other scene in this
+gallery makes exactly one claim about its grid and its palette and then holds it, and that holding
+is most of why each reads as one machine drawing one picture. This one is asked to break it. Broken
+badly it looks like a rendering fault: vary the chunk size per object and some things are blurry,
+vary it per frame and the picture buzzes, vary it at random and the answer to "why does it look like
+that" is "it's broken".
+
+So the variation is **organised into strata**. The frame is cut into nine horizontal bands; each
+band has one grid and one palette all the way across; the boundaries are hard, and they drift.
+
+- **Nine bands, five grids, six palettes.** A still has four resolutions and four colour schemes in
+  it at once, and the town's silhouette runs through all of them unbroken. Nine because fewer reads
+  as *layers of the landscape* — the eye turns a boundary into a horizon and the town ends up
+  standing in four different deserts — and more are too thin to establish a grid before the next one
+  starts. The grids are `[1, 2, 3, 5, 8]` and roughly double, because consecutive sizes cannot be
+  told apart at a glance: a five-pixel chunk beside a six-pixel chunk is one texture with a seam.
+- **Every grid in the frame is a whole multiple of one base chunk.** Not a detail — with unrelated
+  sizes the bands do not line up on any column, and the vertical edges of the town come apart into a
+  staircase of offsets at every boundary. Sharing a base is what lets an awning post be one post all
+  the way up, drawn at four resolutions.
+- **Latched, and staggered.** A band's grid and palette are hashed off the whole number of six-and-a-
+  half-second holds elapsed, so they are decided once and then held — long enough to look at, long
+  enough that the change *is* an event. Re-rolled per frame this scene is static; eased between rolls
+  it is a cross-fade, which is a fourth thing on top of two grids and two palettes and reads as mud.
+  It cuts. And band `n` turns over a fraction of a hold after band `n − 1`, because a whole-frame cut
+  every six seconds is a slide projector and a rolling one is weather.
+- **Colours are taken by *index*, and that is what keeps six palettes from being six pictures.** The
+  sky is ramp step 4 and the ground is step 0 everywhere, so whatever a band deals, the sky is the
+  brightest thing in it and the ground the darkest — a shingle is step 3 wherever it is, so the town
+  holds its shape across a boundary while its colour changes completely. An earlier build rolled each
+  band's ramp by a hashed step or two so two bands on the same palette would still differ. It worked,
+  and it cost the only thing holding the picture together: grounds came out brighter than the sky
+  above them and the square floated off the bottom of the frame.
+
+### One wind, and the resolution is downstream of it
+
+There is exactly one wind in this scene and everything reads it: the dust rides it, the tumbleweeds
+are carried by it, the plants bend in it, the doors answer to it, the animals hide from it — and
+`strata.js` coarsens **every band in the frame** in proportion to it. When a gust arrives the picture
+itself goes blocky. That is the join between the two halves of the brief: the weather and the
+resolution are the same fact, so the psychedelia is not a filter laid over a western, it is what the
+western does when the wind gets up.
+
+- **A gust is an arrival, not a sine.** Four slow waves at periods with no common factor, summed and
+  raised to the power 2.6 — the power is what turns a wobble into a *distribution*. Most of the time
+  the sum is small and the power crushes it to nothing; now and then the waves line up and it goes
+  over one for a few seconds. Measured over half an hour it is under a quarter strength forty-five
+  per cent of the time and over seven tenths for two. Left at power 1 it is a breeze that never drops
+  and there is nothing for a gust to be louder than.
+- **Loose things ride the gust's integral, and the steady term is derived rather than tuned.** A
+  tumbleweed pushed by the gust directly stops dead every time the wind drops, which is what a leaf
+  on a spring does. Integrated, it keeps rolling and merely rolls faster. The integral is a sum of
+  sines over their own rates plus a steady term, and that term has to be **exactly one**: differentiate
+  and you get `RUN · (1 + Σ amp·sin ⁄ Σ amp)`, whose sum is bounded by one, so the travel is
+  non-decreasing everywhere and touches a standstill only when every wave points backwards at once.
+  Any smaller and a lull carries a tumbleweed *uphill* — the first build did, and it is the one
+  motion in this scene you would notice immediately.
+- **The doors answer to the wind's *changes*, which is the word the brief uses.** A door that tracked
+  the gust would sit half open through a steady blow, and that is not what a door does. These are
+  knocked off a rest position by the wind's turbulence with the gust as the amplitude: shut in still
+  air, clattering harder and faster in a gust. The two leaves swing together rather than mirroring —
+  they hang on the same jamb and a gust pushes both the same way — and read as a pair because the
+  near one is drawn over the far one and lags it by a fraction of a second.
+- **The dust is gated on the gust rather than always present.** Three decks at three heights and
+  three speeds, because the eye reads wind as the *shear* between layers and one population at one
+  speed is smoke. The tall haze only exists while it is blowing; ungated, still air was confetti.
+
+### What is standing in it
+
+- **The facades are false, and that is the joke of the architecture.** An old-timey western front is
+  a flat board nailed to the top of a small building to make it look like a big one — the whole
+  street is a set even when it is real — so a building here is a rectangle, a parapet, and a shadowed
+  gap behind the parapet where the actual roof is a foot lower. Three rectangles, and it is the one
+  detail that makes a row of boxes read as a frontier street. The widths come from a short repeating
+  figure rather than from free random numbers, because a street is a rhythm and independent rolls
+  give a bar chart of buildings; the bodies alternate between two ramp steps along the row, which
+  hands every pair of neighbours a hard edge without a seam to draw.
+- **Everything is axis-aligned blocks and nothing else.** Not a style choice: a shape with a diagonal
+  in it comes apart at every band boundary, and the town has to survive being drawn at four
+  resolutions at once or it stops being a town. The one exception is the doors, which take the band
+  their own top edge falls in and commit — cutting a small moving object across a resolution boundary
+  is where the strata stop reading as strata and start reading as a tear.
+- **Horses that are always there, animals that hardly ever are.** Three horses stand in an open
+  stable at one end of the row the way animals stand — weight on three legs, head down, an ear or a
+  tail moving and nothing else. The critters are the opposite and the brief is precise about them:
+  *rare but sometimes*. Something crossing the square every four seconds is a population; something
+  crossing twice a minute is an event, and an event is worth waiting for. A third of the slots come
+  up empty, so the wait is not a metronome either. Lizards scurry — stop, wait, bolt — scorpions
+  crawl and never hurry, jackrabbits go straight through at speed. All four are bitmaps rather than
+  procedural shapes, because an animal is a silhouette you either recognise or you do not, and at
+  eight pixels a leg there is no room to be approximate.
+
+### Its chrome and its channel change
+
+- **`chrome: 'noon'`** — one chevron cut into three bands at three grids, in the sunbleached ramp.
+  The glyph disagrees with itself about its own resolution, which is the scene in a shape small
+  enough to sit in a corner.
+- **`transition: 'noon'`** — the arriving picture is dealt into nine bands, each one dropping to a
+  different resolution and washing through a different palette before it settles, with a hard lit
+  seam travelling the boundary. Built from the scene's own primitive: the band's rows are collapsed
+  by stretching one source row over a block, which is the same downsample the strata do, so the
+  change cannot drift away from the animation it introduces.
+
+### Knobs
+
+Six: `blow`, `strata`, `grain`, `growth`, `heat`, `form`. `strata` is the one the scene is about —
+it pulls the grids *away from one*, so what it adjusts is the **disagreement between bands** rather
+than the overall resolution, and one end of it is a nearly ordinary sunbleached western while the
+other is the same square rendered by four machines that agree about nothing. Overall resolution is
+`grain`'s job, separately. And because the wind is what the resolution is made of, `blow` comes apart
+the picture as well as the dust.
+
+`maxDpr: 1`, deliberately. Rendering at twice the pixels would be the same picture with more
+expensive rectangles — and worse, it would halve the base chunk and stop the fine bands reading as a
+*resolution* at all. The strata only mean anything if the finest one is visibly a grid.
+
+### Tests
+
+`tests/square-at-noon.test.js` — eight, and every one of them guards a failure that looks like a bug
+in the scene rather than in the machinery. The band boundaries never cross at any time under any
+seed, so no stratum is ever inside out; the range walk the shapes use and the point lookup the
+particles use agree about which band a height is in; every palette rises monotonically in luma and
+`inkOf` is the identity on the index, clamped rather than wrapped; every grid at every viewport and
+every knob setting is a whole multiple of the base chunk; a band holds its deal about a hundred and
+sixty-five times in two minutes and no frame ever carries two deals at once; the wind is calm more
+than a third of the time, gusts hard about two per cent of it, and its integral never once runs
+backwards over fifteen minutes; the doors are shut in dead air and swing wide in the roughest gust
+there is; and the scene draws clean at three viewports at all sixty-four corners of its knob space.
+
 ## [6.2.0] - 2026-08-16
 
 **"The Pitiless Pit" is finished, and a seventh animation begins.** That is the only thing a MAJOR
@@ -200,20 +343,20 @@ is exactly its middle; the panel is markup with no words in it; and the space ba
 to the panel rather than to the gallery.
 
 `tests/long-cut.test.js` — eight, each verified to fail on the bug it guards, and its geometric
-invariants are now checked at **every corner of the knob space** rather than only at the default,
-because that is where a slider can silently undo them.
+invariants are checked at **every corner of the knob space** rather than only at the default, because
+that is where a slider can silently undo them. The frame is two colours and no third; nothing is
+drawn off the device pixel grid at 1×, 1.5×, 2× or 3×; the cell is a whole number of device pixels
+however coarse it was asked to be; `scanFill` fills exactly the cells whose centres are inside the
+shape, checked against a brute-force point-in-polygon at four grid sizes; the bore never escapes the
+section, vertices and edges alike, over three hundred slices; a slice paints nothing by the time it
+is culled, at four window shapes; the fall lands on the same place in the frame whatever shape the
+frame is; and every slice on screen is painted, with the two colours alternating down the train.
+
 `tests/rose-funnel.test.js` gains four more for the compositions: the storey count is the whole
 temple and zero of them removes it; one composition marches across the frame and the other stays
 near the middle without being pinned; the standing column is wider by exactly the declared factor at
 every height and instant; and nothing of the temple reaches the frame in the second arrangement
-while the land still does. The frame is two
-colours and no third; nothing is drawn off the device pixel grid at 1×, 1.5×, 2× or 3×; the cell is a
-whole number of device pixels however coarse it was asked to be; `scanFill` fills exactly the cells
-whose centres are inside the shape, checked against a brute-force point-in-polygon at four grid
-sizes; the bore never escapes the section, vertices and edges alike, over three hundred slices; a
-slice paints nothing by the time it is culled, at four window shapes; the fall lands on the same
-place in the frame whatever shape the frame is; and every slice on screen is painted, with the two
-colours alternating down the train.
+while the land still does.
 
 ## [5.3.0] - 2026-08-16
 

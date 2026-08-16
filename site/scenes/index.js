@@ -6,6 +6,7 @@
 //
 // Adding an animation is two edits: drop a scene module in this folder, then add it here.
 
+import * as squareAtNoon from './square-at-noon/index.js';
 import * as longCut from './long-cut/index.js';
 import * as pitilessPit from './pitiless-pit/index.js';
 import * as moonOverTheDeep from './moon-over-the-deep/index.js';
@@ -15,6 +16,7 @@ import * as grizzlyPeak from './grizzly-peak/index.js';
 import * as floatingBed from './floating-bed/index.js';
 
 export const scenes = [
+  squareAtNoon,
   longCut,
   pitilessPit,
   moonOverTheDeep,
