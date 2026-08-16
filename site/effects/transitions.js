@@ -22,7 +22,7 @@ import { bayerOn, block, chunk, hash01, pixelSize, snap } from './pixel.js';
 import { lobe } from './volume.js';
 
 /** Every change a scene may ask for by name. `meta.transition` must be one of these. */
-export const TRANSITIONS = ['tape', 'pixel', 'vapour', 'funnel', 'tide', 'pit', 'cut'];
+export const TRANSITIONS = ['tape', 'pixel', 'vapour', 'funnel', 'tide', 'pit', 'cut', 'noon'];
 
 /** Everything the changes need decided once. The stage owns one of these for the whole gallery. */
 export function makeChannelChange(rng) {
@@ -58,7 +58,68 @@ export function channelChange(kind, ctx, W, H, t, violence, seamY, change, tape 
   else if (kind === 'tide') tideChange(ctx, W, H, t, violence, seamY, tape);
   else if (kind === 'pit') pitChange(ctx, W, H, t, violence, seamY);
   else if (kind === 'cut') cutChange(ctx, W, H, t, violence, seamY, tape);
+  else if (kind === 'noon') noonChange(ctx, W, H, t, violence, seamY, tape);
   else tapeChange(ctx, W, H, t, violence, seamY, change, tape);
+}
+
+/* ------------------------------------------------------------------ noon ---- */
+
+/** The palettes the square deals from, one flat colour each. The scene's own six ramps, at step 3. */
+const NOON = ['#efa953', '#e4614e', '#c3e34a', '#c05fd0', '#54c6c0', '#e8761f'];
+
+/** How many bands the frame is dealt into — the same nine the scene cuts itself into. */
+const NOON_BANDS = 9;
+
+/**
+ * The `noon` change: the picture is dealt into strata and each one loses its resolution.
+ *
+ * *The Square at Noon* is the one animation in this gallery that refuses to agree with itself about
+ * what a pixel is: nine horizontal bands, each with its own grid and its own palette, all in the
+ * same frame. So the change is that happening **to the picture you were already looking at**. The
+ * frame is cut into the same nine bands, each one drops to its own resolution, and each one is
+ * washed toward a different one of the scene's six ramps — so what you watch is a photograph being
+ * argued into strata, and the animation that arrives is already the argument.
+ *
+ * The resolution loss is done by **stretching one source row over a block of them**, which is a
+ * genuine downsample rather than an overlay: the band really is drawn at a fraction of its own
+ * vertical resolution, and the bigger the block the less of the original survives. Cheap, too — a
+ * band costs one `drawImage` per block row rather than one per block.
+ */
+function noonChange(ctx, W, H, t, violence, seamY, tape) {
+  const scale = deviceScale(ctx, W, H);
+  const source = tape ? tape.source : ctx.canvas;
+  // Held, so the deal changes on a beat rather than boiling. The scene's own bands do the same.
+  const beat = Math.floor(t * 3);
+
+  for (let n = 0; n < NOON_BANDS; n += 1) {
+    const top = Math.round((n / NOON_BANDS) * H);
+    const bottom = Math.round(((n + 1) / NOON_BANDS) * H);
+    const deal = hash01(n * 5.7 + beat * 1.31);
+    // Every band gets a different grid, and every grid coarsens with the move. A band that stayed
+    // fine would read as the one part of the frame that had not been dealt yet.
+    const block = Math.max(1, Math.round((1 + deal * 7) * violence * (H / 90)));
+    if (block > 1) {
+      for (let y = top; y < bottom; y += block) {
+        const height = Math.min(block, bottom - y);
+        ctx.drawImage(
+          source,
+          0, Math.round(y * scale.sy), Math.max(1, Math.round(W * scale.sx)), 1,
+          0, y, W, height,
+        );
+      }
+    }
+    // ...and its palette. Flat, hard-edged, and stronger the further into the move — by the middle
+    // the frame is nine colours in nine bands, which is the scene's opening statement about itself.
+    ctx.fillStyle = NOON[Math.floor(hash01(n * 9.13 + beat * 2.7) * NOON.length) % NOON.length];
+    ctx.globalAlpha = clamp(violence * (0.2 + deal * 0.55), 0, 0.92);
+    ctx.fillRect(0, top, W, bottom - top);
+    ctx.globalAlpha = 1;
+  }
+
+  // The seam wears the scene as well: one hard bar of the brightest thing the desert has.
+  const bar = Math.max(2, Math.round(H * 0.006 * (1 + violence * 3)));
+  ctx.fillStyle = '#ffe6a8';
+  ctx.fillRect(0, Math.round(seamY - bar / 2), W, bar);
 }
 
 /* ------------------------------------------------------------------- cut ---- */
