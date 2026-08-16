@@ -10,6 +10,7 @@
 // few kilobytes and renders identically in a browser and in the headless render tests.
 
 import { createRng } from '../../lib/rng.js';
+import { bend, knobsFor } from '../../lib/knobs.js';
 import {
   TAU,
   clamp,
@@ -70,6 +71,19 @@ export const meta = {
   // four times the pixels buys nothing a scene this deliberately lo-fi wants — on a high-DPI
   // display the softness the upscale adds is the right look anyway.
   maxDpr: 1,
+  /**
+   * Five knobs. `havoc` is the tape — every artefact this scene finishes on at once, from none of
+   * them to a picture barely holding together — and `form` is the two things in the frame with a
+   * size: the bed and the black hole. Turning it makes a small bed beside a wide hole or a big bed
+   * beside a pinprick, which is a question about what the picture is *of*.
+   */
+  knobs: [
+    { id: 'drift', colour: '#4d8bff' },
+    { id: 'swarm', colour: '#3fd6d0' },
+    { id: 'glow', colour: '#ffe9a8' },
+    { id: 'havoc', colour: '#ff5544' },
+    { id: 'form', colour: '#ff4fa3' },
+  ],
 };
 
 // The bed is ~714 units long and is scaled against the viewport's short edge, so the larger the
@@ -120,8 +134,9 @@ const SKIN_SHADE = '#6d3a52';
 // Wireframe solids, in the order the sleeper exhales them.
 const ECHO_SHAPES = [3, 4, 0, 6, 5];
 
-export function create({ width, height, seed = meta.id, tape = null }) {
+export function create({ width, height, seed = meta.id, tape = null, knobs }) {
   const rng = createRng(seed);
+  const K = knobsFor(meta, knobs);
 
   // Star positions live in normalised space so a resize never reshuffles the sky.
   const layers = [
@@ -219,16 +234,23 @@ export function create({ width, height, seed = meta.id, tape = null }) {
     },
 
     draw(ctx, t) {
-      // Minutes-long periods, not seconds: the bed is adrift, not bobbing.
-      const driftX = wave(t, 97, 0.4) * 0.055 + wave(t, 53, 2.2) * 0.022;
-      const driftY = wave(t, 71, 1.1) * 0.038 + wave(t, 41, 0.3) * 0.014;
+      // The knobs. Read live every frame and never kept, so putting one back puts the picture back.
+      const adrift = bend(K.drift, 0.1, 1, 3.6);
+      const starlight = bend(K.swarm, 0.06, 1, 1);
+      const blaze = bend(K.glow, 0.25, 1, 2.4);
+      const damage = bend(K.havoc, 0, 1, 2.6);
+      const bedSize = bend(K.form, 0.4, 1, 2.2);
 
-      const hole = holeGeometry(W, H);
+      // Minutes-long periods, not seconds: the bed is adrift, not bobbing.
+      const driftX = (wave(t, 97, 0.4) * 0.055 + wave(t, 53, 2.2) * 0.022) * adrift;
+      const driftY = (wave(t, 71, 1.1) * 0.038 + wave(t, 41, 0.3) * 0.014) * adrift;
+
+      const hole = holeGeometry(W, H, bend(K.form, 0.35, 1, 1.9));
 
       drawVoid(ctx, W, H);
       drawHaze(ctx, W, H, t, haze, clouds);
       drawGalacticBand(ctx, W, H, bandStars, dustLanes);
-      drawStars(ctx, W, H, t, layers, driftX, driftY, hole);
+      drawStars(ctx, W, H, t, layers, driftX, driftY, hole, starlight, bend(K.swarm, 0.8, 1, 1.8));
       drawStringArt(ctx, W, H, t, stringArt);
       drawShootingStar(ctx, W, H, t, shooters);
       // The accretion disc goes down first, then the whole pocket — background *and* disc — is
@@ -240,7 +262,7 @@ export function create({ width, height, seed = meta.id, tape = null }) {
       drawHorizon(ctx, t, hole);
       drawNeutronBinary(ctx, W, H, t);
 
-      const scale = Math.min(W, H) * BED_SCALE;
+      const scale = Math.min(W, H) * BED_SCALE * bedSize;
       const bedX = W * (0.34 + driftX);
       const bedY = H * (0.37 + driftY);
       // A tumble so slow you only notice it by looking away and back.
@@ -263,7 +285,7 @@ export function create({ width, height, seed = meta.id, tape = null }) {
       ctx.translate(bedX, bedY);
       ctx.scale(scale, scale);
       // The one warm thing in the frame, and it is very nearly nothing.
-      glow(ctx, -170, -70, 900, [255, 150, 190], 0.07, 0.018);
+      glow(ctx, -170, -70, 900 * blaze, [255, 150, 190], Math.min(1, 0.07 * blaze), Math.min(1, 0.018 * blaze));
       ctx.rotate(tumble);
       ctx.save();
       ctx.scale(1, flattened);
@@ -299,7 +321,10 @@ export function create({ width, height, seed = meta.id, tape = null }) {
       // Tape last, over everything — including the sleeper. Ambient damage runs the whole time;
       // on top of it, an irregular schedule of events, most of them small and one every minute or
       // so an order of magnitude worse, with real silences in between.
-      const chaos = damageAt(t, DAMAGE_SEED);
+      // Scaled by the `havoc` knob at its source, so every artefact downstream — the shreds, the
+      // smears, the dropouts, the chroma split and the grain, which all read this one number —
+      // moves together. At zero the tape is clean; there is no other way to reach that.
+      const chaos = damageAt(t, DAMAGE_SEED) * damage;
       const wrecked = chaos > 4; // the events that used to be the surge
 
       // Ambient damage stays readable; an event is where it goes to pieces, and a big one is where
@@ -490,7 +515,7 @@ function drawGalacticBand(ctx, W, H, bandStars, dustLanes) {
   ctx.restore();
 }
 
-function drawStars(ctx, W, H, t, layers, driftX, driftY, hole) {
+function drawStars(ctx, W, H, t, layers, driftX, driftY, hole, swarm = 1, blaze = 1) {
   // Batched by colour and by a coarse alpha step: ~900 stars become a few dozen fills instead of
   // ~900. Individually filling each one is the single most expensive thing the scene does, and the
   // banding from quantising alpha to 1/8ths is invisible at these sizes.
@@ -500,10 +525,12 @@ function drawStars(ctx, W, H, t, layers, driftX, driftY, hole) {
   for (const layer of layers) {
     const dx = driftX * layer.depth;
     const dy = driftY * layer.depth;
-    for (const star of layer.stars) {
+    const lit = Math.round(layer.stars.length * swarm);
+    for (let nth = 0; nth < lit; nth += 1) {
+      const star = layer.stars[nth];
       let x = wrap01(star.x + dx) * W;
       let y = wrap01(star.y + dy) * H;
-      let alpha = clamp(star.alpha * (0.88 + 0.12 * Math.sin(t * star.twinkle + star.phase)), 0, 1);
+      let alpha = clamp(star.alpha * blaze * (0.88 + 0.12 * Math.sin(t * star.twinkle + star.phase)), 0, 1);
 
       // Anything close to the hole gets pushed outward and brightened — a cheap stand-in for
       // gravitational lensing that crowds stars into a ring instead of swallowing them.
@@ -557,9 +584,9 @@ function drawStars(ctx, W, H, t, layers, driftX, driftY, hole) {
 
 /* --------------------------------------------------------- black hole ---- */
 
-function holeGeometry(W, H) {
+function holeGeometry(W, H, size = 1) {
   const m = Math.min(W, H);
-  const shadow = m * 0.037;
+  const shadow = m * 0.037 * size;
   return {
     cx: W * BLACK_HOLE.x,
     cy: H * BLACK_HOLE.y,

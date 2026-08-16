@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [6.1.0] - 2026-08-16
+## [6.2.0] - 2026-08-16
 
 **"The Pitiless Pit" is finished, and a seventh animation begins.** That is the only thing a MAJOR
 bump means here — see `.claude/CLAUDE.md`.
@@ -145,9 +145,63 @@ holding it whole while it twists; this one **picks it up**. What gives way first
 the column, so it reads as suction rather than as decay, and the pieces are six chunks across so
 there is still something recognisable on them as they are carried off.
 
+### Knobs: a live hand on every animation
+
+Double-tap the picture, or press space, and a rack of four to ten scene-specific knobs comes up.
+Turning one changes the animation as it runs.
+
+**A knob is not an event, and the whole architecture rests on that.** Every scene here is a pure
+function of `t` — which is what lets the render tests draw eight timestamps out of order, lets the
+stage hand a fresh instance somebody else's clock during a channel change, and makes a poster frame
+possible at all. The obvious way to build a panel is to let a slider *do* something, and the moment a
+knob applies an impulse the scene has a history and every one of those stops being true. So a scene
+is now a pure function of `t` **and of its knobs**, both constant for the duration of a frame. Turn
+one and the same clock gives a different picture; turn it back and you get the old one exactly, bit
+for bit — which is also what makes the reset a real answer rather than an approximation of one.
+
+- **`bend(v, lo, mid, hi)` is the whole helper.** A knob's middle is the scene as it shipped, and its
+  two halves interpolate separately, so they can mean different things. A knob that drives four
+  parameters can push two of them up and two down on the way to one end and do something else on the
+  way to the other — which is what makes six knobs worth more than six sliders: each is a *direction
+  the picture can be pushed in*, not a parameter it happens to contain. *The Long Cut*'s `form` grows
+  the column while pulling its vertex range in, so one end is a small round shaft and the other a
+  huge spiked one; *Above the Fog*'s `veil` raises the fog's opacity while shrinking every lobe, so
+  one end is a thin wide haze and the other a boil of small dense masses.
+- **Colour is the only label, and it is a vocabulary.** No words, no numbers, no units — the things
+  these move do not have names anybody would recognise, and "crowd" is an exponent on a palette-step
+  boundary. What a knob does is visible the instant you move it. The same swatch means the same kind
+  of gesture in every panel: amber is pace, green is resolution, cyan is how many, magenta is form,
+  red is damage, pale is light. The accessible name is a separate question and is answered
+  separately, with an `aria-label` on every knob.
+- **A knob may not scale the master clock.** *The Long Cut*'s slices are indexed by `k - t*RATE`, so
+  a knob on `RATE` would move the train by `t*dRATE` — eighty slices at four minutes in — and the
+  whole picture would teleport the instant it was touched. `GAP` gives the same apparent speed by
+  changing how much world there is between slices, continuously, without touching the phase. The
+  same rule applies to every epoch and latch clock in the gallery.
+- **And a knob may not break the scene it is adjusting.** *The Long Cut*'s slices leave the frame by
+  outrunning their own radius; `form` at full makes a section nearly twice the width the fall was
+  chosen against, so the fall is now measured in **section widths** and the `fall` knob is not
+  allowed to shorten it — its lower half changes *when* the drift is spent instead. Likewise *Moon
+  Over the Deep*'s chunk budget moves with its `grain` knob rather than being overridden by it: a
+  finer sea is a knob's business, a phone drawing five times the chunks is not.
+
+The space bar used to travel the gallery, which four other gestures already did; the panel had no
+keyboard route at all, so the key moved. A single tap still re-composes, held back by a quarter of a
+second so a double tap does not re-arrange the picture on its way into the panel — and only on the
+scenes that have more than one arrangement, so nothing else waits.
+
 ### Tests
 
-`tests/long-cut.test.js` — eight, each verified to fail on the bug it guards.
+`tests/knobs.test.js` — eight. Every animation declares four to ten well-formed knobs and no two
+scenes disagree about what a colour means; the panel at its defaults is the artwork *exactly*; every
+knob moves the picture at **both** ends; a knob turned and turned back gives the same frame op for
+op; a scene handed a bag with a knob missing fills it in rather than drawing `NaN`; `bend`'s middle
+is exactly its middle; the panel is markup with no words in it; and the space bar and double tap go
+to the panel rather than to the gallery.
+
+`tests/long-cut.test.js` — eight, each verified to fail on the bug it guards, and its geometric
+invariants are now checked at **every corner of the knob space** rather than only at the default,
+because that is where a slider can silently undo them.
 `tests/rose-funnel.test.js` gains four more for the compositions: the storey count is the whole
 temple and zero of them removes it; one composition marches across the frame and the other stays
 near the middle without being pinned; the standing column is wider by exactly the declared factor at

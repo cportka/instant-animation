@@ -67,7 +67,9 @@ export function moonAt(W, H, plan) {
   return {
     cx: plan.at * W,
     cy: plan.high * H,
-    r: Math.min(W, H) * 0.115,
+    r: Math.min(W, H) * 0.115 * (plan.size ?? 1),
+    // Carried through so the sky's glare and the limb's own haze answer to one number.
+    haze: plan.haze ?? 1,
   };
 }
 
@@ -164,8 +166,9 @@ export function drawMoon(ctx, W, H, t, plan, px) {
  */
 export function glareAt(moon, x, y) {
   const d = Math.hypot(x - moon.cx, y - moon.cy) / moon.r;
-  if (d >= GLARE_REACH) return 0;
-  const near = d <= 1 ? 1 : (GLARE_REACH - d) / (GLARE_REACH - 1);
+  const far = GLARE_REACH * (moon.haze ?? 1);
+  if (d >= far) return 0;
+  const near = d <= 1 ? 1 : (far - d) / (far - 1);
   // Weighted toward the disc, but gently — the exponent is what decides how much of the reach is
   // spent near nothing, and pushed hard it re-creates the steep gradient the wide reach was for.
   return near ** 2.1;

@@ -38,8 +38,9 @@
 // and nowhere else, without a single test of what is underneath.
 
 import { INK, VOID, cellFor, scanFill, speck } from '../../effects/onebit.js';
-import { SIDES, boreAt, sectionAt } from './solid.js';
-import { placeAt, trainAt } from './train.js';
+import { bend, knobsFor } from '../../lib/knobs.js';
+import { SIDES, boreAt, sectionAt, tuneSolid } from './solid.js';
+import { placeAt, trainAt, tuneTrain } from './train.js';
 
 /** How many cells across the short edge. Coarse enough that every edge is visibly a staircase. */
 const ACROSS = 140;
@@ -48,8 +49,11 @@ const ACROSS = 140;
 const RIM = 1.35;
 const RIM_CAP = 0.34;
 
-export function planCut(rng) {
+export function planCut(rng, meta, knobs) {
   return {
+    // The live bag the panel writes into. Read every frame and never remembered, so the scene stays
+    // a pure function of `t` *and* of these — turn a knob back and the picture comes back exactly.
+    K: knobsFor(meta, knobs),
     // Where along the column this particular run came in. The solid is infinite in both directions
     // and entirely determined by the slice index, so a seed has exactly one thing to decide: which
     // part of it you are looking at. Fractional on purpose — the shape functions are smooth in `k`,
@@ -67,8 +71,15 @@ export function planCut(rng) {
 }
 
 export function drawCut(ctx, W, H, t, plan) {
-  const cell = cellFor(ctx, W, H, ACROSS);
-  const { travel, near, far } = trainAt(t);
+  const { K } = plan;
+  // Everything the knobs decide, worked out once for the whole frame. A knob is part of the question
+  // the scene is being asked, not an event, so it is read here and is constant for every slice in
+  // the frame — which is what keeps the picture reproducible from `t` and the panel alone.
+  const solid = tuneSolid(K, bend);
+  const rails = tuneTrain(K, bend, solid);
+  const cell = cellFor(ctx, W, H, bend(K.grain, 44, ACROSS, 330));
+  const rimAt = bend(K.grain, 2.6, RIM, 0.75);
+  const { travel, near, far } = trainAt(t, rails);
   const { section, outer, bore, halo, pupil, at } = plan;
   const body = [outer, bore];
   // The keyline is the *whole* silhouette, grown, and the body is then painted over the middle of it
@@ -89,7 +100,7 @@ export function drawCut(ctx, W, H, t, plan) {
 
   for (let k = far; k >= near; k -= 1) {
     const depth = k - travel;
-    placeAt(k, depth, W, H, at);
+    placeAt(k, depth, W, H, at, rails);
     const cx = at[0];
     const cy = at[1];
     const scale = at[2];
@@ -98,8 +109,8 @@ export function drawCut(ctx, W, H, t, plan) {
     // units around the slice's own centre and projected here, which is the whole of the camera: one
     // multiply and one add, because a slice is flat and square to the eye and has no perspective of
     // its own to work out.
-    sectionAt(k + plan.grain, section);
-    boreAt(k + plan.grain, section, bore);
+    sectionAt(k + plan.grain, section, solid);
+    boreAt(k + plan.grain, section, bore, solid);
 
     let left = Infinity;
     let right = -Infinity;
@@ -123,7 +134,7 @@ export function drawCut(ctx, W, H, t, plan) {
 
     // The keyline, in screen pixels and capped at a third of the slice — so it is a hairline on the
     // near sections and nearly all of the far ones, but never swallows the shape it is describing.
-    const rim = Math.min(cell * RIM, reach * RIM_CAP);
+    const rim = Math.min(cell * rimAt, reach * RIM_CAP);
     for (let i = 0; i < SIDES * 2; i += 2) {
       const ox = outer[i] - cx;
       const oy = outer[i + 1] - cy;

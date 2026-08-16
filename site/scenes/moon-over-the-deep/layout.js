@@ -61,14 +61,20 @@ const CHUNK_BUDGET = 30000;
  * not degrade — it **oscillates**, and the picture visibly changes resolution every few seconds for
  * no reason the viewer can see. Staying inside a budget is what keeps the stage's hand off the dial.
  */
-export function pixelFor(W, H) {
-  let px = Math.max(2, Math.round(Math.min(W, H) / 175));
-  while (px < 24 && waterChunks(W, H, px) > CHUNK_BUDGET) px += 1;
+export function pixelFor(W, H, grain = 1) {
+  let px = Math.max(2, Math.round(Math.min(W, H) / (175 * grain)));
+  // The budget still applies whatever a knob asks for — it **moves** with the knob rather than being
+  // overridden by it. Asking for a finer sea is a knob's business; a phone quietly drawing five
+  // times the chunks because somebody dragged one is not, and an unbounded grain would walk straight
+  // into the failure this ceiling exists for: a scene expensive enough to trip the stage's quality
+  // drop, then cheap enough at the lower resolution to restore, forever.
+  const budget = CHUNK_BUDGET * Math.min(2.4, Math.max(0.5, grain * grain));
+  while (px < 24 && waterChunks(W, H, px) > budget) px += 1;
   return px;
 }
 
 /** ...and the grid the sky is drawn on: three chunks to the water's one. */
-export const backPixel = (px) => px * 3;
+export const backPixel = (px, coarse = 3) => Math.max(px, Math.round(px * coarse));
 
 /**
  * **The scene in one function.** Pick a ramp step, given a continuous position along the ramp.

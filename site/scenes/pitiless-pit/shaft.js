@@ -41,7 +41,7 @@ const CROWD = 0.625;
 /** The shallowest the eruption's white front ever reaches. */
 const THROAT = 6.5;
 
-export function drawShaft(ctx, W, H, flow, erupt, px) {
+export function drawShaft(ctx, W, H, flow, erupt, px, tune) {
   const finest = finestOf(ctx, W);
   const cx = snapTo(W / 2, px);
   const cy = snapTo(H / 2, px);
@@ -62,7 +62,7 @@ export function drawShaft(ctx, W, H, flow, erupt, px) {
   // pit, not the window you are looking at it through.
   const surge = erupt.on ? surgeAt(erupt.age) : 0;
   const tear = surge > 0
-    ? (y) => tearAt(y, erupt.age, H, TEAR_SLIDE * surge, px)
+    ? (y) => tearAt(y, erupt.age, H, TEAR_SLIDE * surge * tune.havoc, px)
     : null;
 
   const kerb = scaleAt(-0.55);
@@ -80,9 +80,9 @@ export function drawShaft(ctx, W, H, flow, erupt, px) {
   // are the actual event — are white on white and cannot be seen at all. Held to a throat a third of
   // the way down, it reads as what it is: a light too far away to make out, and everything between
   // you and it thrown up in front of it.
-  const white = erupt.on ? deepest - surge * (deepest - THROAT) : Infinity;
+  const white = erupt.on ? deepest - surge * (deepest - tune.throat) : Infinity;
 
-  const march = flow * MARCH;
+  const march = flow * MARCH * tune.pace;
   const base = Math.floor(march);
   const slip = march - base;
 
@@ -96,7 +96,7 @@ export function drawShaft(ctx, W, H, flow, erupt, px) {
     // here and nowhere else: the rings are drawn outside in and every one of them is a *filled*
     // rectangle covering the middle of the last, so a band on a finer grid can only ever land on top
     // of one already painted. There is no seam to leave, because there is no edge between them.
-    const grid = pxAt(top, px, finest);
+    const grid = pxAt(top, px, finest, tune.sharpen);
     if (s * Math.min(W, H) < grid * 2) break;
 
     let colour;
@@ -115,7 +115,7 @@ export function drawShaft(ctx, W, H, flow, erupt, px) {
       // steps apart forever is enough: the deep shaft is a shimmer of ever-finer rings, and how fine
       // they have become is the thing you are meant to be able to see.
       const stripe = (((j - base) % 2) + 2) % 2;
-      colour = SHAFT[Math.min(SHAFT.length - 2, Math.floor((top / GLOOM) ** CROWD)) + stripe];
+      colour = SHAFT[Math.min(SHAFT.length - 2, Math.floor((top / tune.gloom) ** tune.crowd)) + stripe];
     }
     ctx.fillStyle = rgba(colour, 1);
     fillRing(ctx, cx, cy, halfW * s, halfH * s, grid, H, tear);

@@ -9,6 +9,8 @@
 
 import { scenes } from './scenes/index.js';
 import { formatAddress, parseAddress, wrapIndex } from './lib/gallery.js';
+import { makeKnobs } from './lib/knobs.js';
+import { createPanel } from './lib/panel.js';
 import { createStage } from './lib/stage.js';
 
 // One wheel gesture should move one animation, not fifty.
@@ -22,6 +24,12 @@ const TAP_SLOP = 10;
 // ...and how briefly. A still finger held past this is a long-press — a selection or callout
 // gesture the platform owns — and quietly re-arranging the picture underneath it is a surprise.
 const TAP_MS = 500;
+// How long a tap waits to find out whether it was the first half of a double one. A single tap
+// re-composes and a double opens the panel, so the first of a pair has to be held back or every
+// visit to the panel also re-arranges the picture on the way in. Well under the threshold where a
+// deliberate action starts to feel unanswered, and invisible next to the second of dissolve it is
+// delaying. Scenes with only one composition have nothing to defer and do not wait at all.
+const DOUBLE_MS = 260;
 
 const canvas = document.getElementById('stage');
 const navUp = document.getElementById('nav-up');
@@ -44,6 +52,26 @@ const chosen = new Map();
 let locked = false;
 let lockTimer = 0;
 let wheelTravel = 0;
+let tapTimer = 0;
+
+// Where every scene's knobs are kept, one live bag each. Kept **per scene and for the whole visit**
+// for the same reason the chosen composition is: having the gallery forget a setting the moment you
+// look at something else would make moving it feel like it did not count. The bag is mutated in
+// place by the panel and read by the scene, so a knob changes the next frame without re-mounting —
+// and re-mounting would restart the clock, which is not what a knob does.
+const tuning = new Map();
+const knobsOf = (scene) => {
+  if (!tuning.has(scene.meta.id)) tuning.set(scene.meta.id, makeKnobs(scene.meta));
+  return tuning.get(scene.meta.id);
+};
+
+const panel = createPanel(
+  document.getElementById('knobs'),
+  document.getElementById('knobs-reset'),
+  // A still frame has no loop to repaint it, so a knob turned under reduced motion would do nothing
+  // visible at all until something else happened to redraw.
+  () => stage.repaint(),
+);
 
 /* -------------------------------------------------------------- scene -- */
 
@@ -85,8 +113,13 @@ function show(index, { direction, updateHash = true, variant, dissolving = false
   // Moving between animations pushes; moving between compositions of one dissolves in place. They
   // are different events and they have to look different — a push says "you have travelled" about a
   // picture that has not moved anywhere.
-  if (dissolving) stage.recompose(scene, variants?.[pick]);
-  else stage.mount(scene, { direction, variant: variants?.[pick] });
+  // The rack belongs to the artwork, so it is restocked with the scene — and with that scene's own
+  // values, which is what makes leaving and coming back a return rather than a reset.
+  const knobs = knobsOf(scene);
+  panel.stock(scene.meta, knobs);
+
+  if (dissolving) stage.recompose(scene, variants?.[pick], knobs);
+  else stage.mount(scene, { direction, variant: variants?.[pick], knobs });
 }
 
 /** Hold off further input until the channel change has finished, so it can't be cut in half. */
@@ -130,10 +163,20 @@ window.addEventListener('keydown', (event) => {
   switch (event.key) {
     case 'ArrowDown':
     case 'PageDown':
+      event.preventDefault();
+      travel(1);
+      break;
+    // The space bar opens the knobs. It used to travel the gallery, which four other gestures
+    // already do — the arrows, page keys, the wheel, a swipe and both chevrons — while the panel
+    // had no keyboard route at all. A key that duplicates five others is worth more spent on the
+    // thing that has none.
     case ' ':
     case 'Spacebar':
       event.preventDefault();
-      travel(1);
+      panel.toggle();
+      break;
+    case 'Escape':
+      panel.close();
       break;
     case 'ArrowUp':
     case 'PageUp':
@@ -209,10 +252,26 @@ canvas.addEventListener(
     // ...and a tap that went nowhere re-composes the one you are looking at. On a scene with a
     // single composition this does nothing at all, which is the correct amount for a page whose
     // entire premise is that the animation *is* the interface.
-    if (Math.hypot(dx, dy) <= TAP_SLOP && event.timeStamp - press.at <= TAP_MS) recompose(1);
+    //
+    // Held back for a moment first, but only where there is something to hold back: a double tap
+    // opens the knobs, and without the wait every visit to the panel would re-arrange the picture
+    // on its way in. `dblclick` cancels whatever is pending.
+    if (Math.hypot(dx, dy) <= TAP_SLOP && event.timeStamp - press.at <= TAP_MS) {
+      if (!hasCompositions()) return;
+      window.clearTimeout(tapTimer);
+      tapTimer = window.setTimeout(() => recompose(1), DOUBLE_MS);
+    }
   },
   { passive: true },
 );
+
+// Two taps in quick succession are not two taps. The panel is the second thing the picture can be
+// asked for, and a double tap is the gesture with no other job on this page.
+canvas.addEventListener('dblclick', (event) => {
+  event.preventDefault();
+  window.clearTimeout(tapTimer);
+  panel.toggle();
+});
 
 window.addEventListener('hashchange', () => {
   const at = parseAddress(window.location.hash, scenes);

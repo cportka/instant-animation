@@ -218,6 +218,20 @@
       </svg>
     </button>
 
+    <!--
+      The knob panel. Empty here on purpose: the rack is stocked from the mounted scene's
+      `meta.knobs`, because which knobs exist is a fact about the artwork. Only the shell of it — the
+      frame and the reset — is markup, so the site tests can read it off the file.
+
+      No text anywhere in it, including on the reset. A knob's colour is its label; the reset is a
+      black square. The accessible names are attributes, which is where a name belongs on a page
+      whose entire premise is that there is nothing written on it.
+    -->
+    <div class="panel" id="panel" hidden>
+      <div class="panel__rack" id="knobs"></div>
+      <button class="panel__reset" id="knobs-reset" type="button" aria-label="Reset the knobs"></button>
+    </div>
+
     <p id="live" class="sr-only" role="status" aria-live="polite"></p>
 
     <noscript>

@@ -166,7 +166,7 @@ function place(out, p, u, cx, cy, halfW, halfH) {
 
 const wrapTo = (v, span) => v - Math.floor(v / span) * span;
 
-export function drawDescent(ctx, W, H, flow, plan, px) {
+export function drawDescent(ctx, W, H, flow, plan, px, tune) {
   const finest = finestOf(ctx, W);
   const cx = snapTo(W / 2, px);
   const cy = snapTo(H / 2, px);
@@ -182,7 +182,9 @@ export function drawDescent(ctx, W, H, flow, plan, px) {
   // are drawn on, because that grid now depends on how deep the chunk is — see `pxAt`.
   const bodies = [];
   const heads = [];
-  for (const line of plan.lines) {
+  const someLines = Math.round(plan.lines.length * tune.swarm);
+  for (let nth = 0; nth < someLines; nth += 1) {
+    const line = plan.lines[nth];
     let u = U_TOP + wrapTo(line.phase + flow * line.speed, span);
     if (u > line.vanish) continue;
     // A line that goes wrong jumps somewhere it has not been yet and stutters there — the read came
@@ -196,7 +198,7 @@ export function drawDescent(ctx, W, H, flow, plan, px) {
     // How far through its undoing it is. Nothing simply stops being drawn any more: the last
     // stretch of every fall is spent coming apart, in whichever of the seven ways this one was
     // dealt. See `dissolve.js`.
-    const undone = Math.max(0, 1 - (line.vanish - u) / UNDOING);
+    const undone = Math.max(0, 1 - (line.vanish - u) / (UNDOING * tune.havoc));
     const { keep, slide } = dissolveLine(line.way, undone, line.glitch, flow);
     if (keep <= 0) continue;
 
@@ -224,7 +226,9 @@ export function drawDescent(ctx, W, H, flow, plan, px) {
   // already shrinks the whole way down and leaves as one device pixel. That is the plainest of the
   // seven ways to go and the pit gives it to the things too small to have any other.
   const motes = [];
-  for (const mote of plan.motes) {
+  const someMotes = Math.round(plan.motes.length * tune.swarm);
+  for (let nth = 0; nth < someMotes; nth += 1) {
+    const mote = plan.motes[nth];
     const u = U_TOP + wrapTo(mote.phase + flow * mote.speed, span);
     if (u > mote.vanish) continue;
     const grid = pxAt(u, px, finest);
@@ -236,7 +240,9 @@ export function drawDescent(ctx, W, H, flow, plan, px) {
   // The blocks. Bucketed by colour so each is one path, which matters here only because a block is
   // sixteen cells rather than one chunk.
   const cells = FALL.map(() => [[], []]);
-  for (const block of plan.blocks) {
+  const someBlocks = Math.round(plan.blocks.length * tune.swarm);
+  for (let nth = 0; nth < someBlocks; nth += 1) {
+    const block = plan.blocks[nth];
     const u = U_TOP + wrapTo(block.phase + flow * block.speed, span);
     const s = place(at, block.p, u, cx, cy, halfW, halfH);
 
@@ -254,7 +260,7 @@ export function drawDescent(ctx, W, H, flow, plan, px) {
 
     // Near, or far. One switch, no fade — see `FALL`.
     const into = cells[hue][u > 8.5 ? 1 : 0];
-    const wide = block.size * s * Math.min(W, H);
+    const wide = block.size * s * Math.min(W, H) * tune.bulk;
     // The grid this depth is drawn on, which gets finer the further down it is. A block near the
     // bottom is therefore made of chunks a fraction the size of the ones it arrived as, and its
     // dissolution is drawn at that resolution too — the pit takes it apart in more detail than it
@@ -263,7 +269,7 @@ export function drawDescent(ctx, W, H, flow, plan, px) {
 
     // How far through its undoing. Zero for almost the whole fall; the last couple of depths are
     // spent coming apart in whichever of the seven ways this block was dealt.
-    const undone = Math.max(0, 1 - (block.vanish - u) / UNDOING);
+    const undone = Math.max(0, 1 - (block.vanish - u) / (UNDOING * tune.havoc));
     if (undone >= 1) continue;
 
     // **A sprite runs out of resolution before the pit runs out of depth**, and what it does then is

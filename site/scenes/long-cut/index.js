@@ -59,11 +59,32 @@ export const meta = {
   // half-resolution canvas to stretch, and the stretch is a blur — which in a picture whose entire
   // claim is that it contains two colours is not a softer picture, it is a broken promise.
   maxDpr: 2,
+  /**
+   * Six knobs, and the colours are a vocabulary rather than decoration: amber is always pace, blue
+   * is always the shape of a fall or a depth, magenta is always how big and how violent a form is,
+   * violet is always what a scene does with its holes and its palette, green is always resolution,
+   * and cyan is always how much a thing turns or wanders. The same swatch is the same *kind* of
+   * gesture in every panel in the gallery.
+   *
+   * Each one drives several numbers at once, and in more than one direction. `form` grows the column
+   * while pulling its vertex range in, so one end of it is a small round shaft and the other a huge
+   * spiked one. `grain` coarsens the cell **and** thickens the keyline, because a chunky raster with
+   * a hairline outline is two decisions that disagree. `twist` winds the solid here and widens the
+   * train's wander in `train.js`, which are the same idea at two scales.
+   */
+  knobs: [
+    { id: 'pace', colour: '#ffb020' },
+    { id: 'fall', colour: '#4d8bff' },
+    { id: 'form', colour: '#ff4fa3' },
+    { id: 'bore', colour: '#a06bff' },
+    { id: 'grain', colour: '#5fd66a' },
+    { id: 'twist', colour: '#3fd6d0' },
+  ],
 };
 
-export function create({ width, height, seed = meta.id }) {
+export function create({ width, height, seed = meta.id, knobs }) {
   const rng = createRng(seed);
-  const plan = planCut(rng);
+  const plan = planCut(rng, meta, knobs);
 
   let W = width;
   let H = height;

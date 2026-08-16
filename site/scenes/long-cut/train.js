@@ -69,6 +69,49 @@ export const BRINK = (CLIP - NEAR) / GAP;
 /** How long a slice lives, in slice-units — which is what a fall is measured against. */
 const LIFE = FAR - BRINK;
 
+/**
+ * The knobs' one hard rule, stated where it is easiest to break.
+ *
+ * **Nothing here may scale the master clock.** A slice's identity is the integer `k` and its depth is
+ * `k − t·RATE`, so a knob that changed `RATE` would move `travel` by `t·ΔRATE` — which at four
+ * minutes in is eighty slices, and the whole train would teleport the instant the knob was touched.
+ * The same is true of any epoch or latch clock in this gallery.
+ *
+ * `GAP` is the way through, and it is not a workaround: a slice's *depth* is `NEAR + (k − travel)·GAP`,
+ * so changing it leaves every slice exactly where it is in the train and only changes how much world
+ * there is between them. The apparent speed is `RATE·GAP`, so the picture speeds up and thins out
+ * together, continuously, from a knob that never touches the phase.
+ */
+export const tuneTrain = (K, bend, solid) => {
+  const gap = bend(K.pace, 0.17, 0.30, 0.52);
+  const brink = (CLIP - NEAR) / gap;
+  const wander = bend(K.twist, 0.18, 1, 2.3);
+  return {
+    gap,
+    brink,
+    life: FAR - brink,
+    /**
+     * The fall, in **section widths** rather than in world units, and with a floor it may not go
+     * under. Both halves of that are what keep the knobs from breaking the scene.
+     *
+     * A slice leaves the frame by outrunning its own radius, so if the drift is ever shorter than
+     * the section is wide there is no depth at all at which the thing is gone: it grows around the
+     * eye and then blinks out at the clip. That was the one genuinely broken-looking bug this scene
+     * had before it shipped, and a panel is a very efficient way to hand it back — `form` at full
+     * makes a section nearly twice the width `REACH` was chosen against.
+     *
+     * So the reach is multiplied by however much the knobs have widened the worst case, and by a
+     * share of however much further the axis now wanders against it. And the **`fall` knob is not
+     * allowed to shorten it**: its lower half changes `hold` instead, which is *when* the drift is
+     * spent rather than how much of it there is. That is the better gesture anyway — held back, a
+     * slice comes almost the whole way down the train on the axis and then leaves all at once.
+     */
+    reach: bend(K.fall, REACH, REACH, 3.6) * Math.max(1, solid.widen) * (1 + Math.max(0, wander - 1) * 0.16),
+    hold: bend(K.fall, 6.5, 4, 2),
+    wander,
+  };
+};
+
 /** Where the train converges, as a fraction of the frame. Up and left, so the fall has a diagonal. */
 const AXIS_X = 0.24;
 const AXIS_Y = 0.16;
@@ -98,9 +141,9 @@ const LEAN = 2.6;
  * The slices on screen at `t`, as the range of `k` to walk. **Furthest first** — the drawing is
  * painter's algorithm and nothing else, so the order is the entire depth-sorting mechanism.
  */
-export function trainAt(t) {
+export function trainAt(t, tune) {
   const travel = t * RATE;
-  return { travel, near: Math.ceil(travel + BRINK), far: Math.floor(travel + FAR) };
+  return { travel, near: Math.ceil(travel + tune.brink), far: Math.floor(travel + FAR) };
 }
 
 /**
@@ -126,24 +169,24 @@ const wanderY = (k) => 0.29 * Math.sin(k * 0.29 + 1.3) + 0.17 * Math.sin(k * 0.4
  * portrait and on an ultrawide alike — the solid is the same fraction of the narrow dimension in
  * both, and the extra room a wide window has is extra room for the fall to happen in.
  */
-export function placeAt(k, depth, W, H, out) {
+export function placeAt(k, depth, W, H, out, tune) {
   const short = Math.min(W, H);
-  const z = NEAR + depth * GAP;
+  const z = NEAR + depth * tune.gap;
   const scale = (short * 0.5) / z;
   // How far through its life this slice is. Zero where it was cut, one as it passes the eye.
-  const age = (FAR - depth) / LIFE;
+  const age = (FAR - depth) / tune.life;
   // A fourth power, not a square, and the exponent is doing one specific job. `REACH` is fixed by
   // the departure — it has to beat the widest section the solid can make, or a slice never clears
   // the frame. Spend that reach evenly and every slice is already halfway to the corner by the time
   // it is big enough to look at, and the picture empties out. Held back and then spent almost all at
   // once, the same total drift lets a slice come most of the way down the train nearly on the axis
   // and then leave in a rush. Which is also what falling looks like.
-  const drift = REACH * (0.10 * age + 0.90 * age * age * age * age);
+  const drift = tune.reach * (0.10 * age + 0.90 * age ** tune.hold);
   // The frame's half-extents in world units. One of these is exactly one — the short edge — and the
   // other is however much longer the window is; that ratio is what aims the fall at the corner.
   const spanX = Math.min(LEAN, W / short);
   const spanY = Math.min(LEAN, H / short);
-  out[0] = W * AXIS_X + (wanderX(k) + FALL_X * drift * spanX) * scale;
-  out[1] = H * AXIS_Y + (wanderY(k) + FALL_Y * drift * spanY) * scale;
+  out[0] = W * AXIS_X + (wanderX(k) * tune.wander + FALL_X * drift * spanX) * scale;
+  out[1] = H * AXIS_Y + (wanderY(k) * tune.wander + FALL_Y * drift * spanY) * scale;
   out[2] = scale;
 }

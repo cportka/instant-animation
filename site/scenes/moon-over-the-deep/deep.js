@@ -157,8 +157,8 @@ export function glowAt(deep, x, y) {
  */
 export const MIX_CAP = 0.52;
 
-export function mixAt(glow) {
+export function mixAt(glow, lift = 1) {
   // Starts almost at nothing and climbs slowly, so the reach is enormous, nearly all of it is a
   // scattering, and only the very heart of the thing gets anywhere near the cap.
-  return clamp((glow - 0.03) / 0.95, 0, MIX_CAP);
+  return clamp(((glow - 0.03) / 0.95) * lift, 0, MIX_CAP * lift);
 }

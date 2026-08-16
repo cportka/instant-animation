@@ -221,11 +221,11 @@ export function createStage(canvas, options = {}) {
     else if (!prefersReducedMotion()) start();
   }
 
-  function build(module, variant) {
+  function build(module, variant, knobs) {
     return {
       module,
       elapsed: prefersReducedMotion() ? (module.meta.posterTime ?? 0) : 0,
-      instance: module.create({ width, height, seed: module.meta.seed || module.meta.id, variant, tape }),
+      instance: module.create({ width, height, seed: module.meta.seed || module.meta.id, variant, tape, knobs }),
     };
   }
 
@@ -238,14 +238,19 @@ export function createStage(canvas, options = {}) {
    * understanding compositions it acquires opinions about how they differ, which is exactly the
    * knowledge that belongs in the scene. Passing `undefined` is normal and means "however you open".
    *
+   * `knobs` is handled the same way and for the same reason: it is a live bag of numbers the shell
+   * owns and the panel writes into, forwarded to `create()` and never inspected here. What a knob
+   * *means* is a fact about the artwork, and an engine that understood knobs would immediately
+   * acquire opinions about which ones a scene ought to have.
+   *
    * @param {{ meta: object, create: Function }} module
-   * @param {{ direction?: 'down' | 'up', variant?: object }} [opts]
+   * @param {{ direction?: 'down' | 'up', variant?: object, knobs?: object }} [opts]
    */
   function mount(module, opts = {}) {
     pixelCap = Math.min(module.meta.maxDpr ?? MAX_DPR, MAX_DPR);
     measure();
     const reduced = prefersReducedMotion();
-    const next = build(module, opts.variant);
+    const next = build(module, opts.variant, opts.knobs);
 
     // Re-mounting the *same* animation — which is what changing composition is — carries its clock
     // across. Both entries are then the same artwork at the same instant, so the sky, the stars, the
@@ -287,11 +292,11 @@ export function createStage(canvas, options = {}) {
    * what rots away over the next second is a photograph of the arrangement you were looking at, and
    * nothing has to keep drawing it.
    */
-  function recompose(module, variant) {
+  function recompose(module, variant, knobs) {
     pixelCap = Math.min(module.meta.maxDpr ?? MAX_DPR, MAX_DPR);
     measure();
     const reduced = prefersReducedMotion();
-    const next = build(module, variant);
+    const next = build(module, variant, knobs);
     if (current && !reduced) next.elapsed = current.elapsed;
 
     if (current && !reduced && tape && module.meta.dissolve) {
@@ -336,6 +341,17 @@ export function createStage(canvas, options = {}) {
     recompose,
     destroy,
     resize,
+    /**
+     * Draw one frame right now, without advancing the clock.
+     *
+     * For the knobs, and only for them. A scene is a pure function of `t` and its knobs, so turning
+     * one changes the very next frame — except where there *is* no next frame: under reduced motion
+     * the loop is stopped and a poster is on screen, and a knob would then appear to do nothing at
+     * all until something else happened to redraw. This is what makes the panel work there too.
+     */
+    repaint() {
+      if (current) renderFrame(0);
+    },
     get scene() {
       return current?.module ?? null;
     },

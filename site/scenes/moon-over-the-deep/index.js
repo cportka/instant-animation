@@ -24,6 +24,7 @@
 // whole of what makes it read as *below* rather than *on*.
 
 import { createRng } from '../../lib/rng.js';
+import { bend, knobsFor } from '../../lib/knobs.js';
 import { pixelFor } from './layout.js';
 import { drawMeteor, drawSky, planSky } from './sky.js';
 import { drawMoon, moonAt, planMoon } from './moon.js';
@@ -49,10 +50,28 @@ export const meta = {
   // Every value in this scene is a dithered position on a long ramp, so the art *is* the pixel grid.
   // Rendering it at twice the pixels produces the same picture with four times the rectangles.
   maxDpr: 1,
+  /**
+   * Six knobs. `glow` is the one that matters most here: it drives the moon's own haze, how far that
+   * haze reaches into the sky, *and* how much of the light from far below is allowed to mix into the
+   * water — three separate systems that the scene has always meant as one idea, which is how much of
+   * this picture is made of light rather than of things.
+   *
+   * `swell` moves the waves' height up while pulling their wavelength *down*, so one end of it is a
+   * long slow ocean and the other is a short violent one, rather than the same sea louder.
+   */
+  knobs: [
+    { id: 'pace', colour: '#ffb020' },
+    { id: 'swell', colour: '#4d8bff' },
+    { id: 'form', colour: '#ff4fa3' },
+    { id: 'glow', colour: '#ffe9a8' },
+    { id: 'swarm', colour: '#3fd6d0' },
+    { id: 'grain', colour: '#5fd66a' },
+  ],
 };
 
-export function create({ width, height, seed = meta.id }) {
+export function create({ width, height, seed = meta.id, knobs }) {
   const rng = createRng(seed);
+  const K = knobsFor(meta, knobs);
   const sky = planSky(rng);
   const moon = planMoon(rng);
   const island = planIsland(rng);
@@ -72,7 +91,29 @@ export function create({ width, height, seed = meta.id }) {
 
     draw(ctx, t) {
       ctx.save();
-      const px = pixelFor(W, H);
+      // The knobs, written onto the plans the drawing already reads. Nothing is remembered: every
+      // one is recomputed from the live bag and from the *shipped* values, so turning one back
+      // restores the picture exactly rather than approximately.
+      moon.size = bend(K.form, 0.42, 1, 2.1);
+      moon.haze = bend(K.glow, 0.15, 1, 1.85);
+      deep.lift = bend(K.glow, 0.12, 1, 1.9);
+      // How many stars, and — past the middle, where the field has run out of stars to add — how
+      // bright the ones there are. The count is fixed at build time, so the top half of the knob
+      // spends itself on magnitude instead, which pulls the faintest layer of the field up out of
+      // the threshold it is sitting under and *does* add stars, just not new ones.
+      sky.swarm = bend(K.swarm, 0.05, 1, 1);
+      sky.blaze = bend(K.swarm, 0.8, 1, 1.5);
+      // The sky is drawn three chunks to the water's one, and `grain` moves that ratio as well as
+      // the chunk itself. The water's grid answers to a hard budget — a knob may ask for a finer sea
+      // and will be refused on a phone — but the sky is cheap enough to give away, so the fine end
+      // of the knob still has somewhere to go even where the sea has stopped.
+      sky.coarse = bend(K.grain, 5, 3, 1.6);
+      for (let i = 0; i < water.swells.length; i += 1) {
+        water.swells[i].speed = water.rest[i].speed * bend(K.pace, 0.18, 1, 3.4);
+        water.swells[i].amp = water.rest[i].amp * bend(K.swell, 0.22, 1, 2.3);
+        water.swells[i].k = water.rest[i].k * bend(K.swell, 1.9, 1, 0.48);
+      }
+      const px = pixelFor(W, H, bend(K.grain, 0.4, 1, 2.2));
       const disc = moonAt(W, H, moon);
       // The sky is told where the moon is, because the glare around it is *sky* — drawn on the sky's
       // grid, on the sky's ramp, by the sky's own dither. Nothing else would join without a seam.

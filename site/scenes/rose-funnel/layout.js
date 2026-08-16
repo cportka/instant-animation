@@ -28,7 +28,7 @@ export const CLOUD = 0.09;
  * Deliberately about half the resolution of the shared grid: the brief's first word is "pixelated",
  * and at the gallery's usual chunk size that reads as a texture rather than as a decision.
  */
-export const pixelFor = (S) => Math.max(3, Math.round(S / 132));
+export const pixelFor = (S, grain = 1) => Math.max(2, Math.round(S / (132 * grain)));
 
 /**
  * ...and the grid everything *behind* the subject is drawn on: three chunks to the subject's one.

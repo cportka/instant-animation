@@ -16,10 +16,37 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { cellFor, finestOf, scanFill } from '../site/effects/onebit.js';
+import { bend, makeKnobs } from '../site/lib/knobs.js';
 import { create, meta } from '../site/scenes/long-cut/index.js';
-import { SIDES, boreAt, sectionAt } from '../site/scenes/long-cut/solid.js';
-import { BRINK, placeAt, trainAt } from '../site/scenes/long-cut/train.js';
+import { SIDES, boreAt, sectionAt, tuneSolid } from '../site/scenes/long-cut/solid.js';
+import { placeAt, trainAt, tuneTrain } from '../site/scenes/long-cut/train.js';
 import { createRecordingContext } from './helpers/recording-context.mjs';
+
+/**
+ * Every corner of the knob space, plus the neutral.
+ *
+ * The invariants below are not properties of the scene as it shipped — they are properties of the
+ * scene *at every setting the panel can reach*, and that distinction is the whole reason this list
+ * exists. A knob that grows the column can quietly stop another one from carrying it off the frame;
+ * a knob that opens the bore can push it out through a short side. Both are silent, both would only
+ * ever be found by somebody sliding two things at once, and both are caught here.
+ */
+const SETTINGS = (() => {
+  const ids = meta.knobs.map((knob) => knob.id);
+  const out = [makeKnobs(meta)];
+  for (let mask = 0; mask < 1 << ids.length; mask += 1) {
+    const at = {};
+    ids.forEach((id, i) => { at[id] = (mask >> i) & 1; });
+    out.push(at);
+  }
+  return out;
+})();
+
+/** The two derived bags a scene builds once a frame, for a given panel setting. */
+const tunesFor = (K) => {
+  const solid = tuneSolid(K, bend);
+  return { solid, rails: tuneTrain(K, bend, solid) };
+};
 
 const VIEWS = [
   { width: 1440, height: 900, label: 'desktop' },
@@ -180,16 +207,19 @@ test('the bore never escapes the section it is cut through', () => {
     return crossings % 2 === 1;
   };
 
-  for (let k = -60; k < 260; k += 0.25) {
-    sectionAt(k, section);
-    boreAt(k, section, bore);
-    for (let i = 0; i < SIDES * 2; i += 2) {
-      const j = i + 2 < SIDES * 2 ? i + 2 : 0;
-      for (const [x, y] of [
-        [bore[i], bore[i + 1]],
-        [(bore[i] + bore[j]) / 2, (bore[i + 1] + bore[j + 1]) / 2],
-      ]) {
-        assert.ok(within(section, x, y), `slice ${k}: the bore crosses the section at ${x}, ${y}`);
+  for (const K of SETTINGS) {
+    const { solid } = tunesFor(K);
+    for (let k = -60; k < 260; k += 1) {
+      sectionAt(k, section, solid);
+      boreAt(k, section, bore, solid);
+      for (let i = 0; i < SIDES * 2; i += 2) {
+        const j = i + 2 < SIDES * 2 ? i + 2 : 0;
+        for (const [x, y] of [
+          [bore[i], bore[i + 1]],
+          [(bore[i] + bore[j]) / 2, (bore[i + 1] + bore[j + 1]) / 2],
+        ]) {
+          assert.ok(within(section, x, y), `slice ${k} at ${JSON.stringify(K)}: the bore crosses the section`);
+        }
       }
     }
   }
@@ -209,26 +239,29 @@ test('a slice paints nothing by the time it is culled', () => {
   const bore = new Float64Array(SIDES * 2);
   const at3 = [0, 0, 0];
 
-  for (const view of VIEWS) {
-    const rec = at(view, 2);
-    const cell = cellFor(rec.ctx, view.width, view.height, 140);
-    for (let k = 0; k < 500; k += 1) {
-      placeAt(k, BRINK, view.width, view.height, at3);
-      sectionAt(k, section);
-      boreAt(k, section, bore);
-      for (let i = 0; i < SIDES * 2; i += 2) {
-        outer[i] = at3[0] + section[i] * at3[2];
-        outer[i + 1] = at3[1] + section[i + 1] * at3[2];
-        bore[i] = at3[0] + bore[i] * at3[2];
-        bore[i + 1] = at3[1] + bore[i + 1] * at3[2];
+  for (const K of SETTINGS) {
+    const { solid, rails } = tunesFor(K);
+    for (const view of VIEWS) {
+      const rec = at(view, 2);
+      const cell = cellFor(rec.ctx, view.width, view.height, 140);
+      for (let k = 0; k < 220; k += 1) {
+        placeAt(k, rails.brink, view.width, view.height, at3, rails);
+        sectionAt(k, section, solid);
+        boreAt(k, section, bore, solid);
+        for (let i = 0; i < SIDES * 2; i += 2) {
+          outer[i] = at3[0] + section[i] * at3[2];
+          outer[i + 1] = at3[1] + section[i + 1] * at3[2];
+          bore[i] = at3[0] + bore[i] * at3[2];
+          bore[i + 1] = at3[1] + bore[i + 1] * at3[2];
+        }
+        const painted = scanFill(rec.ctx, [outer, bore], cell, view.width, view.height);
+        assert.equal(
+          painted,
+          0,
+          `${view.label}: slice ${k} at ${JSON.stringify(K)} still paints ${painted} runs at the ` +
+            'moment it is culled — it blinks out instead of leaving',
+        );
       }
-      const painted = scanFill(rec.ctx, [outer, bore], cell, view.width, view.height);
-      assert.equal(
-        painted,
-        0,
-        `${view.label}: slice ${k} still paints ${painted} runs at the moment it is culled — ` +
-          'it blinks out instead of leaving',
-      );
     }
   }
 });
@@ -244,8 +277,10 @@ test('the fall lands on the same place in the frame whatever shape the frame is'
   // regardless of shape. So the invariant is not that a wide frame is crossed the long way — it is
   // that every frame is crossed the *same* way, and the trajectory ends past the same corner.
   const at3 = [0, 0, 0];
+  const { solid } = tunesFor(makeKnobs(meta));
+  const rails = tuneTrain(makeKnobs(meta), bend, solid);
   const where = (width, height, depth) => {
-    placeAt(0, depth, width, height, at3);
+    placeAt(0, depth, width, height, at3, rails);
     return [at3[0] / width, at3[1] / height];
   };
 
@@ -263,7 +298,7 @@ test('the fall lands on the same place in the frame whatever shape the frame is'
         `rather than near ${refX.toFixed(3)}, ${refY.toFixed(3)}`,
     );
     // ...and by the end it is past the corner rather than parked inside it, whatever the shape.
-    const [outX, outY] = where(width, height, BRINK);
+    const [outX, outY] = where(width, height, rails.brink);
     assert.ok(outX > 1 && outY > 1, `${width}×${height}: the fall stops inside the frame (${outX}, ${outY})`);
   }
 });
@@ -278,11 +313,12 @@ test('every slice on screen is painted, and the two colours alternate down the t
 
   for (const view of VIEWS) {
     for (const t of TIMES) {
-      const { travel, near, far } = trainAt(t);
+      const { solid, rails } = tunesFor(makeKnobs(meta));
+      const { travel, near, far } = trainAt(t, rails);
       let onScreen = 0;
       for (let k = far; k >= near; k -= 1) {
-        placeAt(k, k - travel, view.width, view.height, at3);
-        sectionAt(k, section);
+        placeAt(k, k - travel, view.width, view.height, at3, rails);
+        sectionAt(k, section, solid);
         let reach = 0;
         for (let i = 0; i < SIDES * 2; i += 2) reach = Math.max(reach, Math.hypot(section[i], section[i + 1]));
         const r = reach * at3[2];

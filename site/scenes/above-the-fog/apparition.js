@@ -353,12 +353,12 @@ export function apparitionAt(t) {
  * Cells are batched into one path per (figure, level) — at most six fills for the whole thing, even
  * mid-morph with two figures on screen at once and every cell displaced by its own amount.
  */
-export function drawApparition(ctx, W, H, t, densityAt = null) {
+export function drawApparition(ctx, W, H, t, densityAt = null, form = 1) {
   const event = apparitionAt(t);
   if (!event) return;
 
   const S = Math.min(W, H);
-  const size = S * 0.6;
+  const size = S * 0.6 * form;
   // How much survives the cloud directly above the *site* — used for the halo and the veil, which
   // are one mass each and have nowhere to put a per-cell answer. The figure itself is veiled cell by
   // cell further down. The caller owns the fog's own density field and hands one in rather than this
