@@ -2,7 +2,7 @@
 
 An instant animation generator. Animate anything you can describe.
 
-**Version:** 6.0.0 · **Live:** https://cportka.github.io/instant-animation/
+**Version:** 6.1.0 · **Live:** https://cportka.github.io/instant-animation/
 
 Describe something. It becomes a hand-drawn canvas animation and joins the gallery. There is no
 text on the site — the animation *is* the page. The only chrome is a soft chevron floating at each
@@ -31,7 +31,7 @@ being re-composed rather than two pictures. Compositions have their own addresse
 | **The Long Cut** | *stark monochromatic black and white — slices towards the camera, falling down and to the side* |
 | **The Pitiless Pit** | *an abstract pitiless pit that goes down — lines from the ground travel down the pit, pixels travel down the pit, blocks and abstract shapes fall in, and every minute or two everything stops and the pit erupts pure white pixels in a great flurry* |
 | **Moon Over the Deep** | *a stark, highly-stylized, 32-bit pixel style full moon over the water with an island in the background, the water gently rolling under a clear night sky, and a faint glow that occasionally comes from deep below* |
-| **The Rose Funnel** | *a pixelated tornado swirling up reds, pinks and purples, tearing apart an ornate pagoda temple that disembodied spirit hands rebuild without pause* |
+| **The Rose Funnel** *(two compositions)* | *a pixelated tornado swirling up reds, pinks and purples, tearing apart an ornate pagoda temple that disembodied spirit hands rebuild without pause* |
 | **Above the Fog** | *an overhead view of tons of billowing flowing fog under a gusting wind, wisps dissolving and changing into each other, over a lazy winding river and a riverside town in reversed colour — people down there setting fires and letting off fireworks that burst amongst the fog as stylised orange and red fractal pixel art, and every few minutes one cloud pixelates into an angel, then a grim reaper, then a giant happy face* |
 | **Westbound on Grizzly Peak** *(two compositions)* | *2.5D 16-bit from the perspective of a car travelling diagonally up and to the left, a series of copper bronze street lamps, a cliff drop-off overlooking the bay, trees, and a fiery sunset in a night sky* |
 | **Asleep Among the Stars** | *a bed floating in space with someone snuggled under the covers peacefully sleeping while the bed gently floats amongst the stars* |

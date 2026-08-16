@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [6.0.0] - 2026-08-16
+## [6.1.0] - 2026-08-16
 
 **"The Pitiless Pit" is finished, and a seventh animation begins.** That is the only thing a MAJOR
 bump means here — see `.claude/CLAUDE.md`.
@@ -109,9 +109,50 @@ be dull.
   along random lines, this shear is monotonic: every slab moves further than the one above it, so the
   picture comes apart as a stack being pushed over. A cut is not a tear.
 
+### The Rose Funnel gets a second composition — "The Column"
+
+*Westbound on Grizzly Peak* has had two arrangements of itself since `2.0.0`; this is the second
+animation to get them, and the tap that walks them now reaches two scenes instead of one.
+
+**"Over the Temple"** is the arrangement every existing link already resolves to: a storm with
+something in its way, a pagoda coming apart faster than the spirit hands can heal it, and a funnel
+that marches across the frame because it has somewhere to be.
+
+**"The Column"** takes all of that away and leaves what the brief actually asked for — *a pixelated
+tornado swirling up reds, pinks and purples* — alone and centred, with nothing to destroy.
+
+- **The temple is removed by asking for a building with no storeys in it**, not by skipping draw
+  calls one at a time. No storeys means no bays; no bays means nothing to damage, nothing to heal,
+  nothing to come off and nobody to come and put it back, so the debris and the hands size
+  themselves out of existence from that one number. Only the building's own geometry needs telling,
+  because a pagoda with nothing wrong with it is still a pagoda.
+- **The land stays in both.** The treeline, the workshops and the little house at the storm's foot
+  are not the temple — they are what the storm is standing in, and a tornado over an empty green
+  strip has nothing left to be tall against. The house in particular is the one thing in the second
+  composition with a known size.
+- **It stands nearly still rather than being pinned.** The march is turned down to an eighth, not
+  off: a tornado nailed to the centre line is a diagram, and the lean and the snake are properties
+  of a tornado rather than of an arrangement, so they are untouched.
+- **And it is wider by half again**, because the temple was what gave the first composition its
+  scale. A funnel left the same width on an emptier frame reads as *smaller* — the only thing left
+  to measure it against is a frame edge it is nowhere near.
+
+**Its dissolve — `updraft`.** A scene with compositions declares how it re-arranges, and this one is
+the storm taking the arrangement away: chunks of the frozen composition leave the ground, spiral in
+toward the axis and climb out of the top of the frame. It is deliberately a different *verb* from
+the channel change into the same scene, which also uses a vortex — that one **winds** the picture,
+holding it whole while it twists; this one **picks it up**. What gives way first is what is nearest
+the column, so it reads as suction rather than as decay, and the pieces are six chunks across so
+there is still something recognisable on them as they are carried off.
+
 ### Tests
 
-`tests/long-cut.test.js` — eight, each verified to fail on the bug it guards. The frame is two
+`tests/long-cut.test.js` — eight, each verified to fail on the bug it guards.
+`tests/rose-funnel.test.js` gains four more for the compositions: the storey count is the whole
+temple and zero of them removes it; one composition marches across the frame and the other stays
+near the middle without being pinned; the standing column is wider by exactly the declared factor at
+every height and instant; and nothing of the temple reaches the frame in the second arrangement
+while the land still does. The frame is two
 colours and no third; nothing is drawn off the device pixel grid at 1×, 1.5×, 2× or 3×; the cell is a
 whole number of device pixels however coarse it was asked to be; `scanFill` fills exactly the cells
 whose centres are inside the shape, checked against a brute-force point-in-polygon at four grid

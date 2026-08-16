@@ -21,7 +21,7 @@ import { deviceScale } from './vhs.js';
 import { hash01, pixelSize, snap } from './pixel.js';
 
 /** Every dissolve a scene may ask for by name. `meta.dissolve` must be one of these. */
-export const DISSOLVES = ['mosh'];
+export const DISSOLVES = ['mosh', 'updraft'];
 
 /**
  * Dissolve the frozen composition away, revealing the one already drawn underneath.
@@ -31,7 +31,78 @@ export const DISSOLVES = ['mosh'];
  */
 export function dissolve(kind, ctx, W, H, progress, t, tape) {
   if (progress <= 0 || progress >= 1 || !tape) return;
-  moshDissolve(ctx, W, H, progress, t, tape);
+  if (kind === 'updraft') updraftDissolve(ctx, W, H, progress, t, tape);
+  else moshDissolve(ctx, W, H, progress, t, tape);
+}
+
+/**
+ * *The Rose Funnel*: the storm takes the arrangement away.
+ *
+ * The scene's two compositions differ by what is standing in front of the tornado, so the change
+ * between them is the tornado doing the only thing it does — and the useful part is that it is a
+ * **different verb from the channel change into this same scene**, which also uses a vortex. That
+ * one *winds* the frame: rows slide coherently around an axis and the picture stays whole while it
+ * is twisted. This one **picks the picture up**. Chunks leave the ground, spiral in toward the axis,
+ * and climb out of the top of the frame, and each one is gone the moment it has climbed far enough.
+ * Winding is a force applied to something still there; lifting is that thing being carried off.
+ *
+ * Two details do the work. The order of leaving is **by distance from the axis** rather than hashed:
+ * what is nearest the column goes first and the corners are the last to be pulled loose, so it reads
+ * as suction rather than as decay. And a chunk's climb is squared in its own age, so nothing moves
+ * for a moment and then the whole field goes up at once — which is the profile of being caught by
+ * something rather than of falling apart.
+ */
+function updraftDissolve(ctx, W, H, progress, t, tape) {
+  const px = pixelSize(W, H);
+  // A much coarser block than the scene draws in, because this is the picture being *handled*
+  // rather than the picture being drawn. At a chunk near the size of the art's own the frame comes
+  // apart into confetti and reads as the picture dissolving; at six of them a piece is big enough
+  // to still have something recognisable on it while it is carried off, which is the difference
+  // between a picture being taken away and a picture falling apart.
+  const block = px * 6;
+  const cols = Math.ceil(W / block);
+  const rows = Math.ceil(H / block);
+  const scale = deviceScale(ctx, W, H);
+  const stale = tape.of('stale');
+  if (!stale?.width) return;
+
+  // Where the column is standing. The funnel marches, but a dissolve lasts about a second and the
+  // march is on a sixty-second clock, so the axis is taken once and held — a suction point that
+  // slides while it is sucking would be a second motion nobody asked for.
+  const axis = W * 0.5;
+  const reach = Math.hypot(W * 0.5, H * 0.5);
+
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const x = c * block;
+      const y = r * block;
+      // Nearest the axis first, with a little hashed scatter so the front of the suction is ragged
+      // rather than a circle closing in — a clean expanding ring is a wipe, not a wind.
+      const away = Math.hypot(x + block * 0.5 - axis, y + block * 0.5 - H) / reach;
+      const gives = clamp(away * 0.82 + hash01(c * 4.19 + r * 9.13) * 0.3, 0, 1);
+      if (gives < progress) continue;
+
+      const held = clamp(progress / Math.max(0.001, gives), 0, 1);
+      const lift = held * held;
+      // In toward the axis and up out of the frame — the two halves of an updraft. The inward pull
+      // is proportional to how far off-axis the chunk is, so the whole field converges rather than
+      // shearing, and the climb is the same for everything because a column lifts what it has.
+      const dx = snap((axis - x) * 0.55 * lift, px);
+      const dy = snap(-H * 1.15 * lift, px);
+      // ...and it turns as it goes. One shared angle rather than a per-chunk spin: it is one vortex.
+      const turn = lift * 2.4 + t * 0.6;
+      const swirl = snap(Math.sin(turn + away * 5.5) * block * 2.6 * lift, px);
+
+      ctx.drawImage(
+        stale,
+        Math.round(x * scale.sx), Math.round(y * scale.sy),
+        Math.max(1, Math.round(Math.min(block, W - x) * scale.sx)),
+        Math.max(1, Math.round(Math.min(block, H - y) * scale.sy)),
+        x + dx + swirl, y + dy,
+        Math.min(block, W - x), Math.min(block, H - y),
+      );
+    }
+  }
 }
 
 /**
