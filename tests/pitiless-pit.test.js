@@ -19,6 +19,7 @@ import { createRecordingContext } from './helpers/recording-context.mjs';
 import { create, meta } from '../site/scenes/pitiless-pit/index.js';
 import { ERUPT, PERIOD, eruptionAt, flowAt, planClock, surgeAt } from '../site/scenes/pitiless-pit/clock.js';
 import { MOUTH, U_EDGE, depthAt, edgeOf, scaleAt } from '../site/scenes/pitiless-pit/layout.js';
+import { TEAR_SLIDE, corruptAt, tearAt } from '../site/scenes/pitiless-pit/glitch.js';
 import { FALL, FLARE, GROUND, KERB, MOTE, SHAFT, STREAK } from '../site/scenes/pitiless-pit/palette.js';
 
 const clock = () => planClock(createRng(meta.id));
@@ -165,6 +166,104 @@ test('everything going down is frozen for the whole eruption', () => {
     }
   }
   assert.ok(checked > 0, 'no blocks were on screen to check');
+});
+
+test('a corruption latches, and is over when it says it is', () => {
+  // The difference between a fault and noise. A glitch that re-rolls every frame is a texture; one
+  // that decides what is wrong with it *once* and holds that for the whole burst is something you
+  // can watch happen. So `g` — which everything about a fault is hashed from — must be constant
+  // across the burst and must change between bursts.
+  let seen = 0;
+  let lastG = null;
+  for (let clock = 0; clock < 400; clock += 1 / 240) {
+    const bad = corruptAt(clock, 0.37, 30, 0.6);
+    if (!bad) continue;
+    seen += 1;
+    assert.ok(bad.age >= 0 && bad.age < 0.6, `age ${bad.age} outside the burst`);
+    assert.ok(bad.at >= 0 && bad.at < 1, `at ${bad.at} outside 0..1`);
+    if (lastG !== null && bad.g !== lastG) {
+      // A new fault may only begin at the very start of its own burst.
+      assert.ok(bad.age < 1 / 200, `fault ${bad.g} appeared already ${bad.age}s old`);
+    }
+    lastG = bad.g;
+  }
+  assert.ok(seen > 100, 'no corruptions in four hundred seconds of clock');
+  // ...and it is occasional. A fault that is on more than it is off is a filter.
+  const duty = seen / (400 * 240);
+  assert.ok(duty > 0.01 && duty < 0.05, `corrupt ${(duty * 100).toFixed(1)}% of the time`);
+});
+
+test('the raster tear moves whole chunks and only sideways', () => {
+  // It is a displacement, not a smear: an offset that is not a whole number of chunks would put the
+  // torn band half a chunk off the grid, which is the one thing this scene may never do.
+  for (const px of [4, 9, 11]) {
+    for (let y = 0; y < 900; y += 3) {
+      for (let t = 0; t < 8; t += 0.11) {
+        const shift = tearAt(y, t, 900, TEAR_SLIDE, px);
+        // `Math.abs` because a shift of exactly zero to the left is `-0`, and strict equality is
+        // `Object.is`, which does not think that is zero.
+        assert.equal(Math.abs(shift % px), 0, `a band slid ${shift}px, which is not a whole chunk of ${px}`);
+        assert.ok(Math.abs(shift) <= TEAR_SLIDE * px, `a band slid ${shift}px, further than the tear reaches`);
+      }
+    }
+  }
+  // And at rest there is no tear at all — the strength is scaled by the surge, which is zero
+  // outside an eruption, so a quiet frame is never displaced by a chunk.
+  for (let y = 0; y < 900; y += 7) assert.equal(Math.abs(tearAt(y, 3.3, 900, 0, 9)), 0);
+});
+
+test('nothing is torn while the pit is quiet', () => {
+  // The tear belongs to the eruption. If it leaked into an ordinary frame the pit would be a
+  // permanently broken picture rather than one that breaks, and the eruption would stop being an
+  // event — the same argument as white belonging to the eruption alone.
+  // The tear only ever moves things **sideways**, so the property to check is not how many
+  // rectangles a ring was drawn as — several rings share a colour, and slicing one into fifteen is
+  // perfectly legal mid-eruption. It is that every one of them is still centred on the vanishing
+  // point. A torn slice is displaced; an untorn ring cannot be.
+  const plan = clock();
+  const centred = (t) => {
+    const { byColour } = frame(1440, 900, t);
+    let off = 0;
+    let total = 0;
+    for (const step of SHAFT) {
+      for (const r of byColour.get(`rgba(${step[0]}, ${step[1]}, ${step[2]}, 1)`) ?? []) {
+        const [x, , w] = r.split(',').map(Number);
+        total += 1;
+        if (Math.abs(x + w / 2 - 720) > 9) off += 1;
+      }
+    }
+    return { off, total };
+  };
+
+  let checked = 0;
+  for (let t = 0; t < PERIOD * 2 && checked < 5; t += 3.1) {
+    if (eruptionAt(t, plan).on) continue;
+    const { off, total } = centred(t);
+    assert.ok(total > 4, `only ${total} shaft rectangles at t=${t.toFixed(1)}`);
+    assert.equal(off, 0, `${off} of ${total} shaft rectangles are displaced at t=${t.toFixed(1)}, a quiet moment`);
+    checked += 1;
+  }
+  assert.equal(checked, 5, 'not enough quiet frames to check');
+
+  // ...and mid-eruption it very much is torn, or the tear is not doing anything at all.
+  let n = 0;
+  while (!eruptionAt(n, plan).on) n += 0.25;
+  let torn = 0;
+  for (let a = 0.4; a < ERUPT - 1; a += 0.13) torn += centred(n + a).off > 0 ? 1 : 0;
+  assert.ok(torn > 8, `the raster was only torn in ${torn} sampled frames of the eruption`);
+});
+
+test('the corruptions freeze with everything else they belong to', () => {
+  // The faults on the fall run on the **flowed** clock, so when the pit stops taking, they stop
+  // too. That is not a detail: a block frozen mid-air while its own torn row keeps sliding would
+  // say the stop was cosmetic. Covered end to end by the frozen-blocks test above, which compares
+  // the drawn positions of glitched sprites — this pins the reason.
+  const plan = clock();
+  let n = 0;
+  while (!eruptionAt(n, plan).on) n += 0.25;
+  const a = corruptAt(flowAt(n + 0.4, plan), 0.37, 30, 0.6);
+  const b = corruptAt(flowAt(n + ERUPT - 0.6, plan), 0.37, 30, 0.6);
+  assert.deepEqual(b, a, 'a corruption changed during a stop');
 });
 
 test('the surge rises, holds and is drawn back down', () => {

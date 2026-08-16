@@ -14,9 +14,22 @@
 // the bottom is smaller than one chunk; the same item re-entering at the top is outside the frame.
 // There is nowhere to stand where you could watch one turn over.
 
+import { hash2 } from '../../effects/field.js';
 import { rgba } from '../../lib/draw.js';
 import { FALL, MOTE, STREAK } from './palette.js';
+import { corruptAt, flickerOn } from './glitch.js';
 import { RATIO, U_TOP, bottomDepth, edgeOf, scaleAt, snapTo } from './layout.js';
+
+/**
+ * How often a given thing falling in goes wrong, and for how long.
+ *
+ * Per *object*, so the rate you actually see is this divided by however many are falling — fourteen
+ * blocks on a thirty-second cycle is a corruption somewhere about every two seconds, which is often
+ * enough to be a property of the pit and rare enough that you still notice each one. Faults that
+ * arrive faster than you can finish looking at one stop being faults and become a filter.
+ */
+const BREAKS = 30;
+const BURST = 0.6;
 
 /**
  * The things that fall in, as 4×4 bitmaps.
@@ -57,12 +70,14 @@ export function planDescent(rng) {
       speed: rng.range(0.5, 0.95),
       phase: rng.range(0, 60),
       len: rng.range(1.2, 2.8),
-      // Swallowed like everything else, and on the same distribution as the motes but reaching
-      // deeper — a line is the one thing here with enough length to still read as a line most of
-      // the way down, and a few of them going all the way is what keeps the shaft from looking as
-      // though it stops somewhere. Without this the thirty of them converge into the same twenty
-      // chunks at the bottom and weld themselves into a solid grey slab.
-      vanish: 4 + Math.log(rng.range(0.02, 1)) / (0.42 * Math.log(RATIO)),
+      glitch: rng.next(),
+      // Swallowed like everything else, and the exponent is **1** where a mote's is 2 — see the
+      // motes below for where those numbers come from. A line is not a point: it is three or four
+      // chunks long and that length shrinks with the scale, so its ink falls off one power of the
+      // scale more slowly than a mote's does and its survivor count has to fall one power faster
+      // to compensate. A long tail keeps a few going all the way down, so the shaft has lines in
+      // it rather than merely near it.
+      vanish: 4 + Math.log(rng.range(0.02, 1)) / (1 * Math.log(RATIO)),
     })),
     // Loose pixels. Many, small, and at a wider spread of speeds than anything else, so the shaft
     // always has some texture moving in it even when nothing else is happening.
@@ -72,15 +87,19 @@ export function planDescent(rng) {
       phase: rng.range(0, 60),
       // How deep it gets before the pit has it.
       //
-      // **Something has to thin them out, and perspective says how much.** Every ray converges on
-      // the same point, so a population spread evenly through depth is spread over a screen area
-      // that shrinks geometrically — draw them all and the far half of the shaft is not texture, it
-      // is a solid speckled blob sitting exactly where the picture most needs to be empty. Keeping
-      // the *screen* density constant means the survivor count has to fall like the scale does, and
-      // `log(q) / log(RATIO)` on a uniform `q` is exactly the distribution that does it.
+      // **Something has to thin them out, and perspective says exactly how much.** Every ray
+      // converges on the same point, so a population spread evenly through depth is spread over a
+      // screen area that shrinks *geometrically* — drawn in full, the far half of the shaft is not
+      // texture, it is a solid speckled slab sitting where the picture most needs to be empty.
+      //
+      // Written this way, `P(vanish > u)` works out to `RATIO ** (K * (u - floor))`. The area a ring
+      // occupies goes as `RATIO ** (2u)`, so holding the density constant on *screen* means
+      // **K = 2** — and that is the whole derivation. It is worth doing rather than guessing: this
+      // was tuned by eye to 0.55 twice, which is nearly four times too slow, and the slab came back
+      // both times as soon as a reshuffled seed dealt a few more of them deep.
       //
       // It also happens to be the truthful thing to draw. They are not fading out. They are gone.
-      vanish: 3 + Math.log(rng.range(0.02, 1)) / (0.55 * Math.log(RATIO)),
+      vanish: 3 + Math.log(rng.range(0.02, 1)) / (2 * Math.log(RATIO)),
     })),
     // ...and the blocks, which are slow, because a heavy thing going into a hole is the one event
     // here with any weight to it and it should not be over before you have looked at it.
@@ -92,6 +111,7 @@ export function planDescent(rng) {
       hue: Math.floor(rng.next() * FALL.length) % FALL.length,
       spin: rng.range(0.1, 0.42),
       size: rng.range(0.1, 0.2),
+      glitch: rng.next(),
     })),
   };
 }
@@ -121,8 +141,16 @@ export function drawDescent(ctx, W, H, flow, plan, px) {
   const bodies = [];
   const heads = [];
   for (const line of plan.lines) {
-    const u = U_TOP + wrapTo(line.phase + flow * line.speed, span);
+    let u = U_TOP + wrapTo(line.phase + flow * line.speed, span);
     if (u > line.vanish) continue;
+    // A line that goes wrong jumps somewhere it has not been yet and stutters there — the read came
+    // off the wrong address, and the next one will too until it recovers.
+    const bad = corruptAt(flow, line.glitch, BREAKS, BURST);
+    if (bad) {
+      if (!flickerOn(bad.g, bad.age)) continue;
+      u += (hash2(bad.g * 1.7 + line.glitch, 41) - 0.35) * 3.2;
+      if (u <= U_TOP || u > line.vanish) continue;
+    }
     place(at, line.p, u, cx, cy, halfW, halfH);
     // The tail is held just off the frame edge: a line near the mouth is long enough that its far
     // end is well outside the picture, and stepping chunks all the way out there is work spent on
@@ -157,8 +185,21 @@ export function drawDescent(ctx, W, H, flow, plan, px) {
   for (const block of plan.blocks) {
     const u = U_TOP + wrapTo(block.phase + flow * block.speed, span);
     const s = place(at, block.p, u, cx, cy, halfW, halfH);
+
+    // What is wrong with this one, if anything. Decided once and held for the whole burst: the
+    // colour it has been given by mistake, which of its four rows was read from the wrong address,
+    // and how far that row sits from the rest of it.
+    const bad = corruptAt(flow, block.glitch, BREAKS, BURST);
+    if (bad && !flickerOn(bad.g, bad.age)) continue;
+    // Attribute clash: colour belonged to the cell, not the sprite, so a sprite crossing one came
+    // out wearing whatever the cell was already holding. It is the single most recognisable way for
+    // a picture of this generation to be broken, and it costs one index.
+    const hue = bad ? (block.hue + 1 + Math.floor(hash2(bad.g * 2.3, 43) * (FALL.length - 1))) % FALL.length : block.hue;
+    const torn = bad ? Math.floor(hash2(bad.g * 3.1, 47) * 4) : -1;
+    const slip = bad ? (hash2(bad.g * 4.7, 53) < 0.5 ? -1 : 1) * (1 + Math.floor(hash2(bad.g * 5.9, 59) * 2)) : 0;
+
     // Near, or far. One switch, no fade — see `FALL`.
-    const into = cells[block.hue][u > 8.5 ? 1 : 0];
+    const into = cells[hue][u > 8.5 ? 1 : 0];
     const wide = block.size * s * Math.min(W, H);
 
     // **A sprite runs out of resolution before the pit runs out of depth**, and what it does then is
@@ -194,8 +235,10 @@ export function drawDescent(ctx, W, H, flow, plan, px) {
     const x0 = snapTo(at[0] - cell * 2, px);
     const y0 = snapTo(at[1] - cell * 2, px);
     for (let row = 0; row < 4; row += 1) {
+      // ...and one row of it may have come from somewhere else entirely.
+      const skew = row === torn ? slip * cell : 0;
       for (let col = 0; col < 4; col += 1) {
-        if (bitAt(shape, row, col, rot)) into.push(x0 + col * cell, y0 + row * cell, cell);
+        if (bitAt(shape, row, col, rot)) into.push(x0 + col * cell + skew, y0 + row * cell, cell);
       }
     }
   }

@@ -21,6 +21,7 @@
 import { hash2 } from '../../effects/field.js';
 import { rgba } from '../../lib/draw.js';
 import { ERUPT, surgeAt } from './clock.js';
+import { TEAR_SLIDE, tearAt } from './glitch.js';
 import { FLARE } from './palette.js';
 import { U_TOP, bottomDepth, edgeOf, scaleAt, snapTo } from './layout.js';
 
@@ -69,10 +70,30 @@ export function drawFlare(ctx, W, H, erupt, plan, px) {
     if (hash2(i * 4.3 + n, 19) > surge + (u / deepest) * 0.55) continue;
     const s = scaleAt(u);
     edgeOf(hash2(i * 5.9 + n, 23), at);
-    xy.push(
-      snapTo(cx + at[0] * s * halfW, px),
-      snapTo(cy + at[1] * s * halfH, px),
-    );
+    const y = snapTo(cy + at[1] * s * halfH, px);
+    // ...and the raster it is being drawn onto is coming apart. **Screen space**, applied after the
+    // particle knows where it belongs: the fault is in the signal, not in the thing, so a stripe of
+    // the frame is displaced and everything crossing that stripe goes with it. The eruption is the
+    // pit failing rather than an object misbehaving, so this is the one glitch here that corrupts
+    // the picture instead of a sprite.
+    xy.push(snapTo(cx + at[0] * s * halfW, px) + tearAt(y, age, H, TEAR_SLIDE * surge, px), y);
+  }
+
+  // Rows blown out whole. Rare, brief, and full width — a strip of video memory written over with
+  // whatever was coming up the shaft. Only at real pressure, so they read as the eruption at its
+  // worst rather than as a thing it does throughout.
+  const tick = Math.floor(age * 9);
+  if (surge > 0.55) {
+    for (let r = 0; r < 3; r += 1) {
+      if (hash2(n * 6.7 + tick * 3.3 + r, 61) > 0.16 * surge) continue;
+      const y = snapTo(hash2(n * 7.9 + tick * 1.7 + r, 67) * H, px);
+      const from = Math.floor(hash2(n * 8.3 + tick, 71) * W * 0.4);
+      const wide = W * (0.35 + hash2(n * 9.1 + tick + r, 73) * 0.65);
+      for (let x = from; x < from + wide; x += px) {
+        if (hash2(x * 0.37 + tick * 2.9 + r, 79) > 0.62) continue;
+        xy.push(snapTo(x, px), y);
+      }
+    }
   }
 
   if (!xy.length) return;
