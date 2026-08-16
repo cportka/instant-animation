@@ -37,6 +37,7 @@
 // Where Moon Over the Deep resolves the space between two steps, this rounds. See `palette.js`.
 
 import { createRng } from '../../lib/rng.js';
+import { bend, knobsFor } from '../../lib/knobs.js';
 import { pixelFor } from './layout.js';
 import { eruptionAt, flowAt, planClock } from './clock.js';
 import { drawShaft } from './shaft.js';
@@ -68,10 +69,46 @@ export const meta = {
   // picture gets something out of it too — a chunk that lands on exact device pixels has harder
   // edges than one the browser has to stretch, and hard edges are the entire style.
   maxDpr: 2,
+  /**
+   * Six knobs. `swarm` is the one worth naming: it thins **every** population at once — the lines,
+   * the pixels, the blocks and the things crawling on the border — because the pit's whole subject
+   * is *how much is going down it*, and four sliders that each thinned a third of the answer would
+   * be four ways to look at one number.
+   *
+   * `havoc` is the opposite trick, gathering things that are not obviously the same: how far the
+   * raster tears during an eruption, and how long everything takes to come apart on the way down.
+   * Both are the pit refusing to let go of something cleanly, so they move together.
+   */
+  knobs: [
+    { id: 'pace', colour: '#ffb020' },
+    { id: 'swarm', colour: '#3fd6d0' },
+    { id: 'gloom', colour: '#a06bff' },
+    { id: 'grain', colour: '#5fd66a' },
+    { id: 'glow', colour: '#ffe9a8' },
+    { id: 'havoc', colour: '#ff5544' },
+  ],
 };
 
-export function create({ width, height, seed = meta.id }) {
+/** What the knobs make of the pit, worked out once a frame. */
+const tuneOf = (K) => ({
+  pace: bend(K.pace, 0.22, 1, 2.6),
+  // How many, and — past the middle, where "more" has run out of things to add — how *big*. The
+  // populations are fixed at build time, so the top half of the knob spends itself on bulk instead:
+  // the same traffic, taking up more of the shaft. Both halves answer the one question the pit is
+  // about, which is how much is going down it.
+  swarm: bend(K.swarm, 0.12, 1, 1),
+  bulk: bend(K.swarm, 0.8, 1, 2.2),
+  gloom: bend(K.gloom, 1.6, 0.72, 0.26),
+  crowd: bend(K.gloom, 0.42, 0.625, 0.95),
+  sharpen: bend(K.grain, 0.2, 1.2, 2.6),
+  glow: bend(K.glow, 0.2, 1, 2.1),
+  havoc: bend(K.havoc, 0.25, 1, 3),
+  throat: bend(K.glow, 11, 6.5, 1.6),
+});
+
+export function create({ width, height, seed = meta.id, knobs }) {
   const rng = createRng(seed);
+  const K = knobsFor(meta, knobs);
   const clock = planClock(rng);
   const descent = planDescent(rng);
   const crawl = planCrawl(rng);
@@ -89,19 +126,20 @@ export function create({ width, height, seed = meta.id }) {
 
     draw(ctx, t) {
       ctx.save();
-      const px = pixelFor(W, H);
+      const tune = tuneOf(K);
+      const px = pixelFor(W, H, bend(K.grain, 0.42, 1, 2.4));
       const flow = flowAt(t, clock);
       const erupt = eruptionAt(t, clock);
       // The shaft first, because everything else is *in* it: the ground, the lip, and the bands
       // marching down — which also carry the white front on their way back up.
-      drawShaft(ctx, W, H, flow, erupt, px);
+      drawShaft(ctx, W, H, flow, erupt, px, tune);
       // The border, which is crawling. On the flowed clock like everything else, so when the pit
       // stops taking, the crawling stops with it.
-      drawCrawl(ctx, W, H, flow, crawl, px);
+      drawCrawl(ctx, W, H, flow * tune.pace, crawl, px, tune);
       // Then the traffic, on the flowed clock, which is frozen for the duration of an eruption.
-      drawDescent(ctx, W, H, flow, descent, px);
+      drawDescent(ctx, W, H, flow * tune.pace, descent, px, tune);
       // ...and last, over everything, whatever is coming out.
-      drawFlare(ctx, W, H, erupt, clock, px);
+      drawFlare(ctx, W, H, erupt, clock, px, tune);
       ctx.restore();
     },
   };

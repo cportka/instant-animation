@@ -101,7 +101,7 @@ export function drawHouse(ctx, W, H, t, plan, funnel, px) {
   // Asked of the storm directly. Deriving it from `r / wind` looked reasonable and was nonsense:
   // `wind` is defined *as* a multiple of `r`, so their ratio is very nearly constant and the house
   // came out at its floor at every strength — permanently rubble, and never once drawn whole.
-  const power = powerAt(t);
+  const power = powerAt(t, funnel);
   // The ceiling is above 1 on purpose: `wear` tops out at 1, so a ceiling of exactly 1 would leave
   // the top windward corner permanently half-eaten and the house would never once be seen whole.
   const standing = clamp(1.74 - power * 1.32, 0.05, 1.14);

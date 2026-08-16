@@ -76,7 +76,8 @@ const CALM = 0.7;
 const GUST = 0.3;
 
 /** 0.4 in the lulls, 1 at its worst. Never zero: a vortex that stops is a column of dust. */
-export const powerAt = (t) => CALM + GUST * GUSTS.reduce((sum, g) => sum + g.amp * Math.sin(t * g.rate + g.phase), 0);
+export const powerAt = (t, plan) => (CALM + GUST * GUSTS.reduce((sum, g) => sum + g.amp * Math.sin(t * g.rate + g.phase), 0))
+  * (plan?.power ?? 1);
 
 /**
  * ...and the angle it has turned through by `t`, which is the **integral** of that speed and not the
@@ -125,7 +126,7 @@ function axisAt(up, t, W, plan) {
  * difference between the two is entirely in that exponent.
  */
 function radiusAt(up, t, S, plan) {
-  const flare = plan.base + (plan.mouth - plan.base) * up ** 0.62;
+  const flare = plan.base + (plan.mouth - plan.base) * up ** (plan.flare ?? 0.62);
   // A slow ripple travelling up the funnel, so the profile is never the same twice...
   const swell = 1 + 0.13 * Math.sin(up * 5.2 - t * 0.8) + 0.07 * Math.sin(up * 11 - t * 1.7);
   // ...and on top of it a real **bulge**: one localised swelling that climbs the column and is gone,
@@ -141,7 +142,7 @@ function radiusAt(up, t, S, plan) {
   const bulge = 1 + 0.5 * Math.max(0, Math.sin(t * 0.037 + 0.6)) * Math.sin(Math.PI * at)
     * Math.exp(-((up - at) ** 2) / 0.012);
   // ...and the storm's own strength on top of that: a rope at 0.73 of its width, a wedge at 1.2.
-  return S * flare * swell * bulge * (0.42 + powerAt(t) * 0.78);
+  return S * flare * swell * bulge * (0.42 + powerAt(t, plan) * 0.78);
 }
 
 /**
@@ -185,9 +186,9 @@ const spinAt = (up) => 1.9 - up * 1.15;
  * helix somewhere else would guarantee that one day it would drift out of step with the thing it is
  * supposed to be part of.
  */
-function stepFor(u, up, turn, wobble) {
+function stepFor(u, up, turn, wobble, twist = TWIST, rise = RISE) {
   // A helix: turns with the angle, climbs with the height, and advances with time.
-  const band = wrap01(Math.asin(clamp(u, -1, 1)) * TWIST + up * RISE + turn + wobble);
+  const band = wrap01(Math.asin(clamp(u, -1, 1)) * twist + up * rise + turn + wobble);
   let step = Math.floor(band * SPIN.length);
   // Limb darkening: the surface is turning away from you at the edges, so it goes down the ramp.
   step += Math.round(Math.abs(u) ** 2.6 * 2.0);
@@ -234,7 +235,7 @@ export function vortexAt(W, H, t, plan, up) {
   // most of what it does, it does to things it never touches — so everything that asks about the
   // storm gets both numbers: `r` is the body, `wind` is the field, and the field is what does damage
   // at a distance and what drags loose things off the ground and into the column.
-  return { cx: axisAt(up, t, W, plan), r, wind: r * (2.2 + powerAt(t) * 1.4) };
+  return { cx: axisAt(up, t, W, plan), r, wind: r * (2.2 + powerAt(t, plan) * 1.4) * (plan.gale ?? 1) };
 }
 
 /**
@@ -317,7 +318,7 @@ export function drawFunnel(ctx, W, H, t, plan) {
     const r = radiusAt(up, t, R, plan);
     const cols = Math.max(1, Math.round(r / px));
     // The whole column of the funnel turns, and lower rows turn faster.
-    const turn = turnedBy(t) * SPEED * spinAt(up);
+    const turn = turnedBy(t) * SPEED * spinAt(up) * (plan.spin ?? 1);
     // The band's wander is a property of the height, not of the chunk — hoisted out of the inner
     // loop, where it was a noise lookup per chunk for a value that was the same all the way across.
     const wobble = noise2(plan.seed + up * 3.1, t * 0.5) * 0.35;
@@ -327,7 +328,7 @@ export function drawFunnel(ctx, W, H, t, plan) {
       // Dropping most of the mouth leaves confetti where the funnel should be widest, and the widest
       // part is the part that has to look attached to the storm.
       if (up > 0.86 && hash2(c * 1.7 + row * 0.3, Math.floor(t * 9)) < (up - 0.86) * 3.2) continue;
-      bucket[stepFor(c / cols, up, turn, wobble)].push(cx + c * px, y);
+      bucket[stepFor(c / cols, up, turn, wobble, TWIST * (plan.wind ?? 1), RISE * (plan.climb ?? 1))].push(cx + c * px, y);
     }
   }
 

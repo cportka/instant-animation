@@ -153,7 +153,10 @@ export function drawLitter(ctx, W, H, t, plan, funnel, px) {
   const leaf = [];
   const dust = [];
 
-  for (const bit of plan.bits) {
+  const carried = Math.round(plan.bits.length * (plan.swarm ?? 1));
+  const bulk = plan.bulk ?? 1;
+  for (let nth = 0; nth < carried; nth += 1) {
+    const bit = plan.bits[nth];
     const cycles = t / bit.period + bit.phase;
     const n = Math.floor(cycles);
     const began = (n - bit.phase) * bit.period;
@@ -193,7 +196,7 @@ export function drawLitter(ctx, W, H, t, plan, funnel, px) {
     ctx.beginPath();
     for (let i = 0; i < leaf.length; i += 3) {
       if (leaf[i + 2] < lo || leaf[i + 2] >= hi) continue;
-      chunk(ctx, leaf[i], leaf[i + 1], px, px, px);
+      chunk(ctx, leaf[i], leaf[i + 1], px * bulk, px * bulk, px);
     }
     ctx.fill();
   }

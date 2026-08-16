@@ -50,7 +50,7 @@ export function planSky(rng) {
 }
 
 export function drawSky(ctx, W, H, t, plan, px, moon) {
-  const bpx = backPixel(px);
+  const bpx = backPixel(px, plan.coarse ?? 3);
   const skyBottom = waterlineAt(H, px);
   // `ceil`, so the sky always reaches the waterline and may overhang it by up to one coarse chunk.
   // The sea is drawn afterwards and covers the overhang; the alternative rounds short and leaves a
@@ -61,7 +61,7 @@ export function drawSky(ctx, W, H, t, plan, px, moon) {
 
   // The glare only touches a few moons' worth of sky, so the columns it can reach are worked out per
   // row rather than every chunk being asked and told no.
-  const reach = moon.r * GLARE_REACH;
+  const reach = moon.r * GLARE_REACH * (moon.haze ?? 1);
   // Runs, exactly as the water does them — and the sky is the surface that benefits most. Away from
   // the moon the level is *constant along a row*, so the Bayer matrix repeats every four columns and
   // there are only ever four distinct answers; whole rows come out as one rectangle whenever the
@@ -86,7 +86,7 @@ export function drawSky(ctx, W, H, t, plan, px, moon) {
       // edge anywhere for the eye to catch on. See `glareAt`.
       const level = col < from || col > to
         ? night
-        : night + glareAt(moon, x + bpx / 2, y + bpx / 2) * GLARE_LIFT;
+        : night + glareAt(moon, x + bpx / 2, y + bpx / 2) * GLARE_LIFT * (moon.haze ?? 1);
       const step = shadeAt(level, col, row, GLARE.length);
       if (step === runStep) continue;
       if (runStep >= 0) bucket[runStep].push(runX, y, x - runX);
@@ -127,7 +127,9 @@ function drawStars(ctx, W, H, t, plan, px, skyBottom, moon) {
   const steps = STAR_COLD.length;
   const cold = STAR_COLD.map(() => []);
   const warm = STAR_WARM.map(() => []);
-  for (const star of plan.stars) {
+  const lit = Math.round(plan.stars.length * (plan.swarm ?? 1));
+  for (let nth = 0; nth < lit; nth += 1) {
+    const star = plan.stars[nth];
     const y = Math.round((star.high * skyBottom * 0.94) / px) * px;
     // Nothing in the last stripe above the water: the horizon is where a real sky goes empty, and
     // stars sitting on the waterline read as specks on the lens.
@@ -145,7 +147,7 @@ function drawStars(ctx, W, H, t, plan, px, skyBottom, moon) {
     // around itself. The same falloff the air is lit by, so the hole in the star field and the glow
     // it sits in are the same shape by construction.
     const wash = 1 - glareAt(moon, x, y) * 0.88;
-    const level = star.mag * (steps + 1.4) * (1 + swing * shimmer) * haze * wash;
+    const level = star.mag * (steps + 1.4) * (1 + swing * shimmer) * haze * wash * (plan.blaze ?? 1);
     if (level < 0.55) continue;
     // Counted down from the top of the ramp: a bright star is step 0 and a barely-there one is the
     // last step, a shade off the sky itself.

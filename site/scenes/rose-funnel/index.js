@@ -24,6 +24,7 @@
 // colours, which is how a machine that could not do smooth colour would have had to draw it.
 
 import { createRng } from '../../lib/rng.js';
+import { bend, knobsFor } from '../../lib/knobs.js';
 import { drawFunnel, drawWind, funnelPixel, planFunnel, sizeRef } from './funnel.js';
 import { planCycle } from './cycle.js';
 import { drawDebris, drawLitter, planDebris, planLitter } from './debris.js';
@@ -70,6 +71,21 @@ export const meta = {
    *
    * Index 0 is the arrangement every existing link already resolves to.
    */
+  /**
+   * Six knobs. `form` is the storm itself — how strong it is and what profile that strength wears —
+   * so one end of it is a thin rope leaning out of the cloud and the other a wedge with its mouth
+   * off both sides of the frame. `havoc` is what the storm is *doing to things*: the wind's reach
+   * past the wall and the rate the temple comes apart, which are one fact about the weather told
+   * twice.
+   */
+  knobs: [
+    { id: 'pace', colour: '#ffb020' },
+    { id: 'form', colour: '#ff4fa3' },
+    { id: 'swarm', colour: '#3fd6d0' },
+    { id: 'glow', colour: '#ffe9a8' },
+    { id: 'grain', colour: '#5fd66a' },
+    { id: 'havoc', colour: '#ff5544' },
+  ],
   variants: [
     {
       id: 'over-the-temple',
@@ -89,8 +105,9 @@ export const meta = {
   ],
 };
 
-export function create({ width, height, seed = meta.id, variant = meta.variants[0] }) {
+export function create({ width, height, seed = meta.id, variant = meta.variants[0], knobs }) {
   const rng = createRng(seed);
+  const K = knobsFor(meta, knobs);
   // Sky first, so the storm is the same for a given seed however many motes the funnel asks for.
   const sky = planSky(rng);
   const pagoda = planPagoda(rng);
@@ -132,7 +149,26 @@ export function create({ width, height, seed = meta.id, variant = meta.variants[
 
     draw(ctx, t) {
       ctx.save();
-      const px = funnelPixel(Math.min(W, H));
+      // The knobs, written onto the plans the drawing already reads, and recomputed every frame
+      // from the live bag rather than kept — so putting one back puts the picture back.
+      funnel.power = bend(K.form, 0.45, 1, 1.7);
+      funnel.flare = bend(K.form, 1.15, 0.62, 0.3);
+      funnel.spin = bend(K.pace, 0.18, 1, 2.8);
+      funnel.climb = bend(K.pace, 0.3, 1, 2.6);
+      funnel.wind = bend(K.havoc, 0.4, 1, 2.2);
+      funnel.gale = bend(K.havoc, 0.45, 1, 2.3);
+      // The light in the storm: how often it strikes, and how many rain shafts are hanging out of
+      // the cloud. The strikes are six hundredths of their period long, so on their own they would
+      // be a knob that does nothing for six seconds at a time; the shafts are the continuous half.
+      sky.strikes = bend(K.glow, 0.18, 1, 4.5);
+      sky.veils = bend(K.glow, 0.15, 1, 1);
+      sky.beam = bend(K.glow, 0.4, 1, 2.2);
+      litter.swarm = bend(K.swarm, 0.05, 1, 1);
+      works.swarm = bend(K.swarm, 0.12, 1, 1);
+      // ...and past the middle, where the forest and the litter have run out of things to add, the
+      // pieces the wind is carrying simply get bigger.
+      litter.bulk = bend(K.swarm, 0.7, 1, 2.4);
+      const px = funnelPixel(Math.min(W, H), bend(K.grain, 0.45, 1, 2.1));
       drawSky(ctx, W, H, t, sky, px);
       // Before the funnel, so the storm's flare occludes the spire for free — painter's order does
       // the hidden-surface work and nothing has to be sorted or clipped.

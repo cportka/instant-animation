@@ -118,7 +118,9 @@ export function drawWorks(ctx, W, H, t, plan, px) {
   // storm's rose, so the land reads as a living place the temple is standing in rather than as more
   // weather. The far band is a step darker and drawn a chunk lower, which is all the depth a
   // treeline needs.
-  for (const tree of plan.trees) {
+  const standing = Math.round(plan.trees.length * (plan.swarm ?? 1));
+  for (let nth = 0; nth < standing; nth += 1) {
+    const tree = plan.trees[nth];
     // Clear of the temple, so the building stands in a clearing rather than in a hedge.
     if (Math.abs(tree.at - 0.33) < 0.1) continue;
     const x = Math.round((tree.at * W) / bpx) * bpx;

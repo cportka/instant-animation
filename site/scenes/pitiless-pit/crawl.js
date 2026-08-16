@@ -81,7 +81,7 @@ function formOn(seed, col, row, span) {
   return hash2(seed * 3.7 + c * 5.3 + span, row * 7.1 + seed * 1.9) > 0.42;
 }
 
-export function drawCrawl(ctx, W, H, flow, plan, px) {
+export function drawCrawl(ctx, W, H, flow, plan, px, tune) {
   const cx = snapTo(W / 2, px);
   const cy = snapTo(H / 2, px);
   const halfW = W / 2;
@@ -90,7 +90,9 @@ export function drawCrawl(ctx, W, H, flow, plan, px) {
   const cell = [0, 0];
   const buckets = CRAWL.map(() => []);
 
-  for (const thing of plan.things) {
+  const alive = Math.round(plan.things.length * tune.swarm);
+  for (let nth = 0; nth < alive; nth += 1) {
+    const thing = plan.things[nth];
     // Across the border, and wrapping. Out of the frame at one end and into the pit at the other,
     // so the wrap is never on screen.
     const across = thing.at + flow * thing.speed;
@@ -102,7 +104,7 @@ export function drawCrawl(ctx, W, H, flow, plan, px) {
     // deliberately *not* applied: the ground is a plane seen from straight above, so everything on it
     // is the same distance from the eye and a thing does not get smaller for being further out. Only
     // what goes over the lip is allowed to shrink.
-    const size = px * thing.span;
+    const size = px * thing.span * tune.bulk;
     const x0 = snapTo(cx + at[0] * s * halfW - size / 2, px);
     const y0 = snapTo(cy + at[1] * s * halfH - size / 2, px);
 

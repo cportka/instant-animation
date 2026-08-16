@@ -294,8 +294,8 @@ function incarnate(element, t, W, H) {
  * run short. And it is the *integral* over the element's own lifetime, so a gust that arrives
  * halfway through moves it from there rather than retroactively.
  */
-const carried = (live, t, S) =>
-  (windAt(t) - windAt(live.born) - (windAt(live.born + live.life) - windAt(live.born)) * 0.5) * S * WIND;
+const carried = (live, t, S, gust = 1) =>
+  (windAt(t) - windAt(live.born) - (windAt(live.born + live.life) - windAt(live.born)) * 0.5) * S * WIND * gust;
 
 /* -------------------------------------------------------------- windows ---- */
 
@@ -309,7 +309,7 @@ function openWindows(fog, t, W, H) {
     const u = cycles - n;
     if (u >= w.duty) continue;
     const open = Math.sin((u / w.duty) * Math.PI) ** 0.7;
-    const r = S * (0.046 + 0.038 * hash2(w.id + 7.3, n)) * open;
+    const r = S * (0.046 + 0.038 * hash2(w.id + 7.3, n)) * open * (fog.form ?? 1);
     if (r < 2) continue;
     // Held off the very edge of the frame: a peek-a-boo half out of shot is a torn corner.
     const hx = 0.13 + 0.74 * hash2(w.id, n);
@@ -366,7 +366,7 @@ export function drawFog(ctx, W, H, t, fog) {
   // strands, all of which then pass in front of it. Drawn late it was a sprite on the weather;
   // drawn here it is a thing happening some way down inside a bank of it. It is also dimmed by
   // however thick the fog is directly above it, which is the other half of the same idea.
-  if (!glitch) drawApparition(ctx, W, H, t, (x, y) => cloudDensity(x, y, S, t));
+  if (!glitch) drawApparition(ctx, W, H, t, (x, y) => cloudDensity(x, y, S, t), fog.form ?? 1);
   billows(ctx, W, H, S, t, fog, wins, glitch);
   wisps(ctx, W, H, S, t, fog, wins, glitch);
   erosion(ctx, W, H, S, t, fog, wins, glitch);
@@ -472,11 +472,11 @@ function haze(ctx, W, H, S, t, fog, wins, glitch = null) {
     const live = incarnate(d, t, W, H);
     if (live.swell < 0.02) continue;
     const drift = curl(live.x / S, live.y / S, t * 0.15, 0.7);
-    const x = live.x + drift.x * S * 0.2 * live.u + carried(live, t, S);
+    const x = live.x + drift.x * S * 0.2 * live.u + carried(live, t, S, fog.gust ?? 1);
     const y = live.y + drift.y * S * 0.2 * live.u;
-    const major = S * d.size * live.spread;
+    const major = S * d.size * (fog.mass ?? 1) * live.spread;
     const minor = major * d.squash;
-    const alpha = d.alpha * live.swell * clearance(wins, x, y, major);
+    const alpha = d.alpha * (fog.thick ?? 1) * live.swell * clearance(wins, x, y, major);
     if (alpha < 0.004) continue;
     let shift = 0;
     if (glitch) { shift = shred(glitch, d.id, y, H); if (shift === null) continue; }
@@ -600,7 +600,7 @@ function billows(ctx, W, H, S, t, fog, wins, glitch = null) {
     if (live.swell < 0.02) continue;
 
     const drift = curl(live.x / S, live.y / S, t * 0.4, 1.6);
-    const x = live.x + drift.x * S * 0.13 * live.u + carried(live, t, S);
+    const x = live.x + drift.x * S * 0.13 * live.u + carried(live, t, S, fog.gust ?? 1);
     const y = live.y + drift.y * S * 0.13 * live.u;
     const vx = gustAt(t) * WIND * S + drift.x * S * 0.06;
     const vy = drift.y * S * 0.06;
@@ -608,10 +608,10 @@ function billows(ctx, W, H, S, t, fog, wins, glitch = null) {
     // Always expanding, whatever the opacity is doing — that is what makes a mass *dissolve* into
     // the fog around it rather than shrink back to the point it grew from — and stretched along the
     // way it is actually going, more so the faster it goes.
-    const major = S * b.size * live.spread * (1 + drag * 0.4);
+    const major = S * b.size * (fog.mass ?? 1) * live.spread * (1 + drag * 0.4);
     const minor = (major * b.squash) / (1 + drag * 0.45);
     const angle = Math.atan2(vy, vx);
-    const alpha = b.alpha * live.swell * clearance(wins, x, y, major);
+    const alpha = b.alpha * (fog.thick ?? 1) * live.swell * clearance(wins, x, y, major);
     if (alpha < 0.008) continue;
     let shift = 0;
     if (glitch) { shift = shred(glitch, b.id, y, H); if (shift === null) continue; }
@@ -691,7 +691,7 @@ function wisps(ctx, W, H, S, t, fog, wins, glitch = null) {
     if (live.swell < 0.04) continue;
 
     const drift = curl(live.x / S, live.y / S, t * 0.6, 2.9);
-    const x = live.x + drift.x * S * 0.2 * live.u + carried(live, t, S) * 1.25;
+    const x = live.x + drift.x * S * 0.2 * live.u + carried(live, t, S, fog.gust ?? 1) * 1.25;
     const y = live.y + drift.y * S * 0.2 * live.u;
     // A filament does not just grow, it *draws out*: the major axis runs away with the life while
     // the minor one barely moves, so a soft puff becomes a long thread and then nothing. Watching
@@ -702,10 +702,10 @@ function wisps(ctx, W, H, S, t, fog, wins, glitch = null) {
     const vx = gustAt(t) * WIND * S * 1.25 + drift.x * S * 0.1;
     const vy = drift.y * S * 0.1;
     const drag = clamp((Math.hypot(vx, vy) / (S * WIND)) * 0.34, 0, 1.2);
-    const major = S * w.size * live.spread * (0.75 + 0.55 * live.u) * (1 + drag * 0.38);
+    const major = S * w.size * (fog.mass ?? 1) * live.spread * (0.75 + 0.55 * live.u) * (1 + drag * 0.38);
     const minor = (major * w.squash * (1.15 - 0.45 * live.u)) / (1 + drag * 0.38);
     const alpha =
-      w.alpha * live.swell * smoothstep(0.3, 0.66, bankAt(x, y, S, t)) * clearance(wins, x, y, major);
+      w.alpha * (fog.thick ?? 1) * live.swell * smoothstep(0.3, 0.66, bankAt(x, y, S, t)) * clearance(wins, x, y, major);
     if (alpha < 0.006) continue;
     let shift = 0;
     if (glitch) { shift = shred(glitch, w.id, y, H); if (shift === null) continue; }
@@ -736,9 +736,9 @@ function erosion(ctx, W, H, S, t, fog, wins, glitch = null) {
     if (live.swell < 0.04) continue;
 
     const drift = curl(live.x / S, live.y / S, t * 0.5, 2.3);
-    const x = live.x + drift.x * S * 0.17 * live.u + carried(live, t, S) * 1.1;
+    const x = live.x + drift.x * S * 0.17 * live.u + carried(live, t, S, fog.gust ?? 1) * 1.1;
     const y = live.y + drift.y * S * 0.17 * live.u;
-    const major = S * s.size * live.spread * (0.8 + 0.5 * live.u);
+    const major = S * s.size * (fog.mass ?? 1) * live.spread * (0.8 + 0.5 * live.u);
     // The mirror of the crest gate. Between them, a pale bank gets both the brightest and the
     // darkest values in the frame — which is what fog actually does, and what gives a single frame
     // the whole range rather than making the range something you only see over a minute.

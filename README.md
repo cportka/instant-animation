@@ -2,7 +2,7 @@
 
 An instant animation generator. Animate anything you can describe.
 
-**Version:** 6.1.0 · **Live:** https://cportka.github.io/instant-animation/
+**Version:** 6.2.0 · **Live:** https://cportka.github.io/instant-animation/
 
 Describe something. It becomes a hand-drawn canvas animation and joins the gallery. There is no
 text on the site — the animation *is* the page. The only chrome is a soft chevron floating at each
@@ -16,6 +16,14 @@ returns toward the present, and neither ever runs out: by clicking a chevron, sc
 space or the arrow keys, or swiping. Moving between animations plays a channel change — the two
 scenes push past each other while the picture tears itself apart, then settles — and the change is
 always the one belonging to the animation you are arriving *at*, including on the wrap.
+
+**Double-tap the picture** (or press space) and a rack of knobs comes up. Every animation declares
+between four and ten of its own, and they are colours rather than words: what a knob does is visible
+in the picture the moment you move it, which is a better label than any name — and the only one that
+stays true when the same knob is wired to four different parameters at once. The colour is a
+vocabulary across the whole gallery, so amber is always pace, green is always resolution, red is
+always damage. A knob is not an event: turn one back and you get exactly the picture you started
+with, and the black square resets the lot. Your settings follow each animation around for the visit.
 
 **Tap the picture** and some animations re-arrange themselves. An animation may hold more than one
 *composition* of itself — the same artwork, put together a different way — so the gallery has two

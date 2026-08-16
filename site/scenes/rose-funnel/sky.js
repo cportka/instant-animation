@@ -75,11 +75,13 @@ export function drawSky(ctx, W, H, t, sky, px) {
 
 /** Rain, falling in columns a long way behind everything else. */
 function drawShafts(ctx, W, H, t, sky, px, horizonY) {
-  for (const shaft of sky.shafts) {
-    ctx.fillStyle = rgba(SPIN[shaft.step], 0.3);
+  const shafts = Math.round(sky.shafts.length * (sky.veils ?? 1));
+  for (let nth = 0; nth < shafts; nth += 1) {
+    const shaft = sky.shafts[nth];
+    ctx.fillStyle = rgba(SPIN[shaft.step], Math.min(1, 0.3 * (sky.beam ?? 1)));
     ctx.beginPath();
     const x = (shaft.x + t * shaft.drift) % 1;
-    const cols = Math.max(1, Math.round((shaft.width * W) / px));
+    const cols = Math.max(1, Math.round((shaft.width * (sky.beam ?? 1) * W) / px));
     const rows = Math.round((horizonY * shaft.drop) / px);
     for (let r = 0; r < rows; r += 1) {
       for (let c = 0; c < cols; c += 1) {
@@ -173,14 +175,15 @@ function drawGround(ctx, W, H, t, px, horizonY) {
 
 /** A slow pulse of light in the cloud. Rare, brief, and never in the same place twice. */
 export function drawLightning(ctx, W, H, t, sky) {
-  const n = Math.floor(t / 7.3);
-  const into = t / 7.3 - n;
+  const every = 7.3 / (sky.strikes ?? 1);
+  const n = Math.floor(t / every);
+  const into = t / every - n;
   if (into > 0.06) return;
   // Where this particular strike is, hashed off the strike's index so it never repeats and never
   // needs remembering.
   const at = 0.12 + hash2(n, sky.seed) * 0.76;
   // A few frames of flash, then nothing. A long fade would be a lamp, not a strike.
-  const flash = (1 - into / 0.06) ** 2.5;
+  const flash = (1 - into / 0.06) ** 2.5 * (sky.strikes ?? 1);
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   ctx.fillStyle = rgba(SPIN[1], flash * 0.16);

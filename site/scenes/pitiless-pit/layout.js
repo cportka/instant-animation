@@ -39,7 +39,7 @@ const LOG_RATIO = Math.log(RATIO);
  * machine had few pixels and few colours and could blend neither, and a picture that observes one of
  * those constraints while quietly breaking the other two just looks like a mistake.
  */
-export const pixelFor = (W, H) => Math.max(3, Math.round(Math.min(W, H) / 96));
+export const pixelFor = (W, H, grain = 1) => Math.max(2, Math.round(Math.min(W, H) / (96 * grain)));
 
 /** The screen scale of the ring at depth `u`: 1 is the frame edge, `MOUTH` is the lip of the pit. */
 export const scaleAt = (u) => MOUTH * Math.exp(u * LOG_RATIO);
@@ -81,9 +81,9 @@ export const SHARPEN = 1.2;
  * The rule that nothing is ever half a chunk over still holds, exactly — it is only that down there
  * the chunk has become the screen's own grid, so the two rules are the same rule.
  */
-export function pxAt(u, px, finest) {
+export function pxAt(u, px, finest, sharpen = SHARPEN) {
   if (u <= 0) return px;
-  const fine = px * Math.exp(u * SHARPEN * LOG_RATIO);
+  const fine = px * Math.exp(u * sharpen * LOG_RATIO);
   return fine < finest ? finest : fine;
 }
 

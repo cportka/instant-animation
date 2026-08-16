@@ -28,7 +28,7 @@ import { DEEP, PATH, SEA } from './palette.js';
 import { deepAt, glowAt, mixAt } from './deep.js';
 
 export function planWater(rng) {
-  return {
+  const plan = {
     seed: rng.range(0, 50),
     // Three, at wavelengths with no common factor: one long slow roller carrying most of the height,
     // one at half its length, and a short one that only ever shows up as texture on their faces.
@@ -51,6 +51,11 @@ export function planWater(rng) {
       { k: rng.range(13, 17), speed: rng.range(0.3, 0.42), tilt: rng.range(3.2, 5), amp: 0.34 },
     ],
   };
+  // The swells as designed, kept aside. The `pace` and `swell` knobs are written onto `swells` every
+  // frame, so they have to scale from a fixed original — multiplying the live values would compound
+  // them a hundred and eighty times a second and the sea would stop dead or tear itself apart.
+  plan.rest = plan.swells.map((swell) => ({ ...swell }));
+  return plan;
 }
 
 /**
@@ -226,7 +231,7 @@ export function drawWater(ctx, W, H, t, plan, moon, deepPlan, px) {
         // follows the rollers: the glow bands and unbands as crests pass over it, which is a thing
         // only something underneath could do — and it keeps the coverage changing continuously
         // across every area the dither is working on, which is what a dither needs to disappear.
-        if (glow > 0 && bayerOn(col, row, mixAt(glow * (0.72 + h * 0.34)))) {
+        if (glow > 0 && bayerOn(col, row, mixAt(glow * (0.72 + h * 0.34), deepPlan.lift ?? 1))) {
           // Lit from beneath, and the swell keeps rolling over the top of it unlit — which is the
           // whole of what makes the light read as *under* the surface rather than on it.
           //

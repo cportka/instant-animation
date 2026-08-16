@@ -27,6 +27,7 @@
 // of the shape it is on, and masses that grow and die rather than slide.
 
 import { createRng } from '../../lib/rng.js';
+import { bend, knobsFor } from '../../lib/knobs.js';
 import { drawGround, nearestRiver, planGround } from './town.js';
 import { drawCrowd, drawLightBloom, drawLights, planLights } from './lights.js';
 import { drawFog, planFog } from './fog.js';
@@ -51,10 +52,25 @@ export const meta = {
   // nothing else. Four times the pixels would cost four times as much to render something whose
   // every edge is deliberately soft — there is not one hard edge in the frame to sharpen.
   maxDpr: 1,
+  /**
+   * Five knobs, and `veil` is the one this scene is really about. It drives the fog's opacity **up**
+   * while pulling every lobe's size *down*, so one end of its travel is a thin wide haze you can see
+   * the whole town through and the other is a boil of small dense masses that hides everything —
+   * two different weathers, rather than the same weather at two volumes. The scene's own note says
+   * range comes from ordering rather than from opacity; this is the knob that says so out loud.
+   */
+  knobs: [
+    { id: 'pace', colour: '#ffb020' },
+    { id: 'veil', colour: '#a06bff' },
+    { id: 'swarm', colour: '#3fd6d0' },
+    { id: 'glow', colour: '#ffe9a8' },
+    { id: 'form', colour: '#ff4fa3' },
+  ],
 };
 
-export function create({ width, height, seed = meta.id }) {
+export function create({ width, height, seed = meta.id, knobs }) {
   const rng = createRng(seed);
+  const K = knobsFor(meta, knobs);
   // Ground first, so the town's plan is the same for a given seed whatever the fog does with the
   // generator afterwards.
   const ground = planGround(rng);
@@ -75,6 +91,21 @@ export function create({ width, height, seed = meta.id }) {
 
     draw(ctx, t) {
       ctx.save();
+      // The knobs, written onto the plans the drawing already reads, and recomputed every frame from
+      // the live bag rather than kept — so putting one back puts the picture back.
+      fog.gust = bend(K.pace, 0.15, 1, 3.4);
+      fog.thick = bend(K.veil, 0.28, 1, 1.9);
+      fog.mass = bend(K.veil, 1.7, 1, 0.45);
+      // How many people are down there, and — past the middle, where the crowd runs out — how much
+      // light they are making. The population is fixed at build time; the fires are not.
+      lights.swarm = bend(K.swarm, 0.05, 1, 1);
+      lights.ablaze = bend(K.swarm, 0.7, 1, 1.6);
+      lights.blaze = bend(K.glow, 0.2, 1, 2.4);
+      // How much of the ground you are allowed to see, and how big the thing in the cloud is when
+      // it comes. The peek-a-boos are the continuous half — the fog thins over a wandering window
+      // rather than being punched through, so this is the size of the *gap* — and the apparition is
+      // the rare half. Both are the same question: how much of what is under the weather gets out.
+      fog.form = bend(K.form, 0.3, 1, 2.1);
       drawGround(ctx, W, H, t, ground);
       // The people are part of the ground, not part of the light: they composite normally, before
       // anything additive, so they are objects standing on the town rather than more glow.

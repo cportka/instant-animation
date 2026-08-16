@@ -13,6 +13,7 @@
 // perspective, and the lamps ride it.
 
 import { createRng } from '../../lib/rng.js';
+import { bend, knobsFor } from '../../lib/knobs.js';
 import { TAU, clamp, lerp, smoothstep, wave, wrap01 } from '../../lib/draw.js';
 import { bayerOn, block, chunk, ditherGlow, ditherRamp, hash01, pixelSize, snap } from '../../effects/pixel.js';
 
@@ -48,6 +49,21 @@ export const meta = {
   // Pixel art wants one device pixel per drawn pixel. At 2x the chunks are drawn twice as fine and
   // the whole point of the grid — that you can see it — goes away.
   maxDpr: 1,
+  /**
+   * Six knobs. `pace` is the car: it multiplies the one number every layer of the parallax reads,
+   * so the sky barely shifts and the roadside tears past — the depth ordering the scene was built on
+   * comes out of the same multiplication it always did. `havoc` is the tape: the scanline mask this
+   * scene finishes on, which is the difference between a 16-bit picture and a 16-bit picture on a
+   * failing VCR.
+   */
+  knobs: [
+    { id: 'pace', colour: '#ffb020' },
+    { id: 'glow', colour: '#ffe9a8' },
+    { id: 'swarm', colour: '#3fd6d0' },
+    { id: 'grain', colour: '#5fd66a' },
+    { id: 'havoc', colour: '#ff5544' },
+    { id: 'form', colour: '#ff4fa3' },
+  ],
 
   // Two compositions of the same drive, cycled by a tap on the picture.
   //
@@ -146,8 +162,9 @@ const DRIFT_Y = 0.32;
  * @param variant  one of `meta.variants`. Defaults to the first, so every caller that predates
  *                 compositions — and every scene-shaped test — keeps working untouched.
  */
-export function create({ width, height, seed = meta.id, variant = meta.variants[0] }) {
+export function create({ width, height, seed = meta.id, variant = meta.variants[0], knobs }) {
   const rng = createRng(seed);
+  const K = knobsFor(meta, knobs);
   const road = makeRoad(variant.road);
 
   const stars = Array.from({ length: 260 }, () => ({
@@ -213,13 +230,19 @@ export function create({ width, height, seed = meta.id, variant = meta.variants[
     },
 
     draw(ctx, t) {
-      const px = pixelSize(W, H);
-      const travel = t * SPEED;
+      // The knobs. Read from the live bag every frame and never kept, so putting one back puts the
+      // picture back — and folded into the numbers the drawing already reads rather than branching.
+      const pace = bend(K.pace, 0.12, 1, 3.2);
+      const lamplight = bend(K.glow, 0.25, 1, 2.2);
+      const starlight = bend(K.swarm, 0.05, 1, 1);
+      const tape = bend(K.havoc, 0.1, 1, 2.6);
+      const px = Math.max(2, Math.round(pixelSize(W, H) / bend(K.grain, 0.45, 1, 2.1)));
+      const travel = t * SPEED * pace;
 
       drawSky(ctx, W, H, t, px);
-      drawStars(ctx, W, H, t, stars, travel, px);
+      drawStars(ctx, W, H, t, stars, travel, px, starlight, bend(K.swarm, 0.8, 1, 1.7));
       drawSun(ctx, W, H, t, px);
-      drawFigment(ctx, W, H, t, px);
+      drawFigment(ctx, W, H, t, px, bend(K.form, 0.3, 1, 3));
       drawHeadlands(ctx, W, H, travel, px);
       drawSkyline(ctx, W, H, t, skyline, travel, px);
       drawWater(ctx, W, H, t, px);
@@ -229,9 +252,9 @@ export function create({ width, height, seed = meta.id, variant = meta.variants[
       // enough at this scale to erase the road, the lamps and the light on both.
       drawNearTrees(ctx, W, H, t, nearTrees, travel, px);
       drawRoad(ctx, W, H, t, travel, px, road);
-      drawLamps(ctx, W, H, t, lamps, travel, px, road);
+      drawLamps(ctx, W, H, t, lamps, travel, px, road, lamplight);
       drawHood(ctx, W, H, t, px);
-      drawScanlines(ctx, W, H, px);
+      drawScanlines(ctx, W, H, px, tape);
     },
   };
 }
@@ -260,10 +283,12 @@ function drawSky(ctx, W, H, t, px) {
  * Batched by tint: one path per colour rather than one fill per star, which is the difference
  * between four fills a frame and two hundred and sixty.
  */
-function drawStars(ctx, W, H, t, stars, travel, px) {
+function drawStars(ctx, W, H, t, stars, travel, px, swarm = 1, blaze = 1) {
   const paths = STAR_TINTS.map(() => []);
 
-  for (const star of stars) {
+  const lit = Math.round(stars.length * swarm);
+  for (let nth = 0; nth < lit; nth += 1) {
+    const star = stars[nth];
     // The sky is the slowest layer there is — the stars barely acknowledge that the car is moving.
     const x = wrap01(star.x + travel * 0.00002 * DRIFT_X) * W;
     const y = star.y * H + travel * 0.00002 * DRIFT_Y * H;
@@ -272,7 +297,7 @@ function drawStars(ctx, W, H, t, stars, travel, px) {
     if (drowned >= 1) continue;
 
     const swell = 0.5 + Math.sin(t * star.rate + star.phase) * 0.5;
-    const level = star.bright * (0.35 + swell * 0.85) * (1 - drowned);
+    const level = star.bright * (0.35 + swell * 0.85) * (1 - drowned) * blaze;
     if (level < 0.34) continue;
     paths[star.tint].push([x, y, star.sparkles && level > 0.86]);
   }
@@ -723,7 +748,7 @@ function drawGuardRail(ctx, W, H, travel, px, road) {
  * on the road under each. They are the only warm thing on this side of the water, and the reason
  * the road is legible at all.
  */
-function drawLamps(ctx, W, H, t, lamps, travel, px, road) {
+function drawLamps(ctx, W, H, t, lamps, travel, px, road, lamplight = 1) {
   // On the hill side, not the drop-off side. The bay edge runs off the left of frame within a few
   // poles, so a series planted there is two lamps and then nothing; on the right the line holds
   // all the way from the vanishing point to the bottom corner, which is the whole point of it.
@@ -761,8 +786,8 @@ function drawLamps(ctx, W, H, t, lamps, travel, px, road) {
     // The pool it throws on the road, drawn before the pole so the pole stands in its own light.
     // Wide and flat: a street lamp lights a long ellipse down the road, not a circle under itself,
     // and this pool is the only reason the tarmac is legible at all.
-    ditherGlow(ctx, headX, at.y, height * 1.05, LAMP_DEEP, 0.9 * flick * fade, px, 0.3, 1.1);
-    ditherGlow(ctx, headX, at.y, height * 0.66, LAMP_MID, 0.85 * flick * fade, px, 0.28, 1.2);
+    ditherGlow(ctx, headX, at.y, height * 1.05 * lamplight, LAMP_DEEP, Math.min(1, 0.9 * flick * fade * lamplight), px, 0.3, 1.1);
+    ditherGlow(ctx, headX, at.y, height * 0.66 * lamplight, LAMP_MID, Math.min(1, 0.85 * flick * fade * lamplight), px, 0.28, 1.2);
     ditherGlow(ctx, headX, at.y, height * 0.34, LAMP_HOT, 0.8 * flick * fade, px, 0.26, 1.3);
 
     // Pole and arm. Lit down the side facing the head. As the lamp goes out the metal comes apart
@@ -1013,8 +1038,8 @@ function exitBolts(ctx, cx, cy, size, u, seed, px) {
  * A car, spinning end over end across the night sky. Not reflected, not explained, and gone in a
  * few seconds — the one thing in the frame that does not obey the road.
  */
-function drawFigment(ctx, W, H, t, px) {
-  const PERIOD = 23;
+function drawFigment(ctx, W, H, t, px, often = 1) {
+  const PERIOD = 23 / often;
   const index = Math.floor(t / PERIOD);
   const local = t - index * PERIOD;
   const LENGTH = 5.5;
@@ -1078,9 +1103,10 @@ function drawHood(ctx, W, H, t, px) {
 }
 
 /** Scanlines, at the grid's own pitch. The screen this was meant to be seen on. */
-function drawScanlines(ctx, W, H, px) {
+function drawScanlines(ctx, W, H, px, tape = 1) {
+  if (tape <= 0.02) return;
   ctx.save();
-  ctx.globalAlpha = 0.16;
+  ctx.globalAlpha = Math.min(0.6, 0.16 * tape);
   ctx.fillStyle = '#000000';
   ctx.beginPath();
   for (let y = 0; y < H; y += px * 2) ctx.rect(0, y, W, px);

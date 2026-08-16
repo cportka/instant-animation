@@ -32,6 +32,9 @@ export const meta = {
   chrome: 'neon',            // which nav chevron the scene wears
   transition: 'tape',        // the channel change *into* this scene
   maxDpr: 2,                 // cap the render scale; lo-fi scenes want 1 (optional)
+  knobs: [                   // 4-10 live controls; colour is the only label
+    { id: 'pace', colour: '#ffb020' },
+  ],
 };
 
 export function create({ width, height, seed }) {
@@ -70,6 +73,47 @@ cut one.
 
 You get the channel change between scenes for free — it lives in the stage and works on rendered
 pixels, so it never needs anything from the scene.
+
+## Knobs
+
+Every animation declares **four to ten knobs** — the panel a visitor gets by double-tapping the
+picture or pressing space. `create()` is handed a live bag of `0..1` values which the panel mutates
+in place; read it every frame and never keep it:
+
+```js
+import { bend, knobsFor } from '../../lib/knobs.js';
+
+export function create({ width, height, seed, knobs }) {
+  const K = knobsFor(meta, knobs);        // fills in anything the caller left out
+  return {
+    draw(ctx, t) {
+      const pace = bend(K.pace, 0.2, 1, 3.2);   // 0 -> 0.2, half -> 1, 1 -> 3.2
+    },
+  };
+}
+```
+
+Four rules, all of them enforced by `tests/knobs.test.js`:
+
+1. **A knob is part of the question, not an event.** A scene is a pure function of `t` *and* its
+   knobs, both constant for a frame. Turn one back and the picture has to come back bit for bit —
+   nothing may integrate, decay or remember. Read the bag in `draw()`, not in `create()`.
+2. **The middle is the artwork.** `bend`'s `mid` is the value the scene shipped with, so a panel at
+   its defaults draws exactly what the render tests and the poster path draw. Reset is then a real
+   answer rather than an approximation.
+3. **Both ends must move the picture, and a knob should move several things.** A knob that runs out
+   of things to add halfway is half dead — when a population is fixed at build time, spend the top
+   half on how *big* or how *bright* instead. And prefer one gesture over one parameter: push two
+   numbers up while pulling two down, so the two ends of the travel are different ideas.
+4. **A knob may not scale the master clock, and may not break the scene.** Anything indexed off an
+   epoch — `floor(t * rate)` — teleports when its rate changes; find the parameter that gives the
+   same apparent speed without touching the phase. And if a scene has a geometric invariant, check it
+   across the knob *space*: a slider is a very efficient way to hand back a bug you already fixed.
+
+Colour is the only label, and it is shared across the gallery: amber `#ffb020` is pace, green
+`#5fd66a` is resolution, cyan `#3fd6d0` is how many, magenta `#ff4fa3` is form, violet `#a06bff` is
+palette and holes, pale `#ffe9a8` is light, red `#ff5544` is damage, blue `#4d8bff` is a fall or a
+drift. Two scenes using the same id must use the same colour, and a test says so.
 
 ## Several compositions of one animation
 

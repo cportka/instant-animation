@@ -445,3 +445,86 @@ body {
     transform: none;
   }
 }
+
+/* -------------------------------------------------------------- panel -- */
+
+/* The knob panel: summoned, used, dismissed. At rest it is `hidden` and there is nothing on the
+   page at all, which is the same bargain the chevrons make — a control that is always visible on a
+   page whose subject is a picture is a frame around the picture.
+
+   Bottom left, because the chevrons own the top and bottom *centre*. A rack across the middle of
+   the bottom edge would sit on the down arrow, and one docked to the right would land under the
+   thumb that swipes. */
+.panel {
+  position: fixed;
+  z-index: 3;
+  bottom: calc(1.1rem + env(safe-area-inset-bottom, 0px));
+  left: calc(1.1rem + env(safe-area-inset-left, 0px));
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  padding: 0.6rem;
+  border-radius: 0.75rem;
+  /* Dark enough to read a colour against on a white frame and on a black one alike. Every scene in
+     the gallery is behind this at some point, including one that is literally two colours. */
+  background: rgba(8, 8, 14, 0.72);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.45);
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.panel__rack {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+/* One knob: a track with a coloured column standing in it. The colour is the whole label, so it is
+   the brightest thing here and the track it stands in is nearly nothing. */
+.knob {
+  position: relative;
+  width: 1.15rem;
+  height: 5.25rem;
+  overflow: hidden;
+  border-radius: 0.6rem;
+  background: rgba(255, 255, 255, 0.09);
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.knob__fill {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 0.6rem;
+  background: var(--knob, #ffffff);
+  /* No transition. The knob is a hand on a live picture: the bar and the animation have to move
+     together, and a bar easing into place while the scene has already changed reads as lag. */
+}
+
+.knob:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline-offset: 3px;
+}
+
+/* The reset: a black square, which is the one control here that is allowed to look like a control.
+   Bordered because it sits on a page that is sometimes entirely black, and an unbordered black
+   button on a black picture is a rumour. */
+.panel__reset {
+  width: 1.15rem;
+  height: 1.15rem;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 0.3rem;
+  background: #000000;
+  cursor: pointer;
+}
+
+.panel__reset:hover,
+.panel__reset:focus-visible {
+  border-color: rgba(255, 255, 255, 0.9);
+}

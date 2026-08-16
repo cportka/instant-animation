@@ -390,6 +390,7 @@ function windHere(x, y, S, t) {
  * you can only see through a gap in a cloud.
  */
 export function drawCrowd(ctx, W, H, t, lights) {
+  const many = Math.round(lights.people.length * (lights.swarm ?? 1));
   if (!lights) return;
   const S = Math.min(W, H);
   const r = Math.max(1.8, S * 0.0052);
@@ -449,7 +450,8 @@ export function drawCrowd(ctx, W, H, t, lights) {
   // difference between a crowd and a field of identical marks.
   const across = [];
   const gait = [];
-  for (const p of lights.people) {
+  for (let nth = 0; nth < many; nth += 1) {
+    const p = lights.people[nth];
     const [bx, by] = at(p, t, now);
     const [px, py] = at(p, t - 0.2, then);
     let hx = bx - px;
@@ -870,7 +872,7 @@ export function drawLightBloom(ctx, W, H, t, lights) {
     // A fire at full flare used to throw the largest, brightest coloured mass in the frame — larger
     // and brighter than a shell going off, which puts the hierarchy exactly the wrong way up. A fire
     // is a steady thing you keep noticing; a firework is an event.
-    const power = clamp((0.42 + flare * 0.85) * life * (0.75 + flicker * 0.35) * cloud, 0, 1);
+    const power = clamp((0.42 + flare * 0.85) * life * (0.75 + flicker * 0.35) * cloud * (lights.blaze ?? 1) * (lights.ablaze ?? 1), 0, 1);
     // A soft base, drawn as a **3:1 smear along the wind** at a low alpha. Firelight genuinely does
     // diffuse through cloud, and refusing it any softness at all does not remove the bubble, it just
     // replaces it with a tidy little pile of squares — which is what a tight dither on its own looks
@@ -879,7 +881,7 @@ export function drawLightBloom(ctx, W, H, t, lights) {
     lobe(
       ctx,
       fire.x * W + wind.x * r * 2.6, fire.y * H + wind.y * r * 2.6,
-      r * (5.2 + flare * 4) * (0.85 + flicker * 0.3), r * (1.7 + flare * 1.3) * (0.85 + flicker * 0.3),
+      r * (5.2 + flare * 4) * (0.85 + flicker * 0.3) * (lights.blaze ?? 1), r * (1.7 + flare * 1.3) * (0.85 + flicker * 0.3) * (lights.blaze ?? 1),
       wind.angle, body, clamp(power * 0.13, 0, 1), 0.08, 0.4, fire.phase + t * 0.5,
     );
     // Smoke above it, dithered.

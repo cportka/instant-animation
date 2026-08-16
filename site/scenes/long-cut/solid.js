@@ -41,19 +41,47 @@ const FACE = 2.39996323;
 /** How far a vertex may be pulled in: full length down to this fraction of it. */
 const PULL = 0.62;
 
+/**
+ * What the knobs make of the solid, worked out once a frame.
+ *
+ * Two of them are the reason the panel is worth having at all. **Form** drives the girth up while
+ * pulling the vertex range *down*, so one end of its travel is a small round column and the other is
+ * a huge spiked one — two different solids from one gesture, rather than a size slider. **Twist**
+ * does the same across two files: it winds the column here and widens the train's wander in
+ * `train.js`, because a solid that turns faster and an axis that snakes further are the same idea
+ * seen at two scales, and separating them into two knobs would mean neither could be moved alone
+ * without the picture looking half-adjusted.
+ */
+export const tuneSolid = (K, bend) => {
+  const girth = bend(K.form, 0.66, GIRTH, 1.42);
+  const stretch = bend(K.form, 0.3, 1, 1.9);
+  return {
+    girth,
+    stretch,
+    pull: bend(K.form, 0.86, PULL, 0.24),
+    twist: bend(K.twist, 0, TWIST, 0.35),
+    bore: bend(K.bore, 0.1, 0.46, 0.74),
+    boreSwing: bend(K.bore, 0.06, 0.26, 0.22),
+    // How much wider than the shipped solid the widest section can now be. `train.js` needs it: the
+    // fall has to be measured against the section it is carrying, or growing the column with one
+    // knob quietly stops another one from getting it off the frame.
+    widen: (girth / GIRTH) * ((1 + 0.24 * stretch) / (1 + 0.24)),
+  };
+};
+
 /** Write slice `k`'s outer section into `out` as `x, y, x, y…` in world units. */
-export function sectionAt(k, out) {
-  const girth = GIRTH * (1 + 0.20 * Math.sin(k * 0.17 + 0.6) + 0.12 * Math.sin(k * 0.29 + 3.1));
-  const spin = k * TWIST + 0.34 * Math.sin(k * 0.11 + 1.7);
+export function sectionAt(k, out, tune) {
+  const girth = tune.girth * (1 + 0.20 * Math.sin(k * 0.17 + 0.6) + 0.12 * Math.sin(k * 0.29 + 3.1));
+  const spin = k * tune.twist + 0.34 * Math.sin(k * 0.11 + 1.7);
   // One axis of the section stretched against the other, drifting. Combined with the spin this is a
   // shear the polygon cannot undo by turning, so the solid reads as *deformed* along its length
   // rather than merely rotated — a column that has been pulled as well as wound.
-  const squash = 1 + 0.24 * Math.sin(k * 0.23 + 2.0);
+  const squash = 1 + 0.24 * tune.stretch * Math.sin(k * 0.23 + 2.0);
 
   for (let j = 0; j < SIDES; j += 1) {
     const face = j * FACE;
     const wob = 0.5 + 0.5 * (0.62 * Math.sin(face + k * 0.27) + 0.38 * Math.sin(face * 2.1 - k * 0.17 + 2.4));
-    const r = girth * (PULL + (1 - PULL) * wob);
+    const r = girth * (tune.pull + (1 - tune.pull) * wob);
     const a = spin + (j / SIDES) * TAU;
     out[j * 2] = Math.cos(a) * r;
     out[j * 2 + 1] = Math.sin(a) * r * squash;
@@ -80,8 +108,8 @@ export function sectionAt(k, out) {
  * on one side as the other and the channel does not read as concentric. That eccentricity, not an
  * offset, is what stops a slice looking like a washer.
  */
-export function boreAt(k, section, out) {
-  const shrink = 0.46 + 0.26 * Math.sin(k * 0.19 + 0.9);
+export function boreAt(k, section, out, tune) {
+  const shrink = tune.bore + tune.boreSwing * Math.sin(k * 0.19 + 0.9);
 
   for (let j = 0; j < SIDES; j += 1) {
     const face = j * FACE;

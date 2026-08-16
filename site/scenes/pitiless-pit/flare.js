@@ -31,7 +31,7 @@ const MOTES = 1500;
 /** How long the pit goes on throwing them, of the seconds it has. */
 const THROW = ERUPT * 0.62;
 
-export function drawFlare(ctx, W, H, erupt, plan, px) {
+export function drawFlare(ctx, W, H, erupt, plan, px, tune) {
   if (!erupt.on) return;
   const { n, age } = erupt;
   const cx = snapTo(W / 2, px);
@@ -43,13 +43,13 @@ export function drawFlare(ctx, W, H, erupt, plan, px) {
   // Every round is thrown differently — how many, how hard, how spread. The interval between them
   // cannot vary (see `clock.js`), so this is where the variety has to live, and it is enough: no two
   // eruptions arrive at the same rate or reach the frame edge at the same moment.
-  const count = Math.round(MOTES * (0.55 + hash2(n * 1.7 + plan.seed, 3) * 0.65));
+  const count = Math.round(MOTES * tune.glow * (0.55 + hash2(n * 1.7 + plan.seed, 3) * 0.65));
   // **Fast enough to get out.** A particle has to cross the whole shaft and the ground beyond it —
   // some twenty-five depths — and it has to do that in a second or two, or the flurry is a crowd of
   // white pixels loitering deep in a shaft that is also white, which is exactly nothing to look at.
   // Launched over the first stretch and crossing in a couple of seconds gives a stream rather than a
   // wave: there are always some just leaving and some already at the frame edge.
-  const vigour = 9 + hash2(n * 2.3 + plan.seed, 7) * 7;
+  const vigour = (9 + hash2(n * 2.3 + plan.seed, 7) * 7) * tune.glow;
   const at = [0, 0];
 
   const xy = [];
