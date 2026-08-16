@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [5.0.0] - 2026-08-16
+## [5.1.0] - 2026-08-16
 
 **"Moon Over the Deep" is finished, and a sixth animation begins.** That is the only thing a MAJOR
 bump means here — see `.claude/CLAUDE.md`.
@@ -78,18 +78,58 @@ three:
 - **Everything that descends is one object at three sizes** — lines with a length, loose pixels, and
   blocks — and each falls in a straight line on screen for free, because a point at a fixed place
   around the ring simply scales toward the centre and scaling a point is a ray.
-- **Perspective decides how many survive.** Every ray converges on the same point, so a population
-  spread evenly through depth is spread over a screen area that shrinks geometrically — drawn in
-  full, the far half of the shaft is a solid speckled slab exactly where the picture most needs to be
-  empty. Keeping the *screen* density constant means the survivor count has to fall like the scale
-  does, which is one line of arithmetic and is also the truthful thing to draw: they are not fading
-  out, they are gone.
+- **Perspective decides how many survive, and it is worth deriving rather than tuning.** Every ray
+  converges on the same point, so a population spread evenly through depth is spread over a screen
+  area that shrinks geometrically — drawn in full, the far half of the shaft is a solid speckled slab
+  exactly where the picture most needs to be empty. Written as `vanish = floor + log(q) / (K log R)`
+  on a uniform `q`, the survivor fraction past depth `u` is `R ** (K(u - floor))`, and the area a
+  ring occupies goes as `R ** 2u` — so holding the density constant on *screen* means **K = 2** for a
+  mote. A line is not a point: it is three or four chunks long and that length shrinks with the
+  scale, so its ink falls off one power more slowly and its count has to fall one power faster,
+  giving **K = 1**. Both were tuned by eye first, to 0.55 and 0.72, which is roughly four times and
+  half again too slow; the slab came back twice, the second time only because a reshuffled seed dealt
+  a few more of them deep. It is also the truthful thing to draw: they are not fading out, they are
+  gone.
 - **A sprite runs out of resolution before the pit runs out of depth**, so a block drops to a smaller
   sprite twice on the way down and then is not there. Held at one chunk a cell it could never get
   smaller than four chunks across, and the blocks pile up around the vanishing point at a size the
   shaft left behind long ago.
 - **Quarter-turns, never a fraction of one.** A sprite that rotates smoothly is the single loudest
   way to break this style; 8-bit hardware could flip a tile and nothing else.
+
+### When it goes wrong
+
+A glitch is the easiest thing in this gallery to do badly, because the obvious implementation is
+"randomise something every frame" — and that is not a glitch, it is noise, and noise reads as a
+texture rather than as a fault. What makes a fault legible is that it **latches**: something is
+wrong, it stays exactly that wrong for a moment, and then it is not wrong any more. So every
+corruption here is an epoch, with an index, and everything about it is hashed off that index.
+
+They are **8-bit faults**, on the same argument as the palette and the grid — the failures a machine
+of that generation actually had are specific and look like nothing else:
+
+- **attribute clash**, where colour was stored per cell rather than per pixel, so a sprite crossing a
+  cell boundary drags the wrong colour in with it and wears it until it leaves;
+- **a torn tile row**, one row of a character read from the wrong address, sitting a couple of cells
+  off from the rest of the sprite while the other three are fine;
+- **sprite dropout**, more sprites on a scanline than the hardware could multiplex, so some are
+  simply not drawn on alternate frames — the picture flickers rather than dims, and the flicker is
+  hashed rather than alternating, because a clean on-off at a fixed rate is a strobe and a strobe
+  reads as something the picture is *doing*;
+- **a torn raster**, the beam displaced sideways for a band of scanlines.
+
+The first three belong to the fall, because the things falling in are sprites. The last belongs to
+the eruption, because that is the whole signal coming apart rather than one object misbehaving.
+
+**Everything in a torn band has to move together**, which is the one thing that took a second
+attempt. Slid on its own, a field of scattered white pixels is not visibly torn at all: translate
+scattered points and you get scattered points. What makes a tear legible is a hard *edge* crossing
+the band boundary and coming out somewhere else — so the shaft's rings are sliced along the same
+bands and shifted by the same amount, and the ground is deliberately left intact, because what
+should read as broken is the pit and not the window you are looking at it through.
+
+And the faults on the fall run on the **flowed** clock. When the pit stops taking, they stop too.
+Even the corruption is held still.
 
 ### What comes back up
 
@@ -126,10 +166,11 @@ Both required of a new animation, and both built out of this scene's own primiti
 
 ### Two milliseconds
 
-The cheapest scene in the gallery by an order of magnitude — **1.5ms** on a 1440×900 monitor and
-2.1ms with the pit erupting, against a 20ms ceiling; 0.9ms and 1.2ms on a phone. That is not an
-optimisation, it is the style: a shaft is twenty rectangles, a mote is one chunk, and there is no
-dither pass anywhere because there is no dither.
+The cheapest scene in the gallery by an order of magnitude — **1.4ms** on a 1440×900 monitor and
+2.4ms with the pit erupting and the raster in pieces, against a 20ms ceiling; 0.5ms and 1.2ms on a
+phone. That is not an optimisation, it is the style: a shaft is twenty rectangles, a mote is one
+chunk, and there is no dither pass anywhere because there is no dither. Tearing it costs a
+rectangle per band per ring, and only while it is torn.
 
 ## [4.1.1] - 2026-08-15
 

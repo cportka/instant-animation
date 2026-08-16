@@ -14,6 +14,7 @@
 
 import { rgba } from '../../lib/draw.js';
 import { ERUPT, surgeAt } from './clock.js';
+import { TEAR_BANDS, TEAR_SLIDE, tearAt } from './glitch.js';
 import { FLARE, GROUND, KERB, SHAFT } from './palette.js';
 import { MOUTH, bottomDepth, scaleAt, snapTo } from './layout.js';
 
@@ -39,9 +40,18 @@ export function drawShaft(ctx, W, H, flow, erupt, px) {
 
   // The lip. One band of a lighter grey immediately outside the mouth, which is the only thing in
   // the picture that says the ground has a *thickness* — without it the pit is a hole cut in paper.
+  // While the pit is erupting the raster is coming apart, and everything from the lip inward is
+  // sliced along the tear's own bands and shifted with it. The ground is left intact: tearing the
+  // backdrop as well would open gaps onto the page behind it, and what should read as broken is the
+  // pit, not the window you are looking at it through.
+  const surge = erupt.on ? surgeAt(erupt.age) : 0;
+  const tear = surge > 0
+    ? (y) => tearAt(y, erupt.age, H, TEAR_SLIDE * surge, px)
+    : null;
+
   const kerb = scaleAt(-0.55);
   ctx.fillStyle = rgba(KERB, 1);
-  fillRing(ctx, cx, cy, halfW * kerb, halfH * kerb, px);
+  fillRing(ctx, cx, cy, halfW * kerb, halfH * kerb, px, H, tear);
 
   const deepest = bottomDepth(W, H, px);
   // Where the white has climbed to. Below this depth the shaft is gone and what is there is the
@@ -54,7 +64,7 @@ export function drawShaft(ctx, W, H, flow, erupt, px) {
   // are the actual event — are white on white and cannot be seen at all. Held to a throat a third of
   // the way down, it reads as what it is: a light too far away to make out, and everything between
   // you and it thrown up in front of it.
-  const white = erupt.on ? deepest - surgeAt(erupt.age) * (deepest - THROAT) : Infinity;
+  const white = erupt.on ? deepest - surge * (deepest - THROAT) : Infinity;
 
   const march = flow * MARCH;
   const base = Math.floor(march);
@@ -80,15 +90,26 @@ export function drawShaft(ctx, W, H, flow, erupt, px) {
       colour = SHAFT[step];
     }
     ctx.fillStyle = rgba(colour, 1);
-    fillRing(ctx, cx, cy, halfW * s, halfH * s, px);
+    fillRing(ctx, cx, cy, halfW * s, halfH * s, px, H, tear);
   }
 }
 
-/** One band: a snapped rectangle centred on the vanishing point. */
-function fillRing(ctx, cx, cy, hx, hy, px) {
+/** One band: a snapped rectangle centred on the vanishing point, sliced if the raster is torn. */
+function fillRing(ctx, cx, cy, hx, hy, px, H, tear) {
   const w = Math.max(px, snapTo(hx * 2, px));
   const h = Math.max(px, snapTo(hy * 2, px));
-  ctx.fillRect(cx - snapTo(w / 2, px), cy - snapTo(h / 2, px), w, h);
+  const x = cx - snapTo(w / 2, px);
+  const y = cy - snapTo(h / 2, px);
+  if (!tear) {
+    ctx.fillRect(x, y, w, h);
+    return;
+  }
+  for (let i = 0; i < TEAR_BANDS; i += 1) {
+    const top = Math.max(y, snapTo((i / TEAR_BANDS) * H, px));
+    const bottom = Math.min(y + h, snapTo(((i + 1) / TEAR_BANDS) * H, px));
+    if (bottom <= top) continue;
+    ctx.fillRect(x + tear(top), top, w, bottom - top);
+  }
 }
 
 /** How long an eruption lasts, for anything that needs to know without importing the clock. */
