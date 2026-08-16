@@ -13,7 +13,8 @@ Code two scenes would share does not live in either of them:
   nothing about any particular look.
 - **`site/effects/`** — shared animation code, and nothing but looks: the VHS tape artefacts
   (`vhs.js`), wet-paint ribbons (`paint.js`), the 16-bit grid and its ordered dither (`pixel.js`),
-  noise and flow fields (`field.js`), soft volumetric lobes (`volume.js`).
+  noise and flow fields (`field.js`), soft volumetric lobes (`volume.js`), and two colours with a
+  scanline polygon rasteriser to keep them to two (`onebit.js`).
 
 **No scene may import another scene**, and a test enforces it. If two scenes want the same thing,
 it belongs in `effects/`.

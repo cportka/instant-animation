@@ -2,7 +2,7 @@
 
 An instant animation generator. Animate anything you can describe.
 
-**Version:** 5.3.0 · **Live:** https://cportka.github.io/instant-animation/
+**Version:** 6.0.0 · **Live:** https://cportka.github.io/instant-animation/
 
 Describe something. It becomes a hand-drawn canvas animation and joins the gallery. There is no
 text on the site — the animation *is* the page. The only chrome is a soft chevron floating at each
@@ -28,6 +28,7 @@ being re-composed rather than two pictures. Compositions have their own addresse
 
 | Animation | From the description |
 | --- | --- |
+| **The Long Cut** | *stark monochromatic black and white — slices towards the camera, falling down and to the side* |
 | **The Pitiless Pit** | *an abstract pitiless pit that goes down — lines from the ground travel down the pit, pixels travel down the pit, blocks and abstract shapes fall in, and every minute or two everything stops and the pit erupts pure white pixels in a great flurry* |
 | **Moon Over the Deep** | *a stark, highly-stylized, 32-bit pixel style full moon over the water with an island in the background, the water gently rolling under a clear night sky, and a faint glow that occasionally comes from deep below* |
 | **The Rose Funnel** | *a pixelated tornado swirling up reds, pinks and purples, tearing apart an ornate pagoda temple that disembodied spirit hands rebuild without pause* |
@@ -60,6 +61,8 @@ site/
     pixel.js          the 16-bit grid: chunking, ordered Bayer dither, dithered glow
     field.js          noise and divergence-free flow, all pure functions of position and time
     volume.js         the soft volumetric lobe that fog, smoke and haze are built from
+    onebit.js         two colours and a scanline polygon rasteriser, so a frame can be
+                      #000000 and #ffffff with nothing anti-aliased in between
     transitions.js    the channel change between animations, one per scene
     dissolves.js      the dissolve between compositions of one animation, one per scene
 
