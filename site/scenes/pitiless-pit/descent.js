@@ -18,7 +18,17 @@ import { hash2 } from '../../effects/field.js';
 import { rgba } from '../../lib/draw.js';
 import { FALL, MOTE, STREAK } from './palette.js';
 import { corruptAt, flickerOn } from './glitch.js';
-import { RATIO, U_TOP, bottomDepth, edgeOf, scaleAt, snapTo } from './layout.js';
+import { WAYS, dissolveCell, dissolveLine } from './dissolve.js';
+import { RATIO, U_TOP, bottomDepth, edgeOf, finestOf, pxAt, scaleAt, snapTo } from './layout.js';
+
+/**
+ * How much of an item's fall is spent coming apart.
+ *
+ * In depth rather than in seconds, so a thing near the mouth and a thing deep in the shaft
+ * dissolve over the same *distance* and therefore look like the same event happening at two
+ * scales — which is what perspective would do to it if it were real.
+ */
+const UNDOING = 3.2;
 
 /**
  * How often a given thing falling in goes wrong, and for how long.
@@ -65,12 +75,13 @@ export function planDescent(rng) {
     // Lines run in off the ground and keep going. They are the fastest thing in the picture and the
     // only one with a length, which is what makes the pit read as *pulling* rather than as a hole
     // things happen to be near.
-    lines: Array.from({ length: 30 }, () => ({
+    lines: Array.from({ length: 30 }, (_, i) => ({
       p: rng.next(),
       speed: rng.range(0.5, 0.95),
       phase: rng.range(0, 60),
       len: rng.range(1.2, 2.8),
       glitch: rng.next(),
+      way: WAYS[i % WAYS.length],
       // Swallowed like everything else, and the exponent is **1** where a mote's is 2 — see the
       // motes below for where those numbers come from. A line is not a point: it is three or four
       // chunks long and that length shrinks with the scale, so its ink falls off one power of the
@@ -103,7 +114,7 @@ export function planDescent(rng) {
     })),
     // ...and the blocks, which are slow, because a heavy thing going into a hole is the one event
     // here with any weight to it and it should not be over before you have looked at it.
-    blocks: Array.from({ length: 14 }, () => ({
+    blocks: Array.from({ length: 14 }, (_, i) => ({
       p: rng.next(),
       speed: rng.range(0.34, 0.62),
       phase: rng.range(0, 60),
@@ -112,6 +123,28 @@ export function planDescent(rng) {
       spin: rng.range(0.1, 0.42),
       size: rng.range(0.1, 0.2),
       glitch: rng.next(),
+      // Which of the seven this one goes by. Dealt from the plan, so a given block always comes
+      // apart the same way and you can learn to recognise it before it starts.
+      //
+      // **Round robin, not a random draw.** Fourteen blocks each picking freely from seven ways
+      // leaves two or three of the seven undealt on any given seed — they exist, they are tested,
+      // and nobody ever sees them. Dealt in turn, every way is on screen twice and the gallery
+      // actually contains what it says it does.
+      way: WAYS[i % WAYS.length],
+      // ...and how far down it gets before that starts.
+      //
+      // Blocks need this said explicitly now, where they did not before. They used to leave simply
+      // by becoming smaller than a chunk — but the grid sharpens faster than perspective shrinks
+      // them, so a block is now *further* above the resolution floor the deeper it goes and would
+      // ride all the way to the bottom.
+      //
+      // **Shallow, and that is the whole tuning of this feature.** Perspective is brutal on anything
+      // deep: a block eight depths down is a fifth of the size it arrived at, and a four-by-four
+      // sprite coming apart at a dozen pixels across is an event nobody can see happen. Dealt across
+      // the upper half of the shaft, the largest of them dissolve at forty pixels and the deepest at
+      // a dozen — which is the range that reads as the same thing at different distances rather than
+      // as one thing that only works close up.
+      vanish: rng.range(4.5, 12),
     })),
   };
 }
@@ -128,16 +161,19 @@ function place(out, p, u, cx, cy, halfW, halfH) {
 const wrapTo = (v, span) => v - Math.floor(v / span) * span;
 
 export function drawDescent(ctx, W, H, flow, plan, px) {
+  const finest = finestOf(ctx, W);
   const cx = snapTo(W / 2, px);
   const cy = snapTo(H / 2, px);
   const halfW = W / 2;
   const halfH = H / 2;
-  const deepest = bottomDepth(W, H, px);
+  const deepest = bottomDepth(W, H, finest);
   const span = deepest - U_TOP;
   const at = [0, 0];
   const tail = [0, 0];
+  const cell = [0, 0];
 
-  // Lines, drawn body-first so every head lands on top of its own trail.
+  // Lines, drawn body-first so every head lands on top of its own trail. Grouped by the grid they
+  // are drawn on, because that grid now depends on how deep the chunk is — see `pxAt`.
   const bodies = [];
   const heads = [];
   for (const line of plan.lines) {
@@ -151,33 +187,45 @@ export function drawDescent(ctx, W, H, flow, plan, px) {
       u += (hash2(bad.g * 1.7 + line.glitch, 41) - 0.35) * 3.2;
       if (u <= U_TOP || u > line.vanish) continue;
     }
+    // How far through its undoing it is. Nothing simply stops being drawn any more: the last
+    // stretch of every fall is spent coming apart, in whichever of the seven ways this one was
+    // dealt. See `dissolve.js`.
+    const undone = Math.max(0, 1 - (line.vanish - u) / UNDOING);
+    const { keep, slide } = dissolveLine(line.way, undone, line.glitch, flow);
+    if (keep <= 0) continue;
+
+    const grid = pxAt(u, px, finest);
     place(at, line.p, u, cx, cy, halfW, halfH);
     // The tail is held just off the frame edge: a line near the mouth is long enough that its far
     // end is well outside the picture, and stepping chunks all the way out there is work spent on
     // pixels nobody has.
-    place(tail, line.p, Math.max(u - line.len, U_TOP), cx, cy, halfW, halfH);
+    place(tail, line.p, Math.max(u - line.len * keep, U_TOP), cx, cy, halfW, halfH);
     const dx = at[0] - tail[0];
     const dy = at[1] - tail[1];
-    const steps = Math.min(160, Math.ceil(Math.hypot(dx, dy) / px));
+    const steps = Math.min(220, Math.ceil(Math.hypot(dx, dy) / grid));
     for (let i = 0; i < steps; i += 1) {
       const f = i / steps;
-      bodies.push(snapTo(tail[0] + dx * f, px), snapTo(tail[1] + dy * f, px));
+      bodies.push(snapTo(tail[0] + dx * f + slide, grid), snapTo(tail[1] + dy * f, grid), grid);
     }
-    heads.push(snapTo(at[0], px), snapTo(at[1], px));
+    heads.push(snapTo(at[0] + slide, grid), snapTo(at[1], grid), grid);
   }
-  stamp(ctx, bodies, MOTE, px);
+  stamp(ctx, bodies, MOTE);
   // One chunk at the leading end, a shade brighter. It is the whole of what tells you which way a
   // line is going, and without it a radial streak is as much an arrival as a departure.
-  stamp(ctx, heads, STREAK, px);
+  stamp(ctx, heads, STREAK);
 
+  // The motes need no dissolution of their own: a single chunk on a grid that sharpens with depth
+  // already shrinks the whole way down and leaves as one device pixel. That is the plainest of the
+  // seven ways to go and the pit gives it to the things too small to have any other.
   const motes = [];
   for (const mote of plan.motes) {
     const u = U_TOP + wrapTo(mote.phase + flow * mote.speed, span);
     if (u > mote.vanish) continue;
+    const grid = pxAt(u, px, finest);
     place(at, mote.p, u, cx, cy, halfW, halfH);
-    motes.push(snapTo(at[0], px), snapTo(at[1], px));
+    motes.push(snapTo(at[0], grid), snapTo(at[1], grid), grid);
   }
-  stamp(ctx, motes, MOTE, px);
+  stamp(ctx, motes, MOTE);
 
   // The blocks. Bucketed by colour so each is one path, which matters here only because a block is
   // sixteen cells rather than one chunk.
@@ -201,6 +249,16 @@ export function drawDescent(ctx, W, H, flow, plan, px) {
     // Near, or far. One switch, no fade — see `FALL`.
     const into = cells[hue][u > 8.5 ? 1 : 0];
     const wide = block.size * s * Math.min(W, H);
+    // The grid this depth is drawn on, which gets finer the further down it is. A block near the
+    // bottom is therefore made of chunks a fraction the size of the ones it arrived as, and its
+    // dissolution is drawn at that resolution too — the pit takes it apart in more detail than it
+    // was ever built with.
+    const grid = pxAt(u, px, finest);
+
+    // How far through its undoing. Zero for almost the whole fall; the last couple of depths are
+    // spent coming apart in whichever of the seven ways this block was dealt.
+    const undone = Math.max(0, 1 - (block.vanish - u) / UNDOING);
+    if (undone >= 1) continue;
 
     // **A sprite runs out of resolution before the pit runs out of depth**, and what it does then is
     // the thing to get right. Holding the bitmap at one chunk a cell would stop a block ever getting
@@ -209,36 +267,49 @@ export function drawDescent(ctx, W, H, flow, plan, px) {
     // picture that must not happen. So it drops to a smaller sprite, twice, and then it is gone. An
     // 8-bit game receding a sprite swapped it for a coarser one for exactly this reason; the steps
     // are visible if you look for them and invisible at the size they happen.
-    if (wide < px * 0.9) continue;
-    if (wide < px * 2.2) {
-      into.push(snapTo(at[0], px), snapTo(at[1], px), px);
+    if (wide < grid * 0.9) continue;
+    if (wide < grid * 2.2) {
+      into.push(snapTo(at[0], grid), snapTo(at[1], grid), grid);
       continue;
     }
     // Quarter-turns, never a fraction of one. A sprite that rotates smoothly is the single loudest
     // way to break this style — 8-bit hardware could flip a tile and nothing else.
     const rot = ((Math.floor(flow * block.spin + block.phase) % 4) + 4) % 4;
-    if (wide < px * 4.4) {
+    if (wide < grid * 4.4) {
       // Two by two: the shape's own quadrants, on wherever the full bitmap had anything in them.
-      const x2 = snapTo(at[0] - px, px);
-      const y2 = snapTo(at[1] - px, px);
+      const x2 = snapTo(at[0] - grid, grid);
+      const y2 = snapTo(at[1] - grid, grid);
       for (let row = 0; row < 2; row += 1) {
         for (let col = 0; col < 2; col += 1) {
           const on = bitAt(SHAPES[block.shape], row * 2, col * 2, rot)
             || bitAt(SHAPES[block.shape], row * 2 + 1, col * 2 + 1, rot);
-          if (on) into.push(x2 + col * px, y2 + row * px, px);
+          if (on) into.push(x2 + col * grid, y2 + row * grid, grid);
         }
       }
       continue;
     }
-    const cell = snapTo(wide / 4, px);
+    const size = snapTo(wide / 4, grid);
     const shape = SHAPES[block.shape];
-    const x0 = snapTo(at[0] - cell * 2, px);
-    const y0 = snapTo(at[1] - cell * 2, px);
+    const x0 = snapTo(at[0] - size * 2, grid);
+    const y0 = snapTo(at[1] - size * 2, grid);
+    // Which way it is heading on screen, in case its dissolution wants to smear along it. Every
+    // fall is a straight ray from the centre, so this is just where it is relative to there.
+    const away = Math.hypot(at[0] - cx, at[1] - cy) || 1;
+    const rx = (at[0] - cx) / away;
+    const ry = (at[1] - cy) / away;
     for (let row = 0; row < 4; row += 1) {
       // ...and one row of it may have come from somewhere else entirely.
-      const skew = row === torn ? slip * cell : 0;
+      const skew = row === torn ? slip * size : 0;
       for (let col = 0; col < 4; col += 1) {
-        if (bitAt(shape, row, col, rot)) into.push(x0 + col * cell + skew, y0 + row * cell, cell);
+        if (!bitAt(shape, row, col, rot)) continue;
+        let ox = 0;
+        let oy = 0;
+        if (undone > 0) {
+          if (!dissolveCell(block.way, col, row, undone, block.glitch, -rx, -ry, cell)) continue;
+          ox = cell[0] * size * 0.5;
+          oy = cell[1] * size * 0.5;
+        }
+        into.push(x0 + col * size + skew + ox, y0 + row * size + oy, size);
       }
     }
   }
@@ -252,10 +323,11 @@ export function drawDescent(ctx, W, H, flow, plan, px) {
   }
 }
 
-function stamp(ctx, xy, colour, px) {
-  if (!xy.length) return;
+/** Chunks as `(x, y, size)` triples — the size travels with them, because the grid does. */
+function stamp(ctx, xyz, colour) {
+  if (!xyz.length) return;
   ctx.fillStyle = rgba(colour, 1);
   ctx.beginPath();
-  for (let i = 0; i < xy.length; i += 2) ctx.rect(xy[i], xy[i + 1], px, px);
+  for (let i = 0; i < xyz.length; i += 3) ctx.rect(xyz[i], xyz[i + 1], xyz[i + 2], xyz[i + 2]);
   ctx.fill();
 }

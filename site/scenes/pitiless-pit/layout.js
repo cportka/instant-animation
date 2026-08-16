@@ -54,12 +54,62 @@ export const U_EDGE = depthAt(1);
 export const U_TOP = U_EDGE - 1.4;
 
 /**
- * The depth at which a ring is narrower than one chunk, and the drawing stops.
+ * How fast the grid sharpens with depth, as a multiple of the perspective ratio.
+ *
+ * Above 1 means the chunk shrinks **faster than the ring does**, which is the whole point: a band
+ * twice as far down is not merely half the size, it is drawn in more than twice the detail.
+ */
+export const SHARPEN = 1.2;
+
+/**
+ * The chunk size at a given depth — and this is the one place this scene breaks its own rule.
+ *
+ * Everywhere else the grid is a constant: `S / 96`, coarse, the same at the top of the frame as at
+ * the bottom, because that is what 8-bit means and a picture that quietly gets finer where it feels
+ * like it is not obeying a constraint, it is decorating one.
+ *
+ * **The pit is the exception, and it is an exception with a reason.** Depth in this scene is the
+ * only thing there is; the shaft recedes forever and the whole animation is about what happens to
+ * things that go down it. So the grid goes down with them. Each band is drawn finer than the one
+ * above it, faster than perspective alone would shrink it, until at the bottom a chunk is **one
+ * device pixel** — the finest thing the screen can say — and the last square of the pit is drawn at
+ * the display's own resolution rather than the picture's.
+ *
+ * It inverts what distance normally does, and that is what makes it read. Everything else in the
+ * world gets coarser as it goes away; this gets *sharper*, so the bottom of the pit is the most
+ * detailed thing on the screen and there is no depth at which looking harder stops rewarding you.
+ * The rule that nothing is ever half a chunk over still holds, exactly — it is only that down there
+ * the chunk has become the screen's own grid, so the two rules are the same rule.
+ */
+export function pxAt(u, px, finest) {
+  if (u <= 0) return px;
+  const fine = px * Math.exp(u * SHARPEN * LOG_RATIO);
+  return fine < finest ? finest : fine;
+}
+
+/**
+ * One device pixel, in the CSS pixels the scene draws in.
+ *
+ * The stage draws every scene in CSS pixels and puts the device-pixel-ratio scale on the context, so
+ * a scene that wants to reach the screen's own grid has to ask how big the backing store is. This is
+ * the only number in the animation that is about the display rather than about the picture.
+ */
+export function finestOf(ctx, W) {
+  const wide = ctx.canvas ? ctx.canvas.width : 0;
+  const scale = wide ? wide / W : 1;
+  return 1 / (scale > 0 ? scale : 1);
+}
+
+/**
+ * The depth at which even the finest chunk is wider than the ring, and the drawing stops.
  *
  * The series does not end here — nothing ends here. This is only the depth past which the picture
- * has run out of pixels to say anything with, which is a fact about the screen and not about the pit.
+ * has run out of pixels to say anything with, which is a fact about the screen and not about the
+ * pit. Sharpening the grid moves it a very long way down: the pit used to run out at about
+ * twenty-three bands and now goes past forty, because every band it descends it also gains detail,
+ * and the two only stop racing when the chunk hits the display's own resolution and can go no finer.
  */
-export const bottomDepth = (W, H, px) => depthAt((px * 2) / Math.min(W, H));
+export const bottomDepth = (W, H, finest) => depthAt((finest * 2) / Math.min(W, H));
 
 /**
  * A point on the unit ring: `p` runs 0 to 1 once around the rectangle, starting at the top-left
