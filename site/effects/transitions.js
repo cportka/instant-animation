@@ -15,13 +15,13 @@
 // they belong to: the tape change is the tape artefacts, the pixel and funnel changes are the pixel
 // grid, and the vapour change is the soft lobes fog is made of.
 
-import { TAU, clamp } from '../lib/draw.js';
+import { TAU, clamp, wrap01 } from '../lib/draw.js';
 import { chromaSplit, deviceScale, makeTearBands, seam, tearBands } from './vhs.js';
 import { bayerOn, block, chunk, hash01, pixelSize, snap } from './pixel.js';
 import { lobe } from './volume.js';
 
 /** Every change a scene may ask for by name. `meta.transition` must be one of these. */
-export const TRANSITIONS = ['tape', 'pixel', 'vapour', 'funnel', 'tide'];
+export const TRANSITIONS = ['tape', 'pixel', 'vapour', 'funnel', 'tide', 'pit'];
 
 /** Everything the changes need decided once. The stage owns one of these for the whole gallery. */
 export function makeChannelChange(rng) {
@@ -55,7 +55,68 @@ export function channelChange(kind, ctx, W, H, t, violence, seamY, change, tape 
   else if (kind === 'vapour') vapourChange(ctx, W, H, t, violence, seamY, change);
   else if (kind === 'funnel') funnelChange(ctx, W, H, t, violence, seamY, tape);
   else if (kind === 'tide') tideChange(ctx, W, H, t, violence, seamY, tape);
+  else if (kind === 'pit') pitChange(ctx, W, H, t, violence, seamY);
   else tapeChange(ctx, W, H, t, violence, seamY, change, tape);
+}
+
+/**
+ * The shaft, in the colours it wears at the depths this change reaches. Flat, few, and far apart —
+ * the scene being arrived at has no ramp in it and nothing to dither with, so neither does this.
+ */
+const PIT_WALL = ['#48546f', '#303852', '#1e2438', '#101426', '#06080f'];
+
+/** How much smaller each ring is than the one outside it. The scene's own ratio. */
+const PIT_RATIO = 0.86;
+
+/**
+ * The `pit` change: the picture is swallowed and white is thrown back out over it.
+ *
+ * The scene this introduces is one idea — a hole made of flat concentric rings, receding forever
+ * because the scale is geometric — and one event: everything stops and the pit erupts pure white
+ * pixels. So the change is those two things and nothing else. The mouth opens over whatever you were
+ * looking at, ring by ring, each a flat colour with a hard edge; and white pixels pour out of the
+ * middle along the same rays the scene's own eruption uses, accelerating outward because a constant
+ * rate through a geometric scale *is* an acceleration.
+ *
+ * It opens on the **seam** rather than on the frame centre. That is where the two pictures are being
+ * pushed past each other, so it is the one line in the frame that already means something — the pit
+ * opens at the join, which reads as the join being what gives way.
+ */
+function pitChange(ctx, W, H, t, violence, seamY) {
+  const px = pixelSize(W, H);
+  const cx = snap(W / 2, px);
+  const cy = snap(H / 2 + (seamY - H / 2) * 0.6, px);
+  // Past one at the peak, so the outermost ring is off-frame and the mouth has no visible edge of
+  // its own — what you see is rings arriving from outside the picture, not a circle growing in it.
+  const open = violence * 1.35;
+  if (open <= 0) return;
+
+  for (let j = 0; ; j += 1) {
+    const s = open * PIT_RATIO ** j;
+    const w = Math.max(px, snap(W * s, px));
+    const h = Math.max(px, snap(H * s, px));
+    if (w <= px && h <= px) break;
+    ctx.fillStyle = PIT_WALL[Math.min(PIT_WALL.length - 1, j >> 1)];
+    ctx.fillRect(cx - snap(w / 2, px), cy - snap(h / 2, px), w, h);
+  }
+
+  // ...and what comes back up. Same rays, same geometry, and the only white in the scene.
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  for (let i = 0; i < 900; i += 1) {
+    const out = wrap01(hash01(i * 3.1) + t * (0.42 + hash01(i * 7.7) * 0.55));
+    // Exponential in the depth coordinate, which is what turns a constant rate into a rush.
+    const s = open * Math.exp(out * 3.4) * 0.06;
+    if (s > 1.4 || hash01(i * 11.3) > violence) continue;
+    // Around the ring: a rectangle similar to the frame, so the last of them leave at the corners.
+    const q = wrap01(hash01(i * 5.3)) * 4;
+    const side = q | 0;
+    const f = (q - side) * 2 - 1;
+    const ex = side === 0 ? f : side === 1 ? 1 : side === 2 ? -f : -1;
+    const ey = side === 0 ? -1 : side === 1 ? f : side === 2 ? 1 : -f;
+    ctx.rect(snap(cx + ex * s * W * 0.5, px), snap(cy + ey * s * H * 0.5, px), px, px);
+  }
+  ctx.fill();
 }
 
 /* ------------------------------------------------------------------ tide ---- */
