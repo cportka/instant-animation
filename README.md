@@ -2,7 +2,7 @@
 
 An instant animation generator. Animate anything you can describe.
 
-**Version:** 7.0.0 · **Live:** https://cportka.github.io/instant-animation/
+**Version:** 8.0.0 · **Live:** https://cportka.github.io/instant-animation/
 
 Describe something. It becomes a hand-drawn canvas animation and joins the gallery. There is no
 text on the site — the animation *is* the page. The only chrome is a soft chevron floating at each
@@ -36,6 +36,7 @@ being re-composed rather than two pictures. Compositions have their own addresse
 
 | Animation | From the description |
 | --- | --- |
+| **The All-Night Coast Road** | *a side-scrolling follow of a 16-bit motorcycle with a rider in shiny purple gear head to toe — buildings going by like Rampage or Ninja Gaiden, but ultimately a tropical 80s beachside metropolis at night, driving endlessly forward to the right around occasional vehicles and overpasses and bridges, highway changing to local road and back* |
 | **The Square at Noon** | *a living pixelated town-square western — detailed wind and dust with tumbleweeds, plants, rare scurrying and crawling desert animals, a wooden town with old-timey facades and swinging bar doors that blow open and closed with the wind, and horses in a stable — not locked to any one bit style, but a variety of pixel sizes, resolutions and colours, extremely psychedelic* |
 | **The Long Cut** | *stark monochromatic black and white — slices towards the camera, falling down and to the side* |
 | **The Pitiless Pit** | *an abstract pitiless pit that goes down — lines from the ground travel down the pit, pixels travel down the pit, blocks and abstract shapes fall in, and every minute or two everything stops and the pit erupts pure white pixels in a great flurry* |
@@ -137,7 +138,8 @@ SemVer, with two repo-specific rules:
   finished that one and started *Above the Fog*; `3.0.0` finished that one and started *The Rose
   Funnel*; `4.0.0` finished that one and started *Moon Over the Deep*; `5.0.0` finished that one and
   started *The Pitiless Pit*; `6.0.0` finished that one and started *The Long Cut*; `7.0.0` finished
-  that one and started *The Square at Noon*. If a bump can't name both, it isn't a MAJOR.
+  that one and started *The Square at Noon*; `8.0.0` finished that one and started *The All-Night
+  Coast Road*. If a bump can't name both, it isn't a MAJOR.
 - **Changes fold into the current version** rather than minting a new number each round, so
   `CHANGELOG.md` describes what the project *is* rather than logging every intermediate state it
   passed through. A new section opens when an animation is finished, not on any other signal —

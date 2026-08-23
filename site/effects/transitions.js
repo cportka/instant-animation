@@ -22,7 +22,7 @@ import { bayerOn, block, chunk, hash01, pixelSize, snap } from './pixel.js';
 import { lobe } from './volume.js';
 
 /** Every change a scene may ask for by name. `meta.transition` must be one of these. */
-export const TRANSITIONS = ['tape', 'pixel', 'vapour', 'funnel', 'tide', 'pit', 'cut', 'noon'];
+export const TRANSITIONS = ['tape', 'pixel', 'vapour', 'funnel', 'tide', 'pit', 'cut', 'noon', 'coast'];
 
 /** Everything the changes need decided once. The stage owns one of these for the whole gallery. */
 export function makeChannelChange(rng) {
@@ -59,7 +59,114 @@ export function channelChange(kind, ctx, W, H, t, violence, seamY, change, tape 
   else if (kind === 'pit') pitChange(ctx, W, H, t, violence, seamY);
   else if (kind === 'cut') cutChange(ctx, W, H, t, violence, seamY, tape);
   else if (kind === 'noon') noonChange(ctx, W, H, t, violence, seamY, tape);
+  else if (kind === 'coast') coastChange(ctx, W, H, t, violence, seamY, tape);
   else tapeChange(ctx, W, H, t, violence, seamY, change, tape);
+}
+
+/* ----------------------------------------------------------------- coast ---- */
+
+/** The strip's own colours. The scene's neon, which does not shift with anything. */
+const COAST_NEON = ['#ff3f9a', '#3fe8e0', '#ffd24a', '#8f5cff', '#5cff9a', '#ff7a3f'];
+
+/**
+ * How fast each band of the frame is dragged, top to bottom.
+ *
+ * These are *The All-Night Coast Road*'s own parallax rates — the stars barely move, the skyline
+ * across the bay creeps, the near blocks go at a third, the palms at two thirds, the roadside at one
+ * and the foreground faster than the road. Applying them to whatever picture happened to be on the
+ * screen is the whole change: the frame is not pushed aside, it is **given the arriving scene's
+ * depth** and then allowed to go past.
+ */
+const COAST_RATES = [0.04, 0.12, 0.3, 0.55, 0.8, 1, 1.35];
+
+/**
+ * The `coast` change: the picture is whipped past to the left in parallax bands.
+ *
+ * Every other change in this gallery works on a vertical axis — the pixel change shreds along rows,
+ * the cut change shears a stack downward, the noon change collapses each band's *rows* into blocks.
+ * This scene has exactly one axis and it is horizontal, so this one is the same idea turned ninety
+ * degrees: the frame is cut into the layers the animation is built from, each is dragged sideways at
+ * its own rate, and single **columns** are stretched across the band the way the noon change
+ * stretches single rows down one. A row smeared vertically is a downsample; a column smeared
+ * horizontally is a light going past at speed, which is the only thing this animation is about.
+ *
+ * Each band is drawn twice — once shifted, once wrapped in behind it — so the picture never tears
+ * open to nothing. You are not watching the frame leave; you are watching it *go by*.
+ */
+function coastChange(ctx, W, H, t, violence, seamY, tape) {
+  const px = pixelSize(W, H);
+  const scale = deviceScale(ctx, W, H);
+  const source = tape ? tape.source : ctx.canvas;
+  const bands = COAST_RATES.length;
+  const sw = Math.max(1, Math.round(W * scale.sx));
+
+  for (let n = 0; n < bands; n += 1) {
+    const top = Math.round((n / bands) * H);
+    const bottom = Math.round(((n + 1) / bands) * H);
+    const height = bottom - top;
+    if (height < 1) continue;
+    const sy = Math.round(top * scale.sy);
+    const sh = Math.max(1, Math.round(height * scale.sy));
+    const shift = snap(COAST_RATES[n] * violence * W * 0.85, px);
+    if (shift >= px) {
+      ctx.drawImage(source, 0, sy, sw, sh, -shift, top, W, height);
+      ctx.drawImage(source, 0, sy, sw, sh, W - shift, top, W, height);
+    }
+
+    // ...and the streaks: one column of the band pulled the whole way across it. The faster the
+    // band is travelling the more of it is smear rather than picture, which is what makes the
+    // bottom of the frame read as road and the top as sky without either being drawn.
+    const smears = Math.round(COAST_RATES[n] * violence * 5);
+    for (let i = 0; i < smears; i += 1) {
+      const at = wrap01(hash01(n * 3.7 + i * 1.9 + Math.floor(t * 6) * 0.31));
+      const band = Math.max(px, Math.round(height * 0.16));
+      const y = top + Math.round(at * Math.max(1, height - band));
+      const col = Math.round(wrap01(hash01(n * 8.3 + i * 5.1)) * (sw - 2));
+      ctx.drawImage(source, col, Math.round(y * scale.sy), 2, Math.max(1, Math.round(band * scale.sy)),
+        0, y, W, band);
+    }
+  }
+
+  // Light going past, on the chunk grid: a run of dashes down each band at that band's own rate, so
+  // the fast bands are nearly continuous lines and the slow ones are barely broken at all. This is
+  // what a night road looks like through a windscreen at speed and it costs one path per band.
+  for (let n = 0; n < bands; n += 1) {
+    const top = Math.round((n / bands) * H);
+    const height = Math.round(H / bands);
+    const rate = COAST_RATES[n];
+    ctx.fillStyle = COAST_NEON[n % COAST_NEON.length];
+    ctx.globalAlpha = clamp(violence * rate * 0.5, 0, 0.75);
+    ctx.beginPath();
+    const dash = Math.max(px * 2, W * 0.02 * (0.4 + rate));
+    for (let i = 0; i < 7; i += 1) {
+      const y = snap(top + height * ((i + 0.5) / 7), px);
+      const from = wrap01(hash01(n * 4.1 + i * 2.3)) * W - dash;
+      for (let x = from; x < W; x += dash * 2.6) {
+        chunk(ctx, x, y, dash * (0.4 + rate * violence), Math.max(px, px * 2), px);
+      }
+    }
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // The signs going past: a few hard bars of neon, stretched along the direction of travel. They sit
+  // over everything because a light is not occluded by the thing it is in front of.
+  const bars = Math.round(violence * 9);
+  for (let i = 0; i < bars; i += 1) {
+    const seed = i * 2.7 + Math.floor(t * 4) * 0.53;
+    const y = snap(wrap01(hash01(seed)) * H, px);
+    const long = W * (0.16 + hash01(seed * 3.1) * 0.5) * violence;
+    const x = snap(wrap01(hash01(seed * 5.3)) * W - long * 0.5, px);
+    ctx.fillStyle = COAST_NEON[Math.floor(hash01(seed * 7.9) * COAST_NEON.length) % COAST_NEON.length];
+    ctx.globalAlpha = clamp(0.25 + violence * 0.5, 0, 0.9);
+    ctx.fillRect(x, y, long, Math.max(px, px * 2));
+    ctx.globalAlpha = 1;
+  }
+
+  // The seam wears the scene: one bar of the magenta the strip is lit with.
+  const bar = Math.max(2, Math.round(H * 0.005 * (1 + violence * 3)));
+  ctx.fillStyle = COAST_NEON[0];
+  ctx.fillRect(0, Math.round(seamY - bar / 2), W, bar);
 }
 
 /* ------------------------------------------------------------------ noon ---- */

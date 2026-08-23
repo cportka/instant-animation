@@ -282,6 +282,37 @@ body {
   fill: currentColor;
 }
 
+/* The `coast` chrome: one chevron with its own speed trail behind it.
+
+   Every other glyph in this gallery repeats itself **downward** — three copies stacked a few pixels
+   apart, which is what you do when the animation is about depth or falling. This one is the only
+   scene whose subject is going somewhere, and it is going *sideways*, so the repeats trail to the
+   **left** and the leading copy is the brightest. It is the same information as a motion blur
+   without any blur in it, which is the constraint the whole animation is drawn under.
+
+   The three colours are the strip's own: the leading edge in the hot magenta the signs are lit with,
+   then violet, then cyan furthest back. Nothing here shifts with the scene's `neon` knob for the
+   same reason the signs do not — a tube is the colour it is whatever the night is doing. */
+.nav[data-chrome='coast'] .nav__glyph--coast {
+  display: block;
+}
+
+.nav[data-chrome='coast'] {
+  color: #ff3f9a;
+}
+
+.nav__coast-head rect {
+  fill: currentColor;
+}
+
+.nav__coast-mid rect {
+  fill: #8f5cff;
+}
+
+.nav__coast-tail rect {
+  fill: #3fe8e0;
+}
+
 /* Two animations on each: the float they always had, which never stops, and `peek`, which runs
    exactly **once**. The chevrons introduce themselves a moment after the page arrives and are then
    never seen again unless you reach for them.
@@ -349,7 +380,8 @@ body {
 .nav[data-chrome='moon'].nav--down,
 .nav[data-chrome='pit'].nav--down,
 .nav[data-chrome='cut'].nav--down,
-.nav[data-chrome='noon'].nav--down {
+.nav[data-chrome='noon'].nav--down,
+.nav[data-chrome='coast'].nav--down {
   animation-name: float-down-pixel, peek;
 }
 
@@ -358,7 +390,8 @@ body {
 .nav[data-chrome='moon'].nav--up,
 .nav[data-chrome='pit'].nav--up,
 .nav[data-chrome='cut'].nav--up,
-.nav[data-chrome='noon'].nav--up {
+.nav[data-chrome='noon'].nav--up,
+.nav[data-chrome='coast'].nav--up {
   animation-name: float-up-pixel, peek;
 }
 
