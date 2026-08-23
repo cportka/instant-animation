@@ -44,9 +44,6 @@ const BIKE_AT = 0.34;
 const FAR = 0.8;
 const NEAR = 1.16;
 
-/** How far the backdrop sinks when the deck lifts, as a fraction of the lift. */
-const SINK = 0.42;
-
 /**
  * Everything the frame needs to know about where it is, worked out once a frame.
  *
@@ -77,13 +74,18 @@ export function viewAt(ctx, W, H, t, tune, origin) {
     ctx, W, H, px, span, pxu, travel, t,
     // The world position at the left edge of the frame.
     camX: travel - span * BIKE_AT,
-    // How far the backdrop has sunk because the deck is up.
-    sink: lift * pxu * SINK,
     top,
     band,
     bottom: top + band,
-    horizon: snap(H * HORIZON, px) + lift * pxu * SINK,
-    shore: snap(H * SHORE, px) + lift * pxu * SINK,
+    // **The horizon does not move.** An earlier build sank the whole backdrop as the deck climbed a
+    // causeway, on the reasoning that rising takes you above what you are looking at. It does, by
+    // about eight metres — and the city is a mile away across the bay, so the true shift is a couple
+    // of pixels, not the eighty it was drawing. What that actually looked like was the skyline
+    // bobbing up and down every time a bridge went by, which reads as a bug in the renderer rather
+    // than as a hill. The climb is told instead by the things that are genuinely near: the railing
+    // opening up, the water arriving under the deck, and the lamps changing to masts.
+    horizon: snap(H * HORIZON, px),
+    shore: snap(H * SHORE, px),
     pal: tune.pal,
     tune,
   };
@@ -207,34 +209,62 @@ export function drawSurface(view) {
 }
 
 /**
+ * A light given back by the wet road: a wedge running toward the viewer, brightest at the top.
+ *
+ * `ditherGlow` was the obvious tool and it is the wrong shape. Squashed narrow enough to read as a
+ * reflection it becomes a sparse dotted string, because a tall thin ellipse simply has very few
+ * chunks in it — and what you get is a vertical row of specks rather than light on a road.
+ *
+ * A real reflection is a **wedge**: pinned and bright directly under its source, spreading and
+ * fading as it comes toward you, because the nearer water is at a shallower angle to your eye. That
+ * shape is one scanline loop and it is unmistakable — nobody looks at it and asks what it is, which
+ * was the whole complaint about the version before this one.
+ */
+function smear(ctx, cx, top, height, wide, colour, strength, px) {
+  if (height < px || wide < px || strength <= 0.02) return;
+  ctx.fillStyle = colour;
+  ctx.beginPath();
+  const rows = Math.max(1, Math.round(height / px));
+  for (let r = 0; r < rows; r += 1) {
+    const down = r / rows;
+    const half = wide * (0.3 + down * 1.1);
+    const density = strength * (1 - down) ** 1.4;
+    if (density < 0.03) continue;
+    const y = snap(top + r * px, px);
+    const row = Math.round(y / px);
+    for (let x = snap(cx - half, px); x <= cx + half; x += px) {
+      const across = 1 - Math.abs(x + px / 2 - cx) / half;
+      if (across <= 0) continue;
+      if (bayerOn(Math.round(x / px), row, density * across ** 0.55)) ctx.rect(x, y, px, px);
+    }
+  }
+  ctx.fill();
+}
+
+/**
  * The sheen: the road is wet, and the wet is where the lights are.
  *
  * A column of dithered light under every lamp, smeared down the band and stretched by the lane
  * depth. It reads the same `lightAt` the rider's gear does, so when a lamp goes by the road and the
  * rider brighten together — which is most of what makes a night scene feel lit rather than tinted.
  */
+export { smear };
+
 export function drawSheen(view) {
   const { ctx, px, pal, tune } = view;
-
-  // The strip's own colour lying on the tarmac, on a slow lattice of its own so it is not tied to
-  // the lamps. A night road with no colour on it is a grey band across a coloured picture, and the
-  // whole reason to set this at night in a neon city is that the ground gets to be part of it.
-  eachCell(view, LAMP_PITCH * 2.6, LAMP_PITCH * 2, (n) => {
-    const wx = n * LAMP_PITCH * 2.6;
-    const x = sx(view, wx);
-    if (x < -view.W * 0.25 || x > view.W * 1.25) return;
-    if (hash01(n * 4.13 + 7.7) > 0.62) return;
-    const hue = pal.neon[Math.floor(hash01(n * 8.9) * pal.neon.length) % pal.neon.length];
-    ditherGlow(ctx, x, view.top + view.band * 0.46, view.pxu * 13 * tune.glow, hue,
-      0.22 * tune.glow, px, 0.92, 2.6);
-  });
 
   eachCell(view, LAMP_PITCH, LAMP_PITCH, (n) => {
     const x = sx(view, lampXAt(n));
     if (x < -view.W * 0.2 || x > view.W * 1.2) return;
-    const wide = Math.max(px * 2, view.pxu * 5 * tune.glow);
-    ditherGlow(ctx, x, view.bottom - view.band * 0.18, wide, pal.road[4], 0.34 * tune.glow, px, 2.6, 1.7);
-    ditherGlow(ctx, x, view.top + view.band * 0.22, wide * 0.6, pal.road[4], 0.24 * tune.glow, px, 2.2, 1.8);
+    // Three wedges nested inside each other — pale bronze at the top where the lamp is, through the
+    // deeper glow, out to the ember that reaches the near kerb. **This is the only colour on the
+    // road, and it has a source you can see directly above it.** An earlier build laid the strip's
+    // neon down here on a lattice of its own — magenta and cyan blooms with nothing above them
+    // casting anything — and what that looks like is a coloured blob sliding along the ground.
+    const wide = Math.max(px, view.pxu * 2 * tune.glow);
+    smear(ctx, x, view.top, view.band * 1.05, wide * 1.5, pal.hard.ember, 0.5 * tune.glow, px);
+    smear(ctx, x, view.top, view.band * 0.72, wide, pal.hard.glow, 0.72 * tune.glow, px);
+    smear(ctx, x, view.top, view.band * 0.34, wide * 0.6, pal.hard.bronze, 0.95 * tune.glow, px);
   });
 }
 
@@ -276,7 +306,7 @@ export function drawFarSide(view) {
   if (drew) ctx.fill();
 
   // The heads, lit. Separate pass so the whole row is one fill.
-  ctx.fillStyle = pal.hard.lamp;
+  ctx.fillStyle = pal.hard.bronze;
   ctx.beginPath();
   drew = false;
   eachCell(view, LAMP_PITCH, LAMP_PITCH, (n) => {
@@ -298,7 +328,11 @@ export function drawFarSide(view) {
     if (x < -view.W * 0.15 || x > view.W * 1.15) return;
     const h = H * (kind === LOCAL ? 0.74 : kind === BRIDGE ? 1.25 : 1);
     const reach = h * (kind === LOCAL ? 0.3 : 0.42);
-    ditherGlow(ctx, x + reach, foot - h, view.pxu * 4.4 * tune.glow, pal.hard.lamp, 0.34 * tune.glow, px, 1, 2.1);
+    // Two haloes rather than one: a tight bronze core and a wider, weaker wash of the same lamp's
+    // deeper tone. A single ring reads as a flat disc stuck to the sky; two nested ones fall off in
+    // a way a light actually does, and it costs one more pass over a small box.
+    ditherGlow(ctx, x + reach, foot - h, view.pxu * 6.5 * tune.glow, pal.hard.ember, 0.3 * tune.glow, px, 1, 2.6);
+    ditherGlow(ctx, x + reach, foot - h, view.pxu * 3.2 * tune.glow, pal.hard.bronze, 0.46 * tune.glow, px, 1, 1.8);
   });
 
   // The far barrier: highway only. A rail on posts, and it is the thing that says *motorway*.

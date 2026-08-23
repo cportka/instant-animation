@@ -12,10 +12,10 @@
 import { smoothstep } from '../../lib/draw.js';
 import { chunk, ditherGlow, hash01, snap } from '../../effects/pixel.js';
 import { CAR_PITCH, LANES, LOCAL, kindAt, travelAt } from './world.js';
-import { lz, ly, sx } from './road.js';
+import { lz, ly, smear, sx } from './road.js';
 
-/** How fast the traffic moves, in world units a second. The rider does about forty-six. */
-export const TRAFFIC = 17;
+/** How fast the traffic moves, in world units a second. The rider does about a hundred and forty. */
+export const TRAFFIC = 58;
 
 /**
  * **The gap rule: only every third cell of the lattice may hold a vehicle at all.**
@@ -50,10 +50,16 @@ const GAP_PHASE = 0;
  * distinguishes the kinds is exactly how much the greenhouse overhangs the body.
  */
 const KINDS = [
-  { long: 13.5, tall: 5.4, roof: 0.4, box: 0.66 }, // saloon
-  { long: 16.5, tall: 7.2, roof: 0.62, box: 0.9 }, // van
-  { long: 15, tall: 5.6, roof: 0.34, box: 0.56 }, // pickup
-  { long: 21, tall: 8.4, roof: 0.7, box: 0.95 }, // bus
+  // A saloon: wide body, a cabin set well in from both sides, a big rear screen.
+  { long: 13.5, tall: 5.4, roof: 0.4, box: 0.62, glass: 0.72, wheels: 1, doors: 0, cab: 0 },
+  // A box van: the cabin *is* the vehicle, its back is a pair of doors and there is no glass in it,
+  // and the cab pokes up beyond the box at the front. Take those away and it is a tall saloon.
+  { long: 16.5, tall: 7.6, roof: 0.78, box: 0.94, glass: 0.3, wheels: 1, doors: 1, cab: 0.42 },
+  // A pickup: a small cab at the front and an open bed behind it, so the silhouette has a step in it
+  // — which is the only thing that tells one apart from a saloon at this size.
+  { long: 15.5, tall: 5.8, roof: 0.46, box: 0.44, glass: 0.66, wheels: 1, doors: 0, cab: 0 },
+  // A truck: a long box on twin rear axles, its cab well up over the front of it.
+  { long: 22, tall: 9, roof: 0.82, box: 0.96, glass: 0.24, wheels: 2, doors: 1, cab: 0.5 },
 ];
 
 /**
@@ -265,9 +271,17 @@ function targetLane(x, t, density, from) {
   return weight > 0 ? lane / weight : from;
 }
 
-/** How far back the rider's line is worked out from, and how fast they cross the carriageway. */
+/**
+ * How far back the rider's line is worked out from, and how fast they cross the carriageway.
+ *
+ * `STEP_T` is the old value divided by three, and that division is the whole of what tripling the
+ * road speed cost. A lane change takes the same *distance* whatever you are doing, so at three times
+ * the speed it has to take a third of the **time** — and a rider whose reactions stayed where they
+ * were simply arrives at the van still in its lane. The measured clearance falls from a fifth of a
+ * lane spacing to nothing at all, and no other constant in this file needed touching.
+ */
 const STEPS = 22;
-const STEP_T = 0.07;
+const STEP_T = 0.023;
 const EASE = 0.18;
 
 /**
@@ -334,60 +348,95 @@ export function eachCar(view, density, run) {
  */
 export function drawCar(view, car, wx) {
   const { ctx, px, pal } = view;
+  const shape = car.shape;
   const z = lz(LANES[car.lane]) * view.pxu;
-  const x = snap(sx(view, wx) - (car.shape.long * z) / 2, px);
-  const w = Math.max(px * 3, car.shape.long * z);
-  const h = Math.max(px * 3, car.shape.tall * z);
-  const y = ly(view, LANES[car.lane]) - h;
-  const roof = h * car.shape.roof;
+  const road = ly(view, LANES[car.lane]);
+  const x = snap(sx(view, wx) - (shape.long * z) / 2, px);
+  const w = Math.max(px * 4, shape.long * z);
+  const h = Math.max(px * 4, shape.tall * z);
+  const y = road - h;
+  const roof = Math.max(px * 2, h * shape.roof);
   const tone = 1 + (car.tone % 3);
+  const wheel = Math.max(px * 2, h * 0.19);
+  const cab = shape.cab > 0 ? Math.max(px * 2, h * shape.cab) : 0;
 
-  // The shadow, then the wheels under the body — two dark blocks, and without them a car at this
-  // size is a box hovering an inch above the road, which is exactly what the first build looked like.
+  // **Wheels first, under everything.** Two dark blocks standing clear of the road with the body
+  // above them, and they are most of what separates a vehicle from a box: without them the whole
+  // thing hovers, which is exactly what the first build did.
+  ctx.fillStyle = pal.hard.tyre;
+  ctx.beginPath();
+  for (let i = 0; i < shape.wheels; i += 1) {
+    chunk(ctx, x + w * (0.1 + i * 0.14), road - wheel, Math.max(px, w * 0.1), wheel + px, px);
+    chunk(ctx, x + w * (0.76 - i * 0.14), road - wheel, Math.max(px, w * 0.1), wheel + px, px);
+  }
+  ctx.fill();
+
   ctx.fillStyle = pal.road[0];
   ctx.beginPath();
-  chunk(ctx, x - px, y + h - px * 2, w + px * 2, px * 3, px);
-  chunk(ctx, x + w * 0.1, y + h - px * 2, w * 0.16, px * 3, px);
-  chunk(ctx, x + w * 0.74, y + h - px * 2, w * 0.16, px * 3, px);
+  chunk(ctx, x - px, road - px, w + px * 2, px * 2, px);
   ctx.fill();
 
-  // The body, and the cabin narrower and set back on it. Seen from behind, a car is a wide flat
-  // slab with a smaller box on top — get that proportion right and the kind hardly matters.
+  // The body, sitting on the wheels rather than on the ground, and the cab of a van or a truck
+  // showing above and beyond the box it is pulling.
   ctx.fillStyle = pal.build[tone];
   ctx.beginPath();
-  chunk(ctx, x, y + roof, w, h - roof - px, px);
+  chunk(ctx, x, y + roof, w, h - roof - wheel * 0.55, px);
+  if (cab > 0) chunk(ctx, x + w * 0.86, y + roof - cab, w * 0.14, cab, px);
   ctx.fill();
 
-  // The cabin one step **darker** than the body, which is the opposite of the obvious choice and the
-  // right one: a roof is the panel the sky is not reaching, and drawn lighter it turns the greenhouse
-  // into a lit sign sitting on a bumper. What is bright on a car at night is the glass, and only the
-  // glass — so that is a band rather than the whole box.
+  // The cabin, one step **darker** than the body. A roof is the panel the sky is not reaching, and
+  // drawn lighter it turns the greenhouse into a lit sign balanced on a bumper.
+  const inset = w * (1 - shape.box) * 0.5;
   ctx.fillStyle = pal.build[Math.max(0, tone - 1)];
   ctx.beginPath();
-  chunk(ctx, x + w * (1 - car.shape.box) * 0.5, y, w * car.shape.box, roof + px, px);
+  chunk(ctx, x + inset, y, w * shape.box, roof + px, px);
   ctx.fill();
 
+  // A highlight along the roof edge and a bumper across the bottom, both one chunk deep. Two lines
+  // for the price of two rectangles, and between them they give the body a top and a bottom instead
+  // of leaving it a rectangle that happens to be car-coloured.
+  ctx.fillStyle = pal.build[Math.min(pal.build.length - 1, tone + 1)];
+  ctx.beginPath();
+  chunk(ctx, x + inset, y, w * shape.box, px, px);
+  chunk(ctx, x + px, road - wheel - px * 2, w - px * 2, px * 2, px);
+  ctx.fill();
+
+  // The rear screen, narrower than the cabin so there are pillars either side of it — or, on a box
+  // van, a pair of doors with a dark seam down the middle and no glass to speak of.
   ctx.fillStyle = pal.build[4];
   ctx.beginPath();
-  chunk(ctx, x + w * (1 - car.shape.box * 0.74) * 0.5, y + px * 2, w * car.shape.box * 0.74,
-    Math.max(px, roof * 0.5), px);
+  const glassW = w * shape.box * shape.glass;
+  chunk(ctx, x + w * 0.5 - glassW * 0.5, y + px * 2, glassW, Math.max(px, roof * 0.52), px);
   ctx.fill();
+  if (shape.doors) {
+    ctx.fillStyle = pal.build[0];
+    ctx.beginPath();
+    chunk(ctx, x + w * 0.5 - px * 0.5, y + px, px, roof + h * 0.3, px);
+    chunk(ctx, x + inset, y + roof, w * shape.box, px, px);
+    ctx.fill();
+  }
 
-  // Tail lights: two, low, at the outside corners. At night they are most of what a car *is*.
-  const lampW = Math.max(px, w * 0.09);
-  const lampY = y + roof + px * 2;
-  const lampH = Math.max(px, h * 0.24);
+  // Tail lights: **horizontal bars at the outside corners**, not dots. They are the width of a
+  // cluster rather than a pixel, they sit where the body meets the cabin, and at night they are the
+  // thing the eye actually reads a vehicle by.
+  const lampW = Math.max(px * 2, w * 0.13);
+  const lampH = Math.max(px, h * 0.13);
+  const lampY = y + roof + Math.max(px, h * 0.1);
   ctx.fillStyle = pal.hard.tail;
   ctx.beginPath();
-  chunk(ctx, x, lampY, lampW, lampH, px);
-  chunk(ctx, x + w - lampW, lampY, lampW, lampH, px);
+  chunk(ctx, x + px, lampY, lampW, lampH, px);
+  chunk(ctx, x + w - lampW - px, lampY, lampW, lampH, px);
   ctx.fill();
 
-  // A halo on each, not one on the vehicle. Centred on the body it reads as a detached red flare —
-  // which is what a single glow at the left edge of a hundred-pixel car actually looks like.
-  const halo = Math.max(px * 2, w * 0.11) * view.tune.glow;
-  ditherGlow(ctx, x + lampW * 0.5, lampY + lampH * 0.5, halo, pal.hard.tail, 0.34 * view.tune.glow, px, 1, 2.4);
-  ditherGlow(ctx, x + w - lampW * 0.5, lampY + lampH * 0.5, halo, pal.hard.tail, 0.34 * view.tune.glow, px, 1, 2.4);
+  // A halo on each, and the wet road giving it back. The reflection is drawn tall rather than round
+  // because that is what a light on wet tarmac does — it runs toward you.
+  const halo = Math.max(px * 2, w * 0.1) * view.tune.glow;
+  for (const at of [x + px + lampW * 0.5, x + w - lampW * 0.5 - px]) {
+    ditherGlow(ctx, at, lampY + lampH * 0.5, halo, pal.hard.tail, 0.4 * view.tune.glow, px, 1, 2.2);
+    // ...and the same wedge the lamps get, in red, running back toward the viewer. Every light in
+    // this picture is on a wet road and every one of them is given back by it.
+    smear(ctx, at, road, view.band * 0.3, Math.max(px, w * 0.06), pal.hard.tail, 0.5 * view.tune.glow, px);
+  }
 }
 
 /** The one thing that is not on the lattice: a taxi's roof light, on local roads only. */

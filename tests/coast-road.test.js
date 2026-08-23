@@ -25,6 +25,8 @@ import {
   kindAt, lightAt, riseAt, travelAt,
 } from '../site/scenes/coast-road/world.js';
 import { TRAFFIC, carAt, carX, costOf, lineAt } from '../site/scenes/coast-road/traffic.js';
+import { viewAt } from '../site/scenes/coast-road/road.js';
+import { paletteAt } from '../site/scenes/coast-road/palette.js';
 import { createRecordingContext } from './helpers/recording-context.mjs';
 
 /** How far apart a vehicle and the bike have to stay across the band, from their real widths. */
@@ -155,8 +157,9 @@ test('the line is continuous: the bike never teleports across the carriageway', 
       }
       prev = now;
     }
-    // A real lane change crosses the band in about a second. Anything past six is not a manoeuvre.
-    assert.ok(fastest < 6, `the bike crossed at ${fastest.toFixed(1)} bands a second at ${at.toFixed(2)}s`);
+    // A real lane change covers the band in about a third of a second at this road speed. Anything
+    // past fifteen is not a manoeuvre, it is a jump.
+    assert.ok(fastest < 15, `the bike crossed at ${fastest.toFixed(1)} bands a second at ${at.toFixed(2)}s`);
   }
   // ...and it has to actually move, or "continuous" is being satisfied by a bike on a rail.
   let low = 1;
@@ -198,6 +201,28 @@ test('the causeway meets the ground at the ground', () => {
     }
     assert.ok(slope < 0.02, `the deck leaves the abutment at a slope of ${slope.toFixed(4)}`);
   }
+  // **...and none of it moves the horizon.** An earlier build sank the whole backdrop as the deck
+  // climbed, on the reasoning that rising takes you above what you are looking at. It does — by
+  // about eight metres, against a city a mile away, which is a shift of a couple of pixels rather
+  // than the eighty it was drawing. What it looked like was the skyline bobbing up and down every
+  // time a bridge went past, which reads as a broken renderer rather than as a hill.
+  const tune = {
+    span: 190, grain: 1, glow: 1, tall: 1, lift: 1, growth: 1, shine: 1, density: 0.55,
+    pal: paletteAt(0.34),
+  };
+  const stub = { canvas: { width: 1440, height: 900 } };
+  const seen = { horizon: new Set(), shore: new Set() };
+  let climbed = 0;
+  for (let t = 0; t < 900; t += 0.05) {
+    const view = viewAt(stub, 1440, 900, t, tune, 4200);
+    seen.horizon.add(view.horizon);
+    seen.shore.add(view.shore);
+    climbed = Math.max(climbed, riseAt(travelAt(t) + 4200, 1));
+  }
+  assert.ok(climbed > 8, 'no causeway was crossed in the sample, so the check proves nothing');
+  assert.equal(seen.horizon.size, 1, `the horizon took ${seen.horizon.size} different heights`);
+  assert.equal(seen.shore.size, 1, `the waterline took ${seen.shore.size} different heights`);
+
   // ...and all three kinds of road actually turn up, or the change of road is a change of nothing.
   const kinds = new Set();
   for (let x = 0; x < 200000; x += SEG_LEN * 0.5) kinds.add(kindAt(x));

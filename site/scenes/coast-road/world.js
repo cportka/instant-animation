@@ -25,10 +25,10 @@ import { hash01 } from '../../effects/pixel.js';
 /* ----------------------------------------------------------------- units ---- */
 
 // World units are roughly feet, and the numbers below are chosen against each other rather than
-// against reality: a car is fourteen of them, the bike is seven, and a lamp goes by every thirty.
+// against reality: a car is fourteen of them, the bike is seven, and a lamp goes by every sixty.
 
 /** How fast the rider travels, in world units a second, before the throttle wobbles it. */
-const SPEED = 46;
+const SPEED = 138;
 
 /**
  * How much world fits across the frame, before the `pace` knob has its say — **the lens**.
@@ -45,7 +45,7 @@ export const SPAN = 190;
 
 /** The lattices. Each is a pitch, and an integer index into it is the address of a thing. */
 export const CAR_PITCH = 32;
-export const LAMP_PITCH = 30;
+export const LAMP_PITCH = 60;
 export const SEG_LEN = 340;
 export const OVER_PITCH = 470;
 

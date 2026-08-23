@@ -48,7 +48,7 @@ export const meta = {
   // A causeway, an overpass going by behind, traffic in the near lane to be got round, and a lamp
   // close enough that the highlight is somewhere interesting on the gear. A still at t=0 is a clear
   // stretch of empty highway, which is the one frame that makes the whole thing look like a loop.
-  posterTime: 68.9,
+  posterTime: 38.7,
   // Arriving is the picture being whipped past: the frame is cut into the scene's own parallax
   // layers and each one is dragged left at its own rate, smeared into light as it goes.
   transition: 'coast',
