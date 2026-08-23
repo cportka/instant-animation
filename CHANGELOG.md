@@ -8,6 +8,151 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
+## [8.0.0] - 2026-08-23
+
+**"The Square at Noon" is finished, and a ninth animation begins.** That is the only thing a MAJOR
+bump means here — see `.claude/CLAUDE.md`.
+
+### The ninth animation — "The All-Night Coast Road"
+
+From *"side-scrolling follow of a 16-bit motorcycle with rider decked out in shiny purple gear head
+to toe. The background goes by, buildings like the game Rampage or Ninja Gaiden, but ultimately has a
+tropical 80s beachside metropolis at night vibe. Endless driving forward to the right, around
+occasional vehicles and overpasses and bridges and highway changes to local road changes back."*
+
+**"Endless" is the hard word in that, and it is a promise about arithmetic rather than about length.**
+
+A side-scroller is normally a machine that *steps*: spawn a car off the right edge, shift everything
+left a little, recycle whatever falls off. Every verb in that sentence is a mutation, and this
+gallery forbids all of them — the render tests draw eight timestamps out of order, the stage hands a
+fresh instance somebody else's clock during a channel change, and the poster path asks for one frame
+at `t = 39` having never drawn `t = 0`. Built the usual way it would answer differently every time.
+
+So the road is not simulated, it is **addressed**. Ask what is at world position `x` and it answers
+without having been anywhere else: which kind of road that is, how high the deck rides, whether a
+lamp stands there, whether a vehicle sits in that cell and in which lane. Each is a hash of
+`floor(x / pitch)`. Nothing is ever spawned and nothing is ever recycled, because everything is
+already there at every `x` and always has been — drive for an hour, come back to the same mile, and
+it is the same mile. The seed's whole job is to pick which mile this run came in on, and one number
+gives a different stretch of coast with its own sequence of highway, local road and causeway, because
+every lattice is downstream of the same coordinate.
+
+**Nothing transitions, because the objects change instead.** *Highway changes to local road changes
+back* is drawn by nobody: every lamp, barrier post, kerb stone, gantry and railing asks the world
+what kind of place it is standing in and answers for itself. So the change arrives the way it does
+from a saddle — the barrier runs out, the last gantry goes over, the street lamps start — and it
+sweeps across the frame at exactly the speed you are travelling, because that is what it is.
+
+### Going around something, without being allowed to remember that you are
+
+The interesting consequence, and the file the scene was designed around. Going *around* a vehicle is
+a **decision**, and a pure function of `t` has no memory to hold an intention in. So the swerve is
+not remembered, it is evaluated: three lane costs and a soft minimum, in closed form, from whatever
+traffic happens to be near. Four things had to be got right and every one of them was a bug first.
+
+- **The road is built so that at most one lane is ever blocked.** The cost kernel has compact support
+  two and a half cell-pitches wide, so at most three consecutive cells can matter; only every third
+  cell of the traffic lattice may hold a vehicle; therefore at most one vehicle is ever in play. That
+  last sentence is the whole safety argument. With two lanes blocked, a rider in one outside lane can
+  be required to reach the other, and there is **no continuous path from lane 0 to lane 2 that avoids
+  lane 1** — so no amount of cleverness in the chooser can help, and the road has to not ask.
+- **The cost of a vehicle is flat-topped, not a bump.** A smooth kernel has its maximum at one point
+  and is below it everywhere else, including across the whole stretch where the bike and the vehicle
+  overlap: built that way the rider is pushed hardest a moment *before* the danger and is already
+  easing back as he draws level with the van. A lane is occupied or it is not. The flat top has to
+  cover the longest vehicle's overlap and the support has to stay under three cell-pitches, and those
+  two constraints between them fix all four numbers.
+- **The rider's hysteresis is the last second and a half of his own choices, re-derived.** Choosing a
+  lane has to depend on which lane you are already in — that is the difference between a rider and a
+  coin — and the usual way to get it is a field the last frame wrote, which is exactly what a scene
+  here may not have. So the history is not stored, it is recomputed: every frame walks twenty-two
+  steps forward from a fixed start, evaluating the choice at each and easing toward it. The arbitrary
+  start is worth four parts in a thousand by the time the walk arrives, so the answer is the road's.
+- **The hysteresis and the slow lean take turns, and this was the last real bug.** Something has to
+  stop the rider passing everything on the same side forever, so there is a lean that wanders across
+  the carriageway over half a minute. At full strength alongside a full move-cost the map becomes
+  **bistable** — two stable answers with a watershed between them — and when the lean finally outvotes
+  the home bias the bike does not drift across the road, it *teleports*. It fired about twice in
+  forty minutes and every other test passed while it did. They are now keyed off how blocked the road
+  is: clear road, no grip and full lean; vehicle ahead, grip comes on as the square of the blockage
+  and the lean falls off as the cube of what is left. The lean has still done its job — it decided
+  which side of the road he was on when the vehicle arrived — it just may not argue during an
+  overtake.
+
+Measured over two hundred minutes of riding at five traffic densities: the bike is never inside a
+vehicle, with a clearance margin of 0.16 of a lane spacing to spare, and never crosses faster than
+1.6 bands a second.
+
+### Shiny, on hardware that cannot draw a gradient
+
+The brief is specific about the gear and the answer is arithmetic. **Gloss is not a softer edge, it
+is a brighter step in a smaller place** — so the purple ramp is seven steps long where nothing else
+in the scene needs more than five, and the highlight is a hard band swept across the bike by the
+passing lights. As a lamp comes up the band slides from the nose along the tank, over the shoulder
+and off the tail, and every purple surface it crosses jumps two or three steps and drops back.
+
+That light is one function, and everything shiny reads it — the gear, the tank, the chrome, the wet
+sheen on the road — so when a lamp goes by, every surface in the frame agrees about where it is. It
+is this gallery's one-light rule with the light put in motion. Two kernels rather than one, and the
+reason is worth keeping: a smooth kernel summed over a regular lattice is very nearly **constant**,
+which makes a fine weighted average for the light's *direction* and a completely useless one for its
+strength. Sampled with a single kernel the rider is lit exactly as much between two lamps as directly
+beneath one.
+
+### The city across the water
+
+Five layers at five speeds, and the depth is done entirely with parallax because that is the original
+solution and still the right one — the arcade-brawler building is a flat front with no perspective on
+it at all, and pretending otherwise breaks the moment it scrolls.
+
+The composition was wrong once in a way worth recording: with the blocks planted on the near shore
+they are simply a wall across the middle of the frame, and the bay, the far skyline and the moon's
+column on it are all behind that wall. *Beachside* metropolis means the water is between the city and
+the road. A third of the near blocks' slots are left empty for the same reason.
+
+The neon is the one thing in the picture that is a light source rather than lit by one, so it does
+**not** move with the `neon` knob while everything else does. A tube full of gas is the colour it is
+whatever the sky is doing, and a sign that shifted with the night would be a reflection.
+
+### Its chrome and its channel change
+
+- **`chrome: 'coast'`** — one chevron with its own speed trail. Every other glyph here repeats
+  *downward*, which is what you do for a scene about depth or falling; this is the only animation
+  whose subject is going somewhere, and it is going sideways, so the repeats trail to the **left**
+  with the leading copy brightest. The same information as a motion blur with no blur in it.
+- **`transition: 'coast'`** — the picture is whipped past to the left in the scene's own parallax
+  bands, each dragged at its own rate and drawn twice so it never tears open to nothing. Where the
+  noon change collapses each band's *rows* into blocks, this stretches single **columns** across a
+  band: a row smeared vertically is a downsample, and a column smeared horizontally is a light going
+  past at speed, which is the only thing this animation is about.
+
+### Knobs
+
+Six: `pace`, `swarm`, `grain`, `glow`, `form`, `neon`. `pace` is the one worth explaining, because
+the obvious knob on a scrolling scene is the speed and speed is the one thing that cannot be touched
+— the world is addressed off `travelAt(t)`, so scaling it teleports the rider hundreds of units down
+the road the instant the knob moves. It changes **how much world is across the frame** instead: the
+same apparent speed in pixels a second, continuously, with the phase untouched. The lens comes in or
+pulls back; the rider stays exactly where he was.
+
+A tall window is handed less road rather than a smaller bike. A span fixed in world units is the same
+composition at every size, which is usually what this gallery wants and is wrong here: the subject is
+one object about a fourteenth of the frame wide, and a fourteenth of a phone in portrait is forty
+pixels.
+
+### Tests
+
+`tests/coast-road.test.js` — eight, each verified to fail on the bug it guards. The rider never
+stops and never goes backwards, with real margin rather than by a whisker, and no knob has reached
+the clock; only every third cell of the traffic lattice can hold a vehicle, at every density up to
+one; the cost kernel is flat across a bus's whole overlap and reaches exactly far enough to keep the
+window to three cells; the bike is never inside a vehicle over twenty minutes at each end of the
+`swarm` knob; the line never crosses the carriageway faster than a manoeuvre, and does move; a
+causeway meets the ground at the ground in height *and* slope, at every abutment and every setting of
+`form`; the passing lights are continuous to within a bound set just above what the compact kernel
+actually does, and are a genuine pulse rather than a partition of unity; and the scene draws clean at
+three viewports across all sixty-four corners of its panel, with the seed reaching the road.
+
 ## [7.0.0] - 2026-08-16
 
 **"The Long Cut" is finished, and an eighth animation begins.** That is the only thing a MAJOR bump
