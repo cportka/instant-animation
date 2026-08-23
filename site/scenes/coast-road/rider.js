@@ -18,7 +18,7 @@
 // to know. Leather is glossier than a tyre, a visor is glossier than either.
 
 import { clamp, lerp, wave } from '../../lib/draw.js';
-import { chunk, ditherGlow, snap } from '../../effects/pixel.js';
+import { bayerOn, chunk, ditherGlow, snap } from '../../effects/pixel.js';
 import { lightAt, paceAt } from './world.js';
 import { ly, lz } from './road.js';
 import { lineAt } from './traffic.js';
@@ -30,9 +30,10 @@ const BOX_H = 24;
 /** How long the bike is drawn, in world units. Longer than its clearance box — a rider overhangs. */
 const DRAWN = 15;
 
-/** Which ramp a part is drawn out of. */
+/** Which ramp a part is drawn out of: the rider's gear, the machine's paint, or bare material. */
 const GEAR = 0;
 const HARD = 1;
+const SHELL = 2;
 
 /**
  * The machine and the man, back to front.
@@ -51,11 +52,12 @@ const PARTS = [
   { disc: true, x: 21, y: 4.5, r: 1.8, ramp: HARD, tone: 'rim', gloss: 0.7 },
   { x: 9, y: 4.6, w: 8, h: 4, ramp: HARD, tone: 'steel', gloss: 0.3 },
   { x: 19.4, y: 4.5, w: 2.2, h: 6.6, ramp: HARD, tone: 'chrome', gloss: 0.8 },
-  // Painted bodywork: the tank is the biggest flat panel on a motorcycle and takes the light best.
-  { x: 12, y: 8.4, w: 7.2, h: 3.6, ramp: GEAR, step: 3, gloss: 1 },
-  { x: 5.6, y: 8.4, w: 6.6, h: 3, ramp: GEAR, step: 1, gloss: 0.6 },
-  { x: 3.6, y: 10, w: 3.4, h: 3.6, ramp: GEAR, step: 2, gloss: 0.8 },
-  { x: 17.8, y: 6.8, w: 6.2, h: 6.2, ramp: GEAR, step: 2, gloss: 0.9 },
+  // Painted bodywork, in amber rather than in the rider's purple. The tank is the biggest flat panel
+  // on a motorcycle and takes the moving highlight better than anything else in the frame.
+  { x: 12, y: 8.4, w: 7.2, h: 3.6, ramp: SHELL, step: 4, gloss: 1 },
+  { x: 5.6, y: 8.4, w: 6.6, h: 3, ramp: SHELL, step: 2, gloss: 0.6 },
+  { x: 3.6, y: 10, w: 3.4, h: 3.6, ramp: SHELL, step: 3, gloss: 0.8 },
+  { x: 17.8, y: 6.8, w: 6.2, h: 6.2, ramp: SHELL, step: 3, gloss: 0.9 },
   { x: 22.4, y: 9.4, w: 2.6, h: 2.6, ramp: HARD, tone: 'lamp', gloss: 0 },
   // ---- the rider, foot to helmet, crouched forward over the tank ----
   { x: 10.4, y: 3.4, w: 3.6, h: 2.4, ramp: GEAR, step: 0, gloss: 0.6 },
@@ -96,7 +98,7 @@ export function riderAt(view, density) {
     pace,
     // Leaning *away* from the direction of travel across the band: moving toward the camera the bike
     // banks over to the near side, which in profile is a roll of the whole silhouette.
-    lean: clamp(rate * 0.42, -0.5, 0.5),
+    lean: clamp(rate * 0.14, -0.5, 0.5),
     // A bike is never still. Two unrelated periods and a bump from the throttle coming on.
     bob: wave(t, 0.83) * 0.3 + wave(t, 1.37, 1.1) * 0.22 + (pace - 1) * 0.9,
     z: lz(lane),
@@ -132,9 +134,18 @@ export function drawRider(ctx, view, rider) {
   chunk(ctx, originX - BOX_W * scale * 0.36, originY - px, BOX_W * scale * 0.7, px * 3, px);
   ctx.fill();
 
-  // The headlight throw, before the bike, so the bike sits inside its own light.
-  ditherGlow(ctx, originX + BOX_W * scale * 0.56, originY - BOX_H * scale * 0.52,
-    scale * 9 * view.tune.glow, pal.hard.lamp, 0.34 * view.tune.glow, px, 0.4, 2.4);
+  // The headlight, thrown down the road ahead of the bike so the machine sits inside its own light.
+  const glow = view.tune.glow;
+  const lampX = originX + BOX_W * scale * 0.5;
+  const lampY = originY - 10.4 * scale;
+  // The throw: a wide soft cone, a tight bright one inside it, and the pool where it lands. Three
+  // passes over the same wedge, and the pool is the one that matters — a beam with no lit patch of
+  // road at the end of it is a shape in the air, and light in the air is the part you cannot see.
+  beam(ctx, lampX, lampY, 1, scale * 40, scale * 1.2, scale * 6, scale * 10.4, pal.hard.ember, 0.72 * glow, px);
+  beam(ctx, lampX, lampY, 1, scale * 30, scale * 1, scale * 4, scale * 9.6, pal.hard.bronze, 0.66 * glow, px);
+  beam(ctx, lampX, lampY, 1, scale * 16, scale * 0.7, scale * 2, scale * 4.6, pal.shine[0], 0.6 * glow, px);
+  ditherGlow(ctx, lampX + scale * 26, originY - px * 2, scale * 13 * glow, pal.hard.bronze, 0.3 * glow, px, 0.22, 2.2);
+  ditherGlow(ctx, lampX, lampY, scale * 4 * glow, pal.hard.lamp, 0.72 * glow, px, 1, 1.6);
 
   // Every part, grouped by the colour it ends up as, so the whole rider is a handful of fills.
   const runs = new Map();
@@ -142,13 +153,13 @@ export function drawRider(ctx, view, rider) {
     const at = part.disc ? part.x : part.x + part.w / 2;
     const lift = liftAt(at, rider.light, part.gloss * view.tune.shine);
     let colour;
-    if (part.ramp === GEAR) {
-      const step = part.step + lift;
-      colour = step >= pal.gear.length
-        ? pal.glint[Math.min(pal.glint.length - 1, step - pal.gear.length)]
-        : pal.gear[step];
+    if (part.ramp === HARD) {
+      colour = lift > 1 && part.gloss > 0.6 ? pal.shine[0] : pal.hard[part.tone];
     } else {
-      colour = lift > 1 && part.gloss > 0.6 ? pal.glint[0] : pal.hard[part.tone];
+      const ramp = part.ramp === SHELL ? pal.shell : pal.gear;
+      const top = part.ramp === SHELL ? pal.shine : pal.glint;
+      const step = part.step + lift;
+      colour = step >= ramp.length ? top[Math.min(top.length - 1, step - ramp.length)] : ramp[step];
     }
     if (!runs.has(colour)) runs.set(colour, []);
     runs.get(colour).push(part);
@@ -175,14 +186,53 @@ export function drawRider(ctx, view, rider) {
     ctx.fill();
   }
 
-  // The tail light, and the streak of it left on the air behind.
-  const tailX = originX - BOX_W * scale * 0.44;
-  const tailY = originY - BOX_H * scale * 0.52;
-  ctx.fillStyle = pal.hard.tail;
+  // The tail light: a lamp, a red wash thrown back down the road, and a pool of it on the tarmac.
+  const tailX = originX - BOX_W * scale * 0.42;
+  const tailY = originY - 11.6 * scale;
+  beam(ctx, tailX, tailY, -1, scale * 16, scale * 0.9, scale * 3.4, scale * 6.4,
+    pal.hard.tail, 0.55 * glow, px);
+  ctx.fillStyle = pal.hard.brake;
   ctx.beginPath();
-  chunk(ctx, tailX, tailY, Math.max(px, scale * 1.6), Math.max(px, scale * 2.2), px);
+  chunk(ctx, tailX - scale, tailY, Math.max(px, scale * 2), Math.max(px, scale * 1.6), px);
   ctx.fill();
-  ditherGlow(ctx, tailX, tailY, scale * 4 * view.tune.glow, pal.hard.tail, 0.42 * view.tune.glow, px, 0.7, 2);
+  ditherGlow(ctx, tailX, tailY, scale * 3.4 * glow, pal.hard.tail, 0.6 * glow, px, 1, 1.6);
+  ditherGlow(ctx, tailX - scale * 4, originY - px, scale * 6 * glow, pal.hard.tail, 0.3 * glow, px, 0.34, 2.2);
+}
+
+/**
+ * A cone of light thrown along the road, as chunks on the grid.
+ *
+ * **A lamp is not its bulb, it is what it lands on**, and this scene is at night on a wet road, so
+ * the beams are most of what the bike contributes to the picture. The wedge widens as it goes and
+ * *drops* as it goes — a headlight points slightly down, so its far end is on the tarmac rather than
+ * out at eye level, and drawing it level is the single thing that makes a beam read as a cardboard
+ * triangle glued to the front of a sprite.
+ *
+ * Dithered rather than faded, because the falloff has to be made of the same chunks as everything
+ * else. Density drops with distance along the beam *and* with distance from its axis, so it is
+ * brightest in a small place at the lamp and thin and wide by the time it lands.
+ */
+function beam(ctx, x0, y0, dir, reach, near, far, drop, colour, strength, px) {
+  if (reach < px || strength <= 0.02) return;
+  ctx.fillStyle = colour;
+  ctx.beginPath();
+  const steps = Math.max(1, Math.round(reach / px));
+  for (let i = 0; i < steps; i += 1) {
+    const along = i / steps;
+    const fade = (1 - along) ** 1.5 * strength;
+    if (fade < 0.02) continue;
+    const x = snap(x0 + dir * along * reach, px);
+    const axis = y0 + drop * along * along;
+    const half = Math.max(px, near + (far - near) * along);
+    const col = Math.round(x / px);
+    for (let y = snap(axis - half, px); y <= axis + half; y += px) {
+      const across = 1 - Math.abs(y + px / 2 - axis) / half;
+      if (across <= 0) continue;
+      const density = fade * across ** 0.7;
+      if (density > 0.03 && bayerOn(col, Math.round(y / px), density)) ctx.rect(x, y, px, px);
+    }
+  }
+  ctx.fill();
 }
 
 /**

@@ -83,7 +83,7 @@ function drawMoon(view) {
   const S = Math.min(view.W, view.H);
   // Nearly fixed: the moon is the one thing far enough away not to go past.
   const cx = snap(view.W * 0.76 - view.camX * view.pxu * 0.004, px);
-  const cy = snap(view.H * MOON_UP + view.sink * 0.3, px);
+  const cy = snap(view.H * MOON_UP, px);
   const r = S * MOON_R;
 
   ditherGlow(ctx, cx, cy, r * 4.2, pal.sky[6], 0.5, px, 1, 1.9);

@@ -71,6 +71,19 @@ const LAND_HOT = ['#0d0518', '#160c2a', '#241640', '#3a2456'];
 const NEON = ['#ff3f9a', '#3fe8e0', '#ffd24a', '#8f5cff', '#5cff9a', '#ff7a3f'];
 
 /**
+ * The machine: seven steps of soft amber, and the counterpart to the gear below.
+ *
+ * The bike and the rider are deliberately **not** the same colour, and it is the one place in the
+ * frame where two things that touch are allowed to disagree. A purple rider on a purple bike is one
+ * purple shape at this size — the pose stops reading and the whole subject flattens into a blob —
+ * whereas warm metal under a cold rider separates the two at a glance and gives the highlight
+ * somewhere to travel *between*. Amber is also the colour every light in this scene already is, so
+ * the machine looks lit by the road it is on while the gear looks lit from outside it.
+ */
+const SHELL = ['#3a2410', '#5c3a18', '#845526', '#ad7434', '#d29a46', '#eec06e', '#ffe3ad'];
+const SHINE = ['#fff0c8', '#fffcee'];
+
+/**
  * The rider's gear: seven steps of purple and a specular white above them.
  *
  * The longest ramp in the scene by some way, and it has to be. *Shiny* on hardware that cannot draw
@@ -89,7 +102,14 @@ const HARD = {
   chrome: '#8e9ac0',
   steel: '#3a4260',
   visor: '#4ff0e0',
+  // The moon, and the bike's own headlamp: the two cold-white lights in the picture.
   lamp: '#fff4d0',
+  // The street lighting, which is **sodium** and therefore bronze. A coast highway at night is not
+  // lit by daylight; the give-away that it is a real road rather than a diagram is that everything
+  // under a lamp goes warm and everything between them goes blue.
+  bronze: '#ffcd7e',
+  glow: '#eda23a',
+  ember: '#b56c1e',
   tail: '#ff2a3c',
   brake: '#ff6a50',
 };
@@ -113,6 +133,8 @@ export function paletteAt(at) {
     neon: NEON,
     gear: GEAR,
     glint: GLINT,
+    shell: SHELL,
+    shine: SHINE,
     hard: HARD,
     /** How far toward the hot night we are, for the few things that want the number itself. */
     heat: m,

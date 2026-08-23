@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [8.0.0] - 2026-08-23
+## [8.1.0] - 2026-08-23
 
 **"The Square at Noon" is finished, and a ninth animation begins.** That is the only thing a MAJOR
 bump means here — see `.claude/CLAUDE.md`.
@@ -42,6 +42,17 @@ back* is drawn by nobody: every lamp, barrier post, kerb stone, gantry and raili
 what kind of place it is standing in and answers for itself. So the change arrives the way it does
 from a saddle — the barrier runs out, the last gantry goes over, the street lamps start — and it
 sweeps across the frame at exactly the speed you are travelling, because that is what it is.
+
+### It travels at speed, and the speed costs exactly one constant
+
+A hundred and forty world units a second — three times what it opened at — and only one number had
+to move with it. A lane change takes the same *distance* whatever you are doing, so at three times
+the road speed it has to take a third of the **time**, and a rider whose reactions stayed where they
+were simply arrives at the van still in its lane: the measured clearance falls from a fifth of a lane
+spacing to nothing at all. Dividing the decision walk's step by three puts it back. Nothing else in
+`traffic.js` needed touching, which is the useful thing to know about it — the gap rule, the kernel
+and the soft minimum are all stated in cell-pitches and lane spacings rather than in seconds, so they
+do not care how fast you are going.
 
 ### Going around something, without being allowed to remember that you are
 
@@ -86,10 +97,25 @@ vehicle, with a clearance margin of 0.16 of a lane spacing to spare, and never c
 ### Shiny, on hardware that cannot draw a gradient
 
 The brief is specific about the gear and the answer is arithmetic. **Gloss is not a softer edge, it
-is a brighter step in a smaller place** — so the purple ramp is seven steps long where nothing else
-in the scene needs more than five, and the highlight is a hard band swept across the bike by the
-passing lights. As a lamp comes up the band slides from the nose along the tank, over the shoulder
-and off the tail, and every purple surface it crosses jumps two or three steps and drops back.
+is a brighter step in a smaller place** — so the gear ramp is seven steps long where nothing else in
+the scene needs more than five, and the highlight is a hard band swept across the bike by the passing
+lights. As a lamp comes up the band slides from the nose along the tank, over the shoulder and off
+the tail, and every surface it crosses jumps two or three steps and drops back.
+
+**The machine is amber and the rider is purple**, and that is the one place in the frame where two
+things that touch are allowed to disagree. A purple rider on a purple bike is one purple shape at
+this size: the pose stops reading and the subject flattens into a blob. Warm metal under a cold rider
+separates the two at a glance and gives the highlight somewhere to travel *between*. Amber is also
+the colour every light in the scene already is, so the machine looks lit by the road it is on while
+the gear looks lit from outside it.
+
+**A lamp is not its bulb, it is what it lands on.** The headlight is three passes over one wedge — a
+wide soft cone, a tight bright one inside it, and the pool where it lands — and the pool is the one
+that matters, because a beam with no lit patch of road at the end of it is a shape in the air, and
+light in the air is the part you cannot see. The wedge *drops* as it goes, since a headlight points
+slightly down; drawn level it is a cardboard triangle glued to the front of a sprite. The tail light
+does the same thing backwards in red, and both are dithered rather than faded so the falloff is made
+of the same chunks as everything else.
 
 That light is one function, and everything shiny reads it — the gear, the tank, the chrome, the wet
 sheen on the road — so when a lamp goes by, every surface in the frame agrees about where it is. It
@@ -98,6 +124,52 @@ reason is worth keeping: a smooth kernel summed over a regular lattice is very n
 which makes a fine weighted average for the light's *direction* and a completely useless one for its
 strength. Sampled with a single kernel the rider is lit exactly as much between two lamps as directly
 beneath one.
+
+### Sodium, and reflections that have something above them
+
+The street lighting is **bronze**, because it is sodium: a coast highway at night is not lit by
+daylight, and the give-away that it is a road rather than a diagram is that everything under a lamp
+goes warm and everything between them goes blue. There are half as many of them as there were, which
+at this speed is the difference between passing lamps and a strobe.
+
+What they leave on the road went through three versions and the last one is the only one that reads.
+
+- **The strip's neon, laid on the tarmac on a lattice of its own.** Magenta and cyan blooms with
+  nothing above them casting anything, sliding along the ground. Gone: a reflection has to be under
+  the thing it is a reflection of.
+- **A `ditherGlow` under each lamp.** The right idea and the wrong shape — squashed narrow enough to
+  read as a reflection it becomes a sparse dotted string, because a tall thin ellipse simply has very
+  few chunks in it, and what you get is a vertical row of specks.
+- **A wedge.** Pinned and bright directly under its source, spreading and fading as it comes toward
+  you, because the nearer water is at a shallower angle to your eye. One scanline loop, three of them
+  nested from pale bronze at the lamp out to ember at the near kerb, and nobody looks at it and asks
+  what it is. Every vehicle's tail lights get the same wedge in red.
+
+### The horizon does not move
+
+An earlier build sank the whole backdrop as the deck climbed a causeway, on the reasoning that rising
+takes you above what you are looking at. It does — by about eight metres, against a city a mile away
+across the bay, so the true shift is a couple of pixels rather than the eighty it was drawing. What
+that actually looked like was the skyline bobbing up and down every time a bridge went past, which
+reads as a bug in the renderer rather than as a hill. The climb is told instead by the things that
+are genuinely near: the railing opening up, the water arriving under the deck, the lamps becoming
+masts.
+
+### The traffic
+
+Seen from behind, what distinguishes one vehicle from another is almost entirely **how much the
+greenhouse overhangs the body**, so each kind carries that as a number — how much of its height is
+cabin and how much of its width that cabin takes — alongside whether it has doors instead of a rear
+screen and whether a cab shows above the box it is pulling. With only the first of those a van comes
+out as a narrow tall box balanced on a thin wide bar, because the cabin kept a saloon's setback.
+
+Four more things, each of which was missing and each of which was doing more work than it looked:
+**wheels**, standing clear of the road with the body above them, without which the whole thing hovers;
+a **bumper** and a **roof highlight**, which give the body a top and a bottom instead of leaving it a
+rectangle that happens to be car-coloured; a cabin drawn one step **darker** than the body, since a
+roof is the panel the sky is not reaching and drawn lighter it becomes a lit sign on a bumper; and
+**tail lights as horizontal bars at the outside corners** rather than dots, because at night they are
+what the eye reads a vehicle by.
 
 ### The city across the water
 
@@ -149,9 +221,10 @@ one; the cost kernel is flat across a bus's whole overlap and reaches exactly fa
 window to three cells; the bike is never inside a vehicle over twenty minutes at each end of the
 `swarm` knob; the line never crosses the carriageway faster than a manoeuvre, and does move; a
 causeway meets the ground at the ground in height *and* slope, at every abutment and every setting of
-`form`; the passing lights are continuous to within a bound set just above what the compact kernel
-actually does, and are a genuine pulse rather than a partition of unity; and the scene draws clean at
-three viewports across all sixty-four corners of its panel, with the seed reaching the road.
+`form`, and no causeway moves the horizon or the waterline by a single pixel while it does it; the
+passing lights are continuous to within a bound set just above what the compact kernel actually does,
+and are a genuine pulse rather than a partition of unity; and the scene draws clean at three viewports
+across all sixty-four corners of its panel, with the seed reaching the road.
 
 ## [7.0.0] - 2026-08-16
 
