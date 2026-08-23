@@ -30,7 +30,17 @@ import { hash01 } from '../../effects/pixel.js';
 /** How fast the rider travels, in world units a second, before the throttle wobbles it. */
 const SPEED = 46;
 
-/** How much world fits across the frame, before the `pace` knob has its say. */
+/**
+ * How much world fits across the frame, before the `pace` knob has its say — **the lens**.
+ *
+ * This is the number `pace` moves, and it moves it for a reason worth stating. The obvious knob on a
+ * scrolling scene is the *speed*, and speed is the one thing that cannot be touched: the world is
+ * addressed off `travelAt(t)`, so scaling that by even a few per cent teleports the rider several
+ * hundred units down the road the instant the knob is turned — at five minutes in, past a dozen
+ * segments. Changing how much world is on screen gives the same apparent speed in pixels a second,
+ * continuously, with the phase not moving at all. The rider stays exactly where he was; the camera
+ * comes in or pulls back.
+ */
 export const SPAN = 190;
 
 /** The lattices. Each is a pitch, and an integer index into it is the address of a thing. */
@@ -125,7 +135,7 @@ export const BRIDGE = 2;
  * out, the last gantry goes over, and the street lamps start. It sweeps across the frame at exactly
  * the speed you are travelling, because that is what it is.
  */
-export function kindOf(s) {
+function kindOf(s) {
   const r = hash01(s * 3.71 + 11.2);
   return r < 0.44 ? HIGHWAY : r < 0.76 ? LOCAL : BRIDGE;
 }
@@ -228,23 +238,4 @@ export function lightAt(x) {
   return { bearing: clamp(bearing / weight, -1, 1), strength: clamp((glare - 0.42) * 1.7, 0, 1) };
 }
 
-/* --------------------------------------------------------------- camera ---- */
 
-/**
- * The lens: how many world units the frame is wide, and therefore how many screen pixels a world
- * unit is worth.
- *
- * This is what the `pace` knob moves, and it moves it for a reason worth stating. The obvious knob
- * on a scrolling scene is the *speed*, and it is the one thing that cannot be touched: the world is
- * addressed off `travelAt(t)`, so scaling that by even a few per cent teleports the rider several
- * hundred units down the road the instant the knob is turned — at five minutes in, past a dozen
- * segments. Changing how much world is on screen gives the same apparent speed in pixels a second,
- * continuously, without the phase moving at all. The rider stays exactly where they were; the
- * camera comes in or pulls back.
- */
-export const lensAt = (W, span) => W / span;
-
-/** Everything decided once. There is very little of it, because the world is a function. */
-export function planWorld(rng) {
-  return { seed: rng.range(0, 90), sign: rng.range(0, 40) };
-}

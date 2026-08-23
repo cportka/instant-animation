@@ -11,7 +11,7 @@
 
 import { smoothstep } from '../../lib/draw.js';
 import { chunk, ditherGlow, hash01, snap } from '../../effects/pixel.js';
-import { CAR_PITCH, LANES, LANE_HALF, LOCAL, kindAt, travelAt } from './world.js';
+import { CAR_PITCH, LANES, LOCAL, kindAt, travelAt } from './world.js';
 import { lz, ly, sx } from './road.js';
 
 /** How fast the traffic moves, in world units a second. The rider does about forty-six. */
@@ -247,7 +247,7 @@ const TILT = 0.55;
 const tiltAt = (t) => 0.62 * Math.sin(t * 0.187 + 0.9) + 0.38 * Math.sin(t * 0.081 + 3.4);
 
 /** Where the rider would rather be, given the traffic and where they currently are. */
-export function targetLane(x, t, density, from) {
+function targetLane(x, t, density, from) {
   const costs = costsAt(x, t, density, COSTS);
   const tilt = tiltAt(t) * TILT;
   const worst = Math.max(costs[0], costs[1], costs[2]);
@@ -403,8 +403,3 @@ export function drawFare(view, car, wx) {
   ctx.fill();
 }
 
-/** How wide a vehicle is across the band, for anything that needs to keep clear of one. */
-export const carHalf = () => LANE_HALF;
-
-/** ...and how long, in cell-pitches, for the same reason. */
-export const carSpan = (car) => car.shape.long / CAR_PITCH;

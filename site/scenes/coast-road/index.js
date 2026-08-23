@@ -28,7 +28,7 @@
 
 import { createRng } from '../../lib/rng.js';
 import { bend, knobsFor } from '../../lib/knobs.js';
-import { LANES } from './world.js';
+import { LANES, SPAN } from './world.js';
 import { paletteAt } from './palette.js';
 import {
   drawFarSide, drawGantries, drawNearSide, drawOverBack, drawOverFront, drawSheen,
@@ -102,7 +102,7 @@ export function create({ width, height, seed = meta.id, knobs }) {
       ctx.save();
       const tune = {
         // The lens. Narrow is close and fast, wide is far and slow — and neither moves the phase.
-        span: bend(K.pace, 300, 190, 118),
+        span: bend(K.pace, SPAN * 1.58, SPAN, SPAN * 0.62),
         grain: bend(K.grain, 0.5, 1, 2.1),
         glow: bend(K.glow, 0.3, 1, 1.9),
         tall: bend(K.form, 0.55, 1, 1.7),

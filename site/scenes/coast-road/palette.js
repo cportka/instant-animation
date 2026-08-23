@@ -68,7 +68,7 @@ const LAND_HOT = ['#0d0518', '#160c2a', '#241640', '#3a2456'];
  * of gas is the colour it is whatever the sky is doing, and shifting these with the rest would turn
  * the strip into a wash — the point of a sign is that it disagrees with everything around it.
  */
-export const NEON = ['#ff3f9a', '#3fe8e0', '#ffd24a', '#8f5cff', '#5cff9a', '#ff7a3f'];
+const NEON = ['#ff3f9a', '#3fe8e0', '#ffd24a', '#8f5cff', '#5cff9a', '#ff7a3f'];
 
 /**
  * The rider's gear: seven steps of purple and a specular white above them.
@@ -78,11 +78,11 @@ export const NEON = ['#ff3f9a', '#3fe8e0', '#ffd24a', '#8f5cff', '#5cff9a', '#ff
  * and a ramp with four steps in it has nowhere to put one. Seven leaves room for a lit side, a
  * turning side, a shadow side and a highlight that is unmistakably a highlight.
  */
-export const GEAR = ['#12081f', '#22103a', '#341a58', '#492678', '#63389c', '#8354c0', '#ab7ee0'];
-export const GLINT = ['#d0aef4', '#f4e6ff'];
+const GEAR = ['#12081f', '#22103a', '#341a58', '#492678', '#63389c', '#8354c0', '#ab7ee0'];
+const GLINT = ['#d0aef4', '#f4e6ff'];
 
 /** Everything that is not lit by the night: rubber, steel, glass, and a tail light. */
-export const HARD = {
+const HARD = {
   tyre: '#08070e',
   tread: '#151424',
   rim: '#5a6280',

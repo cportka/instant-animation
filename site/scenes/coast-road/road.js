@@ -30,15 +30,15 @@ import {
  * behind that wall. *Beachside* metropolis means you can see the beach and the sea from the road.
  * So the order down the frame is sky, far skyline, near blocks, **water**, shore, road.
  */
-export const HORIZON = 0.5;
+const HORIZON = 0.5;
 /** ...where the water meets the shore. */
-export const SHORE = 0.615;
+const SHORE = 0.615;
 /** ...and the road band itself. */
-export const ROAD_TOP = 0.645;
-export const ROAD_BAND = 0.245;
+const ROAD_TOP = 0.645;
+const ROAD_BAND = 0.245;
 
 /** Where the rider sits across the frame. Left of centre: the road ahead is what you are watching. */
-export const BIKE_AT = 0.34;
+const BIKE_AT = 0.34;
 
 /** How much smaller the far lane is drawn than the near one. */
 const FAR = 0.8;
@@ -97,7 +97,7 @@ export const ly = (view, lane) => view.top + lane * view.band;
 export const lz = (lane) => lerp(FAR, NEAR, lane);
 
 /** Walk every cell of a world lattice that could touch the frame, with a margin for wide objects. */
-export function eachCell(view, pitch, margin, run) {
+function eachCell(view, pitch, margin, run) {
   const from = Math.floor((view.camX - margin) / pitch);
   const to = Math.floor((view.camX + view.span + margin) / pitch);
   for (let n = from; n <= to; n += 1) run(n);
