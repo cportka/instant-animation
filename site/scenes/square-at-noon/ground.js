@@ -13,7 +13,7 @@
 import { hash2, noise2 } from '../../effects/field.js';
 import { wrap01 } from '../../lib/draw.js';
 import { STREET } from './town.js';
-import { bandOf, chunkIn, chunkOf, inBands, inkOf, strataAt } from './strata.js';
+import { bandOf, chunkIn, chunkOf, inBands, inkOf, mark, strataAt } from './strata.js';
 import { bearingAt, carriedBy, gustAt, windHere } from './wind.js';
 
 export function planGround(rng) {
@@ -71,10 +71,12 @@ export function drawSky(ctx, W, H, t, plan, base, tune) {
     ctx.fillStyle = inkOf(strata, 4);
     ctx.beginPath();
     chunkIn(ctx, 0, top, W, bottom - top, top, bottom, px);
-    ctx.fill();
+    mark(ctx, tune);
 
     // Heat: a coarse mottle one step *down*, thickening toward the horizon. Drawn on the band's own
-    // grid, so a fine band shimmers and a coarse one boils.
+    // grid, so a fine band shimmers and a coarse one boils — and thinned by `stipple`, because in
+    // the drawn composition every one of these single chunks comes out as a solid mark rather than
+    // an outline, and a sky's worth of them is not shimmer, it is a grey wash over the paper.
     ctx.fillStyle = inkOf(strata, 3);
     ctx.beginPath();
     let drew = false;
@@ -85,12 +87,12 @@ export function drawSky(ctx, W, H, t, plan, base, tune) {
       const down = y / streetY;
       for (let c = 0; c < cols; c += 1) {
         const shimmer = noise2(c * px * 0.012 + t * 0.3, y * 0.02 - t * 0.7);
-        if (shimmer > 1.05 - down * 0.55 * tune.heat) continue;
+        if (shimmer > (1.05 - down * 0.55 * tune.heat) * tune.stipple) continue;
         ctx.rect(c * px, y, px, px);
         drew = true;
       }
     }
-    if (drew) ctx.fill();
+    if (drew) mark(ctx, tune);
 
     // The sun: a hard disc, no glow, no gradient. At noon it is a hole punched in the sky.
     const sunY = H * 0.16;
@@ -105,7 +107,7 @@ export function drawSky(ctx, W, H, t, plan, base, tune) {
         if (half < px * 0.5) continue;
         drew = chunkIn(ctx, W * 0.74 - half, y, half * 2, px, top, bottom, px) || drew;
       }
-      if (drew) ctx.fill();
+      if (drew) mark(ctx, tune);
     }
   });
 }
@@ -124,7 +126,7 @@ export function drawSquare(ctx, W, H, t, plan, base, tune) {
     ctx.fillStyle = inkOf(strata, 1);
     ctx.beginPath();
     chunkIn(ctx, 0, streetY, W, H - streetY, top, bottom, px);
-    ctx.fill();
+    mark(ctx, tune);
 
     // Ruts and stones: the same ground one step darker, in long thin runs down the square. Wheel
     // ruts run *away* from the viewer, so they converge — the only perspective in the whole scene.
@@ -138,15 +140,15 @@ export function drawSquare(ctx, W, H, t, plan, base, tune) {
       for (const lane of [0.3, 0.42, 0.64, 0.76]) {
         const x = W * (0.5 + (lane - 0.5) * (0.5 + out * 1.6));
         const wide = px * (1 + out * 3);
-        if (noise2(x * 0.01, y * 0.05 + lane * 20) > 0.52) continue;
+        if (noise2(x * 0.01, y * 0.05 + lane * 20) > 0.52 * tune.stipple) continue;
         drew = chunkIn(ctx, x, y, wide, px, top, bottom, px) || drew;
       }
       for (let c = 0; c < Math.ceil(W / px); c += 1) {
-        if (hash2(c * 1.7, r * 3.1) > 0.012 + out * 0.03) continue;
+        if (hash2(c * 1.7, r * 3.1) > (0.012 + out * 0.03) * tune.stipple) continue;
         drew = chunkIn(ctx, c * px, y, px, px, top, bottom, px) || drew;
       }
     }
-    if (drew) ctx.fill();
+    if (drew) mark(ctx, tune);
   });
 }
 
@@ -179,7 +181,7 @@ export function drawPlants(ctx, W, H, t, plan, base, tune) {
         ctx.rect(Math.round(bx / px) * px, Math.round((y - up * tall) / px) * px, px, px);
       }
     }
-    ctx.fill();
+    mark(ctx, tune);
   }
 }
 
@@ -211,6 +213,11 @@ export function drawDust(ctx, W, H, t, plan, base, tune) {
     // the first build of this was: the wind changed how *high* the dust went and never how much of
     // it there was, so the one thing the scene is about could not be seen at all.
     if (mote.lift > gust * 1.15 + 0.06) continue;
+    // ...and how much of the population this composition wants at all. A speck is one chunk, and a
+    // chunk **stroked** is a solid little square rather than an outline — so a drawing keeps a
+    // scattering of them as stipple and a painting keeps the lot as weather. Same dust, different
+    // amount of it, which is a fact about the medium rather than about the wind.
+    if (mote.at > tune.stipple) continue;
 
     const n = bandOf(y / H, t, plan.strata);
     (buckets[n] ??= []).push(x, y, mote.step);
@@ -235,7 +242,7 @@ export function drawDust(ctx, W, H, t, plan, base, tune) {
         ctx.rect(Math.round(list[i] / px) * px, Math.round(list[i + 1] / px) * px, px, px);
         drew = true;
       }
-      if (drew) ctx.fill();
+      if (drew) mark(ctx, tune);
     }
   }
 }
@@ -283,6 +290,6 @@ export function drawWeeds(ctx, W, H, t, plan, base, tune) {
         );
       }
     }
-    ctx.fill();
+    mark(ctx, tune);
   }
 }

@@ -8,7 +8,7 @@ section describes what the project *is* rather than logging every state it passe
 section opens when an animation is **finished** — see `.claude/CLAUDE.md`. This project does not
 use git tags or GitHub Releases; the version in `package.json` is the record.
 
-## [8.1.0] - 2026-08-23
+## [8.2.0] - 2026-08-23
 
 **"The Square at Noon" is finished, and a ninth animation begins.** That is the only thing a MAJOR
 bump means here — see `.claude/CLAUDE.md`.
@@ -212,6 +212,54 @@ composition at every size, which is usually what this gallery wants and is wrong
 one object about a fourteenth of the frame wide, and a fourteenth of a phone in portrait is forty
 pixels.
 
+### "The Square at Noon" gets a second composition — "The Line Drawing"
+
+The same square, in ink on white paper. Third animation in the gallery to hold more than one
+arrangement of itself, and the first where the difference is the **medium** rather than what is
+standing in the scene.
+
+**None of it is a switch, and that is the whole reason it works.** A composition here is a block of
+numbers the scene reads, never a branch it takes, so the drawn version had to be expressible as
+*settings* on machinery that already existed — and it turned out to be, in two pieces.
+
+- **The outline is where the fill was.** Every shape in this animation is already a path of
+  axis-aligned rectangles, built by `chunkIn` and put down by one call at the end. So the outline of
+  every shape is *already described by the path that fills it*: stroking rather than filling gets the
+  town, the horses, the plants, the tumbleweeds, the saloon doors and the dust without a single one
+  of them being told, because none of them ever chose to be solid — they chose to be rectangles. One
+  function, fifteen call sites, no new geometry anywhere. The line is two pixels wide because a
+  stroke straddles its path by half its width, and an odd width would put a soft edge on a scene
+  whose entire premise is that it has none.
+- **The distortion is turned down to zero rather than skipped.** One ramp instead of six, no weather
+  reaching the grid, no drift in the boundaries, a spread of zero: every band then agrees about
+  everything and holds still, and the strata simply **stop happening**. Nothing tests which
+  composition it is in; the effect was asked for a range of nothing.
+
+Two things needed a value rather than a range. The greyscale ramp is read against the same hierarchy
+every shape already obeys, so it says in ink what the colour version says in colour — ground and
+seams near black, timber mid grey, sky and glass at the pale end. And a **stipple** setting, because
+a speck of dust is one chunk and a chunk *stroked* comes out as a solid little square rather than an
+outline: at full strength the heat mottle alone lays a grey wash over the whole sky. A drawing keeps
+a scattering of them and a painting keeps the lot, which is a fact about the medium rather than about
+the wind.
+
+**Its dissolve — `bleach`.** The colour drains out and the drawing is left behind, which is the one
+verb that turns either composition into the other. Deliberately a different verb from the channel
+change into this same animation, which also works in the scene's nine bands — that one *deals* the
+frame, dropping each band to its own resolution and washing it toward its own ramp, so it ends up
+looking like more of the picture. This one takes the picture away and leaves the paper. The bands go
+one at a time, staggered top to bottom, so the paper arrives as a front sweeping down the frame
+rather than as a fade; the wash is punched through on the ordered matrix rather than laid on at an
+alpha, because a white sheet at forty per cent opacity is a soft edge over the entire frame; and a
+dark rule is left along every boundary and thickens, so by the end the frame is white with nine lines
+ruled across it, which is a drawing of the strata.
+
+`tests/scenes.test.js` had to give a little ground for it. Its dissolve check asserted that a
+dissolve *thins out* — fewer surviving blocks later than earlier — which was really asserting that
+every dissolve is a **displacement**. That is a fact about the two that existed rather than about
+dissolves: `bleach` takes the old arrangement away by covering it, so its work grows. The shape
+checked is now the monotonicity and not the sign of it.
+
 ### Tests
 
 `tests/coast-road.test.js` — eight, each verified to fail on the bug it guards. The rider never
@@ -225,6 +273,11 @@ causeway meets the ground at the ground in height *and* slope, at every abutment
 passing lights are continuous to within a bound set just above what the compact kernel actually does,
 and are a genuine pulse rather than a partition of unity; and the scene draws clean at three viewports
 across all sixty-four corners of its panel, with the seed reaching the road.
+
+`tests/square-at-noon.test.js` gains a ninth, verified against five mutations: the drawn composition
+issues no fill at all and the painted one no stroke; the paper is laid before anything is drawn on
+it; and in the line drawing every band deals one ramp, holds its boundaries still, and lands on the
+same chunk at every strength of wind — while the painted square still does all of it.
 
 ## [7.0.0] - 2026-08-16
 

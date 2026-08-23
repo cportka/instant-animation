@@ -31,7 +31,7 @@
 
 import { createRng } from '../../lib/rng.js';
 import { bend, knobsFor } from '../../lib/knobs.js';
-import { baseChunk, planStrata } from './strata.js';
+import { GREYS, baseChunk, planStrata } from './strata.js';
 import { drawPlants, drawDust, drawSky, drawSquare, drawWeeds, planGround } from './ground.js';
 import { drawTown, planTown } from './town.js';
 import { drawCritter, drawStable, planBeasts } from './beasts.js';
@@ -57,6 +57,30 @@ export const meta = {
   // and worse, it would halve the base chunk and make the fine bands stop reading as a *resolution*
   // at all. The strata only mean anything if the finest one is visibly a grid.
   maxDpr: 1,
+  // Re-arranging is the colour draining out of the square rather than the square going anywhere.
+  dissolve: 'bleach',
+  /**
+   * Two compositions: the square as it is painted, and the square as it is **drawn**.
+   *
+   * Everything that separates them is in these two blocks, and none of it is a switch. The line
+   * drawing asks for one ramp instead of six, no weather reaching the grid, a spread of zero so
+   * every band converges on the same chunk, and paper to put it on. The strata do not get skipped —
+   * they are *asked for a range of nothing*, which is the difference between an effect that is off
+   * and an effect that is turned all the way down, and the reason the second composition needs no
+   * code of its own beyond the ink it hands over.
+   */
+  variants: [
+    {
+      id: 'noon',
+      title: 'The Square at Noon',
+      ink: { palettes: undefined, weather: 1, drift: 1, spread: 1, stipple: 1, outline: false, paper: null },
+    },
+    {
+      id: 'the-line-drawing',
+      title: 'The Line Drawing',
+      ink: { palettes: [GREYS], weather: 0, drift: 0, spread: 0, stipple: 0.16, outline: true, paper: '#ffffff' },
+    },
+  ],
   /**
    * Six knobs. `strata` is the one this scene is about: it drives how coarse the coarse bands are
    * **and** how far the palettes are allowed to roll apart, so one end of it is a nearly ordinary
@@ -74,11 +98,12 @@ export const meta = {
   ],
 };
 
-export function create({ width, height, seed = meta.id, knobs }) {
+export function create({ width, height, seed = meta.id, variant = meta.variants[0], knobs }) {
   const rng = createRng(seed);
   const K = knobsFor(meta, knobs);
   // The strata first, so the bands are the same for a given seed however much is standing in them.
-  const strata = planStrata(rng);
+  const ink = variant.ink;
+  const strata = planStrata(rng, ink);
   const town = planTown(rng);
   const ground = planGround(rng);
   const beasts = planBeasts(rng);
@@ -101,6 +126,8 @@ export function create({ width, height, seed = meta.id, knobs }) {
       ctx.save();
       // The knobs, worked out once for the whole frame and read from the live bag rather than kept.
       const tune = {
+        outline: ink.outline,
+        stipple: ink.stipple,
         blow: bend(K.blow, 0.12, 1, 2.8),
         growth: bend(K.growth, 0.3, 1, 2.2),
         heat: bend(K.heat, 0.15, 1, 2.1),
@@ -112,8 +139,16 @@ export function create({ width, height, seed = meta.id, knobs }) {
       // How coarse the coarse bands get, and how fine the fine one is. One knob moves both ends
       // apart, so the *disagreement between bands* is the thing being adjusted rather than the
       // overall resolution — which is what `grain` is for, separately.
-      strata.spread = bend(K.strata, 0.25, 1, 1.9);
+      strata.spread = bend(K.strata, 0.25, 1, 1.9) * ink.spread;
       const base = baseChunk(W, H, bend(K.grain, 0.45, 1, 2.2));
+
+      // The paper, if this composition is drawn on any. The sky is step 4 of its ramp and step 4 of
+      // the drawn ramp is the paper's own white, so without this the line drawing would be lines
+      // over whatever the last frame left behind.
+      if (ink.paper) {
+        ctx.fillStyle = ink.paper;
+        ctx.fillRect(0, 0, W, H);
+      }
 
       drawSky(ctx, W, H, t, ground, base, tune);
       drawSquare(ctx, W, H, t, ground, base, tune);

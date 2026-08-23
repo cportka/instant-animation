@@ -94,11 +94,21 @@ test('every dissolve rots, cleanly and the same way twice', () => {
     assert.equal(run(kind, 0).ops.length, 0, `${kind} draws before it has begun`);
     assert.equal(run(kind, 1).ops.length, 0, `${kind} is still drawing once it is over`);
 
-    // ...and it thins as it goes: later is always fewer surviving blocks than earlier, which is what
-    // makes it a dissolve rather than a shuffle.
-    const early = run(kind, 0.25).ops.length;
-    const late = run(kind, 0.8).ops.length;
-    assert.ok(late < early, `${kind} does not thin out (${early} → ${late})`);
+    // ...and it goes **one way**. Every dissolve here has to be monotone in its own progress: it is
+    // a thing coming apart, and a thing that came apart and then re-assembled and then came apart
+    // again would be a pulse, not a change.
+    //
+    // Which direction is up to the dissolve, and that took a third one to notice. `mosh` and
+    // `updraft` take the old arrangement away block by block, so their work *shrinks*: fewer
+    // surviving blocks each frame. `bleach` takes it away by covering it, so its work *grows*: more
+    // paper each frame. Asserting "later is fewer than earlier" was really asserting that every
+    // dissolve is a displacement, which is a fact about the two that existed rather than about
+    // dissolves — so the shape checked here is the monotonicity, and not the sign of it.
+    const walk = [0.15, 0.35, 0.55, 0.75, 0.92].map((at) => run(kind, at).ops.length);
+    const rising = walk.every((n, i) => i === 0 || n >= walk[i - 1]);
+    const falling = walk.every((n, i) => i === 0 || n <= walk[i - 1]);
+    assert.ok(rising || falling, `${kind} turns around part way through (${walk.join(' → ')})`);
+    assert.notEqual(walk[0], walk[walk.length - 1], `${kind} does not change as it goes`);
     shapes.set(kind, rec.ops.join('|'));
   }
   assert.equal(new Set(shapes.values()).size, DISSOLVES.length, 'two dissolves draw identically');

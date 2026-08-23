@@ -2,7 +2,7 @@
 
 An instant animation generator. Animate anything you can describe.
 
-**Version:** 8.1.0 · **Live:** https://cportka.github.io/instant-animation/
+**Version:** 8.2.0 · **Live:** https://cportka.github.io/instant-animation/
 
 Describe something. It becomes a hand-drawn canvas animation and joins the gallery. There is no
 text on the site — the animation *is* the page. The only chrome is a soft chevron floating at each
@@ -37,7 +37,7 @@ being re-composed rather than two pictures. Compositions have their own addresse
 | Animation | From the description |
 | --- | --- |
 | **The All-Night Coast Road** | *a side-scrolling follow of a 16-bit motorcycle with a rider in shiny purple gear head to toe — buildings going by like Rampage or Ninja Gaiden, but ultimately a tropical 80s beachside metropolis at night, driving endlessly forward to the right around occasional vehicles and overpasses and bridges, highway changing to local road and back* |
-| **The Square at Noon** | *a living pixelated town-square western — detailed wind and dust with tumbleweeds, plants, rare scurrying and crawling desert animals, a wooden town with old-timey facades and swinging bar doors that blow open and closed with the wind, and horses in a stable — not locked to any one bit style, but a variety of pixel sizes, resolutions and colours, extremely psychedelic* |
+| **The Square at Noon** *(two compositions)* | *a living pixelated town-square western — detailed wind and dust with tumbleweeds, plants, rare scurrying and crawling desert animals, a wooden town with old-timey facades and swinging bar doors that blow open and closed with the wind, and horses in a stable — not locked to any one bit style, but a variety of pixel sizes, resolutions and colours, extremely psychedelic* |
 | **The Long Cut** | *stark monochromatic black and white — slices towards the camera, falling down and to the side* |
 | **The Pitiless Pit** | *an abstract pitiless pit that goes down — lines from the ground travel down the pit, pixels travel down the pit, blocks and abstract shapes fall in, and every minute or two everything stops and the pit erupts pure white pixels in a great flurry* |
 | **Moon Over the Deep** | *a stark, highly-stylized, 32-bit pixel style full moon over the water with an island in the background, the water gently rolling under a clear night sky, and a faint glow that occasionally comes from deep below* |
