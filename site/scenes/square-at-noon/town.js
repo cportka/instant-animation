@@ -15,7 +15,7 @@
 // boundary, and the picture would stop being a town.
 
 import { hash2 } from '../../effects/field.js';
-import { chunkIn, inBands, inkOf } from './strata.js';
+import { chunkIn, inBands, inkOf, mark } from './strata.js';
 import { gustAt, windHere } from './wind.js';
 
 /** Where the boardwalk sits, as a fraction of the frame. The square is everything below it. */
@@ -158,7 +158,7 @@ export function drawTown(ctx, W, H, t, plan, base, tune) {
           }
         }
       }
-      if (drew) ctx.fill();
+      if (drew) mark(ctx, tune);
     }
   });
 
@@ -188,7 +188,7 @@ function drawDoors(ctx, W, H, t, plan, base, gust, tune) {
     ctx.fillStyle = inkOf(strata, 0);
     ctx.beginPath();
     let drew = chunkIn(ctx, midX - leafW * 1.05, doorY, leafW * 2.1, doorH, top, bottom, px);
-    if (drew) ctx.fill();
+    if (drew) mark(ctx, tune);
 
     for (const [lag, step] of [[0.18, 2], [0, 3]]) {
       const swing = swingAt(t, lag) * tune.swing;
@@ -204,7 +204,7 @@ function drawDoors(ctx, W, H, t, plan, base, gust, tune) {
         const shift = side * leafW * 0.52 + open * leafW * 0.55;
         drew = chunkIn(ctx, midX + shift - wide / 2, doorY, wide, doorH, top, bottom, px) || drew;
       }
-      if (drew) ctx.fill();
+      if (drew) mark(ctx, tune);
     }
   });
 }

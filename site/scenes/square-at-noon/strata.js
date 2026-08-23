@@ -72,6 +72,43 @@ export const PALETTES = [
   ['#1a0a0a', '#521414', '#a33218', '#e8761f', '#ffcf6a'],
 ];
 
+/**
+ * ...and the one that is not a palette at all.
+ *
+ * The second composition draws the same square as a **line drawing on white paper**, and this ramp is
+ * what it indexes instead of the six above. Read the values against the hierarchy every shape in the
+ * scene already obeys and it says the same thing the colour version does, in ink: the ground and the
+ * seams are near black, the timber is a mid grey, and step 4 — the sky, and the glass — is **the
+ * paper itself**, so those two draw nothing at all. A sky with no outline is what a sky looks like
+ * when it is drawn rather than painted, and a lit window is a hole you can see through.
+ */
+export const GREYS = ['#101010', '#3c3c3c', '#6a6a6a', '#909090', '#c4c4c4'];
+
+/**
+ * Put the open path down: filled in the painted composition, **stroked** in the drawn one.
+ *
+ * The whole of the line drawing is this function, and that is not a shortcut — it is the same
+ * observation that made the colour version work. Every shape in this scene is already a path of
+ * axis-aligned rectangles built by `chunkIn`, so the outline of every shape is *already described*
+ * by the path that fills it. Stroking it costs nothing extra and gets the town, the horses, the
+ * plants, the tumbleweeds and the dust without any of them being told, because none of them chose
+ * to be solid in the first place — they chose to be rectangles.
+ *
+ * The line is two pixels wide and that number is not a taste. A stroke straddles its path by half
+ * its width, so an odd width lands on half-pixels and the one thing this scene may not have is a
+ * soft edge; two puts both sides of every line on an integer boundary at the scale this animation
+ * renders at.
+ */
+export function mark(ctx, tune) {
+  if (!tune.outline) {
+    ctx.fill();
+    return;
+  }
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = ctx.fillStyle;
+  ctx.stroke();
+}
+
 /** How long a stratum holds its arrangement before the next one is dealt, in seconds. */
 const HOLD = 6.5;
 
@@ -95,7 +132,7 @@ export function edgeAt(n, t, plan) {
   if (n >= BANDS) return 1;
   const seed = n * 4.7 + plan.seed;
   const drift = Math.sin(t * 0.11 + seed) * SLIDE + Math.sin(t * 0.067 - seed * 1.7) * SLIDE * 0.5;
-  return (n + drift * 0.62) / BANDS;
+  return (n + drift * 0.62 * (plan.drift ?? 1)) / BANDS;
 }
 
 /** Which band a height falls in. For anything that is a point rather than a shape. */
@@ -118,7 +155,7 @@ export function inBands(H, t, plan, gust, base, run) {
     const bottom = H * edgeAt(n + 1, t, plan);
     if (bottom - top < 1) continue;
     const strata = strataAt(n, t, plan);
-    run(strata, top, bottom, chunkOf(base, strata, gust, plan.spread ?? 1), n);
+    run(strata, top, bottom, chunkOf(base, strata, gust * (plan.weather ?? 1), plan.spread ?? 1), n);
   }
 }
 
@@ -162,7 +199,7 @@ export function strataAt(n, t, plan) {
     era,
     into,
     grid: GRIDS[Math.floor(hash2(key, 3.3) * GRIDS.length) % GRIDS.length],
-    palette: PALETTES[Math.floor(hash2(key, 11.7) * PALETTES.length) % PALETTES.length],
+    palette: plan.palettes[Math.floor(hash2(key, 11.7) * plan.palettes.length) % plan.palettes.length],
   };
 }
 
@@ -212,9 +249,25 @@ export const chunkOf = (base, strata, gust, spread = 1) => {
 /** The base chunk, off the short edge, before any band has had its say. */
 export const baseChunk = (W, H, grain = 1) => Math.max(2, Math.round(Math.min(W, H) / (260 * grain)));
 
-/** Everything decided once. The strata are a function of `t`, so there is very little of it. */
-export function planStrata(rng) {
-  return { seed: rng.range(0, 60), phase: rng.next() };
+/**
+ * Everything decided once. The strata are a function of `t`, so there is very little of it — and
+ * what the composition supplies is the rest.
+ *
+ * `palettes` is which ramps the bands may deal from, `weather` is how much of the gust reaches the
+ * grid, and `drift` is how far the boundaries wander. Set to one ramp, no weather and no drift,
+ * every band agrees about everything and holds still, and the strata simply **stop happening**: one
+ * resolution, one set of values, a fixed ladder of boundaries, nothing coarsening as the wind gets
+ * up. That is the whole of "turn the distortion off" — not a switch that skips an effect, but the
+ * effect asked for a range of zero, which is why the drawn composition needs no code of its own.
+ */
+export function planStrata(rng, ink = {}) {
+  return {
+    seed: rng.range(0, 60),
+    phase: rng.next(),
+    palettes: ink.palettes ?? PALETTES,
+    weather: ink.weather ?? 1,
+    drift: ink.drift ?? 1,
+  };
 }
 
 /** A hashed angle, for anything that needs to point somewhere and never change its mind. */

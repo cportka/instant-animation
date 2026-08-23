@@ -14,7 +14,7 @@
 import { hash2 } from '../../effects/field.js';
 import { wrap01 } from '../../lib/draw.js';
 import { STREET } from './town.js';
-import { bandOf, chunkIn, chunkOf, inBands, inkOf, strataAt } from './strata.js';
+import { bandOf, chunkIn, chunkOf, inBands, inkOf, mark, strataAt } from './strata.js';
 import { gustAt, windHere } from './wind.js';
 
 /**
@@ -106,7 +106,7 @@ export function drawStable(ctx, W, H, t, plan, base, tune) {
     // as the one place in the frame that the noon light does not reach.
     ctx.fillStyle = inkOf(strata, 0);
     ctx.beginPath();
-    if (chunkIn(ctx, x, roofY, w, streetY - roofY, top, bottom, px)) ctx.fill();
+    if (chunkIn(ctx, x, roofY, w, streetY - roofY, top, bottom, px)) mark(ctx, tune);
 
     ctx.fillStyle = inkOf(strata, 2);
     ctx.beginPath();
@@ -116,7 +116,7 @@ export function drawStable(ctx, W, H, t, plan, base, tune) {
     }
     // A hayloft opening in the gable, which is the detail that says stable rather than shed.
     drew = chunkIn(ctx, x + w * 0.42, roofY - H * 0.05, w * 0.16, H * 0.05, top, bottom, px) || drew;
-    if (drew) ctx.fill();
+    if (drew) mark(ctx, tune);
   });
 
   // The horses, on the band their feet are in and drawn whole. An animal cut across a resolution
@@ -151,7 +151,7 @@ export function drawStable(ctx, W, H, t, plan, base, tune) {
         ctx.rect(tailX, hy + (3 + Math.abs(swish)) * scale, scale, scale * 2);
       }
     }
-    ctx.fill();
+    mark(ctx, tune);
   }
 }
 
@@ -204,7 +204,7 @@ export function drawCritter(ctx, W, H, t, plan, base, tune) {
     '1',
     flip,
   );
-  ctx.fill();
+  mark(ctx, tune);
 }
 
 /** How much the air is moving where an animal is standing, for anything that flinches at it. */

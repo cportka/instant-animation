@@ -18,10 +18,10 @@
 
 import { clamp } from '../lib/draw.js';
 import { deviceScale } from './vhs.js';
-import { hash01, pixelSize, snap } from './pixel.js';
+import { bayerOn, hash01, pixelSize, snap } from './pixel.js';
 
 /** Every dissolve a scene may ask for by name. `meta.dissolve` must be one of these. */
-export const DISSOLVES = ['mosh', 'updraft'];
+export const DISSOLVES = ['mosh', 'updraft', 'bleach'];
 
 /**
  * Dissolve the frozen composition away, revealing the one already drawn underneath.
@@ -32,6 +32,7 @@ export const DISSOLVES = ['mosh', 'updraft'];
 export function dissolve(kind, ctx, W, H, progress, t, tape) {
   if (progress <= 0 || progress >= 1 || !tape) return;
   if (kind === 'updraft') updraftDissolve(ctx, W, H, progress, t, tape);
+  else if (kind === 'bleach') bleachDissolve(ctx, W, H, progress, tape);
   else moshDissolve(ctx, W, H, progress, t, tape);
 }
 
@@ -102,6 +103,70 @@ function updraftDissolve(ctx, W, H, progress, t, tape) {
         Math.min(block, W - x), Math.min(block, H - y),
       );
     }
+  }
+}
+
+/** The nine bands the square cuts itself into, and the two inks its drawn composition uses. */
+const BLEACH_BANDS = 9;
+const PAPER = '#ffffff';
+const RULE = '#101010';
+
+/**
+ * *The Square at Noon*: the colour drains out and the drawing is left behind.
+ *
+ * The scene's two compositions are the same square **painted** and the same square **drawn**, so the
+ * change between them is the one verb that turns either into the other: the colour goes and the
+ * structure stays. It is deliberately a different verb from the channel change into this animation,
+ * which also works in the scene's nine bands — that one *deals* the frame, dropping each band to its
+ * own resolution and washing it toward its own ramp, so it ends up looking like more of the picture.
+ * This one takes the picture away and leaves the paper.
+ *
+ * Three things, in the order you notice them.
+ *
+ * **The bands go one at a time.** Each has its own share of the change, staggered top to bottom, so
+ * the paper arrives as a front sweeping down the frame rather than as a fade — a fade over the whole
+ * picture is a cross-dissolve, which says the two arrangements are two pictures. They are one.
+ *
+ * **The wash is dithered, not alpha.** This animation has no soft edges anywhere in it, and a
+ * white sheet at forty per cent opacity is a soft edge over the entire frame. Punching the paper
+ * through on the ordered matrix keeps every value in the change one of the two the composition it
+ * is heading toward is allowed.
+ *
+ * **A rule is left along every boundary, and it thickens.** The bands are what the scene is made of,
+ * and as the colour goes they are the last thing still saying so — by the end the frame is white
+ * with nine dark lines ruled across it, which is a drawing of the strata, and then the drawing of
+ * the square arrives underneath.
+ */
+function bleachDissolve(ctx, W, H, progress, tape) {
+  const px = pixelSize(W, H);
+  const cols = Math.ceil(W / px) + 1;
+
+  for (let n = 0; n < BLEACH_BANDS; n += 1) {
+    const top = Math.round((n / BLEACH_BANDS) * H);
+    const bottom = Math.round(((n + 1) / BLEACH_BANDS) * H);
+    const rows = Math.max(1, Math.round((bottom - top) / px));
+    // Its own share of the change: band `n` starts when the one above it is half gone, so the front
+    // travels down the frame at a little under twice the speed the whole change runs at.
+    const start = (n / BLEACH_BANDS) * 0.55;
+    const gone = clamp((progress - start) / (1 - start), 0, 1);
+    if (gone <= 0) continue;
+
+    ctx.fillStyle = PAPER;
+    ctx.beginPath();
+    for (let r = 0; r < rows; r += 1) {
+      const y = top + r * px;
+      // Squared, so a band holds almost everything for the first half of its share and then goes.
+      const density = gone * gone;
+      for (let c = 0; c < cols; c += 1) {
+        if (bayerOn(c, r, density)) ctx.rect(c * px, y, px, px);
+      }
+    }
+    ctx.fill();
+
+    // ...and the rule the band leaves behind, growing as the colour goes.
+    const rule = Math.max(1, Math.round(px * gone * 1.6));
+    ctx.fillStyle = RULE;
+    ctx.fillRect(0, top, W, rule);
   }
 }
 

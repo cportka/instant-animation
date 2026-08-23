@@ -184,6 +184,83 @@ test('the doors are shut in still air and clatter in a gust', () => {
   assert.ok(roughest.swing > 0.6, `the doors barely move at ${roughest.g.toFixed(2)} of wind`);
 });
 
+test('the drawn composition is a line drawing, and the strata are switched off inside it', () => {
+  // The second composition is the same square rendered as ink on paper, and the whole of it is data:
+  // one ramp instead of six, no weather reaching the grid, no drift in the boundaries, a spread of
+  // zero, a thinner stipple, and a stroke where the painted one fills. Nothing is skipped and no
+  // draw function knows which arrangement it is in — so what has to be checked is that the *effect*
+  // really did go to zero rather than that some code path was avoided.
+  const drawn = meta.variants[1];
+  const painted = meta.variants[0];
+
+  const shot = (variant) => {
+    const rec = createRecordingContext({ width: 1280, height: 720 });
+    const scene = create({ width: 1280, height: 720, seed: meta.id, variant });
+    for (const t of [0, 47.3, 203]) scene.draw(rec.ctx, t, 1 / 60);
+    rec.assertClean(variant.id);
+    assert.equal(rec.depth, 0, `${variant.id}: unbalanced save/restore`);
+    return rec;
+  };
+
+  const ink = shot(drawn);
+  const paint = shot(painted);
+
+  // Outlines, not fills. Every shape in this scene is already a path of axis-aligned rectangles, so
+  // its outline is described by the path that fills it — which is why the drawn composition needs no
+  // geometry of its own. A single stray `fill()` here is a shape that came out solid on the paper.
+  assert.equal(ink.ops.filter((op) => op === 'fill()').length, 0, 'the line drawing filled a shape');
+  assert.ok(ink.ops.filter((op) => op === 'stroke()').length > 100, 'the line drawing hardly drew a line');
+  assert.equal(paint.ops.filter((op) => op === 'stroke()').length, 0, 'the painted square stroked something');
+  assert.ok(paint.ops.filter((op) => op === 'fill()').length > 100, 'the painted square hardly filled anything');
+
+  // ...on paper, and the paper has to be laid before anything else or the lines sit on whatever the
+  // last frame left behind. The sky is the top of its ramp and the top of the drawn ramp is nearly
+  // the paper's own white, so there is nothing else covering the frame.
+  assert.match(ink.ops[1] ?? '', /^set:fillStyle\(#ffffff\)$/, 'the line drawing does not start on paper');
+  assert.match(ink.ops[2] ?? '', /^fillRect\(0\.0000,0\.0000,1280/, 'the paper does not cover the frame');
+
+  // The strata, off. Every band deals the same grid and the same ramp, holds still, and does not
+  // coarsen in a gust — which is the request "no distortion" expressed as a range of zero rather
+  // than as a branch, and is the only reason `strata.js` needed no new code.
+  const rng = () => createRng(meta.id);
+  const flat = planStrata(rng(), drawn.ink);
+  const full = planStrata(rng(), painted.ink);
+  const grids = new Set();
+  const ramps = new Set();
+  const edges = new Set();
+  for (let t = 0; t < 300; t += 1.7) {
+    for (let n = 0; n < BANDS; n += 1) {
+      const at = strataAt(n, t, flat);
+      grids.add(at.grid);
+      ramps.add(at.palette.join(''));
+      edges.add(`${n}:${edgeAt(n, t, flat)}`);
+    }
+  }
+  assert.equal(ramps.size, 1, `the line drawing deals ${ramps.size} different palettes`);
+  assert.equal(edges.size, BANDS, 'the line drawing\'s band boundaries move');
+  // The dealt grid still varies — what is zeroed is how far `chunkOf` is allowed to act on it, so
+  // every band lands on the same chunk however it was dealt, at any strength of wind.
+  flat.spread = 0;
+  full.spread = 1;
+  const chunks = new Set();
+  for (const gust of [0, 0.4, 1]) {
+    for (let n = 0; n < BANDS; n += 1) {
+      chunks.add(chunkOf(8, strataAt(n, 40, flat), gust * (flat.weather ?? 1), flat.spread));
+    }
+  }
+  assert.equal(chunks.size, 1, `the line drawing draws at ${chunks.size} different resolutions`);
+  assert.ok(grids.size > 1, 'the deal itself stopped varying, which is a different change');
+
+  // ...and the painted one still does all of it, or the two are one composition wearing two names.
+  const painted_chunks = new Set();
+  for (const gust of [0, 0.4, 1]) {
+    for (let n = 0; n < BANDS; n += 1) {
+      painted_chunks.add(chunkOf(8, strataAt(n, 40, full), gust * (full.weather ?? 1), full.spread));
+    }
+  }
+  assert.ok(painted_chunks.size > 3, 'the painted square lost its strata');
+});
+
 test('the square draws at every viewport and every corner of its panel', () => {
   // The strata multiply everything: a knob that coarsens the grid and a gust that coarsens it again
   // can between them ask for a chunk wider than the frame, and a band with no rows in it is where
